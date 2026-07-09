@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Prerequisites
 *.d
 
@@ -79,10 +80,13 @@ AroundMe/Work_Files/character/CN_BIRD/CN_BIRD_work.mb
 AroundMe/Work_Files/character/CN_BIRD/CN_BIRD_work.mb
 *.code-workspace
 
+=======
+>>>>>>> origin/master
 
 #///////////////////////////
 # Cocos Creator 3D Project
 #///////////////////////////
+<<<<<<< HEAD
 CoinDuel2D/library/
 CoinDuel2D/temp/
 CoinDuel2D/local/
@@ -93,13 +97,33 @@ CoinDuel2D/native
 # NPM
 #//////////////////////////
 CoinDuel2D/node_modules/
+=======
+library/
+temp/
+local/
+build/
+profiles/
+native
+#//////////////////////////
+# NPM
+#//////////////////////////
+node_modules/
+>>>>>>> origin/master
 
 #//////////////////////////
 # VSCode
 #//////////////////////////
+<<<<<<< HEAD
 CoinDuel2D/.vscode/
+=======
+.vscode/
+>>>>>>> origin/master
 
 #//////////////////////////
 # WebStorm
 #//////////////////////////
+<<<<<<< HEAD
 CoinDuel2D/.idea/
+=======
+.idea/
+>>>>>>> origin/master
