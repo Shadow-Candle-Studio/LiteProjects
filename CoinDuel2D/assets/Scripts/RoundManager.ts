@@ -1,24 +1,40 @@
-import { _decorator, Component, Vec2, Vec3 } from 'cc';
+import { _decorator, Component, Vec3 } from 'cc';
 const { ccclass, property } = _decorator;
 
 @ccclass('RoundManager')
 export class RoundManager extends Component {
-    // 生成coin初始位置，随机分布在不重叠的圆形范围内
-    public newRound(tableRadius: number, coinRadius: number, coinCount: number): Vec3[] {
+    /**
+     * 在矩形桌面内生成不重叠的硬币初始位置（避开围墙区域）
+     * @param tableWidth   桌面宽度
+     * @param tableHeight  桌面高度
+     * @param coinRadius   硬币半径
+     * @param coinCount    需要生成的硬币数量
+     * @param wallThickness 围墙厚度
+     */
+    public newRound(
+        tableWidth: number,
+        tableHeight: number,
+        coinRadius: number,
+        coinCount: number,
+        wallThickness: number = 0,
+    ): Vec3[] {
         const positions: Vec3[] = [];
-        const minDist = coinRadius * 2;          // 两枚硬币中心之间的最小距离（不重叠）
-        const maxAttempts = coinCount * 50;       // 每枚硬币最多尝试次数，防止死循环
+        const minDist = coinRadius * 2;               // 两枚硬币中心之间的最小距离（不重叠）
+        const margin = coinRadius + wallThickness;     // 离桌面边缘的间距（含围墙厚度）
+        const maxAttempts = coinCount * 100;
         let attempts = 0;
+
+        // 桌面矩形边界（缩进 wallThickness + coinRadius）
+        const left   = -tableWidth / 2  + margin;
+        const right  =  tableWidth / 2  - margin;
+        const bottom = -tableHeight / 2 + margin;
+        const top   =   tableHeight / 2 - margin;
 
         while (positions.length < coinCount && attempts < maxAttempts) {
             attempts++;
 
-            // 在圆形范围内均匀随机采样（缩进一个 coinRadius 确保不越界）
-            const spawnRadius = Math.max(0, tableRadius - coinRadius);
-            const angle = Math.random() * Math.PI * 2;
-            const r = Math.sqrt(Math.random()) * spawnRadius;
-            const x = r * Math.cos(angle);
-            const y = r * Math.sin(angle);
+            const x = Math.random() * (right - left) + left;
+            const y = Math.random() * (top - bottom) + bottom;
 
             // 检查是否与已放置的硬币重叠
             let overlap = false;
@@ -36,16 +52,13 @@ export class RoundManager extends Component {
             }
         }
 
-        // 如果未能生成足够数量的硬币，输出警告
         if (positions.length < coinCount) {
             console.warn(
                 `[RoundManager] 无法生成 ${coinCount} 枚硬币（已有 ${positions.length} 枚），` +
-                `tableRadius=${tableRadius}, coinRadius=${coinRadius} 可能过小`
+                `桌面 ${tableWidth}x${tableHeight} 可能过小`
             );
         }
 
         return positions;
     }
 }
-
-

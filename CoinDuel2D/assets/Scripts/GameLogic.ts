@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec3, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, Color } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D } from 'cc';
 import { CoinController } from './CoinController';
 import { Leaderboard } from './Leaderboard';
 import { SoundManager } from './SoundManager';
@@ -16,8 +16,9 @@ export class GameLogic extends Component {
     @property({ type: Node, tooltip: "所有硬币的父节点" })
     public coinGroup: Node = null!;
 
-    @property({ tooltip: "桌面半径（超过此距离判定坠落）" })
-    public tableRadius: number = 400;
+    public tableWidth: number = 1280;
+
+    public tableHeight: number = 720;
 
     @property({ tooltip: "硬币半径" })
     public coinRadius: number = 32;
@@ -30,6 +31,14 @@ export class GameLogic extends Component {
 
     @property({ tooltip: "硬币滑动阻尼（值越大摩擦越大，减速越快）" })
     public coinDamping: number = 2;
+
+    // ── 围墙与缺口数据（每局由 GameScene 从 TableController 同步） ──
+    /** 围墙厚度 */
+    public wallThickness: number = 8;
+    /** 本局所有缺口 */
+    public gaps: { side: number; center: number }[] = [];
+    /** 缺口宽度 */
+    public gapWidth: number = 80;
 
     @property({ type: Graphics, tooltip: "拖拽引导线绘制组件" })
     public dragGraphics: Graphics = null!;
@@ -77,26 +86,28 @@ export class GameLogic extends Component {
     /** PhysicsSystem2D 全局碰撞回调：活跃弹射硬币撞到其他硬币时计数 */
     private _onBeginContact(a: Collider2D, b: Collider2D): void {
         if (!this._activeShotCoin) return;
-        
-        SoundManager.instance.playHit();
-        
-        this.coinHitCount++;
 
         const nodeA = a.node;
         const nodeB = b.node;
 
-        if (nodeA === this._activeShotCoin) {
-            this.onCoinHitByActiveShot(nodeB);
-        } else if (nodeB === this._activeShotCoin) {
-            this.onCoinHitByActiveShot(nodeA);
-        }
+        // 只处理硬币-硬币碰撞，跳过围墙碰撞
+        const otherNode = nodeA === this._activeShotCoin ? nodeB : nodeA;
+        if (!otherNode.getComponent(CoinController)) return;
+
+        SoundManager.instance.playHit();
+        this.coinHitCount++;
+
+        this.onCoinHitByActiveShot(otherNode);
     }
 
     update(deltaTime: number) {
         // 1. 持续监测坠落（在任意状态下均可坠落）
         this.checkCoinFalls();
 
-        // 2. 物理模拟中：检查是否静止
+        // 2. 桌面边界反弹（含缺口侧边）
+        this._applyWallBounce();
+
+        // 3. 物理模拟中：检查是否静止
         if (this.currentPhase === GamePhase.ANIMATING) {
             if (this.isAllCoinsStopped()) {
                 this.currentPhase = GamePhase.SETTLING;
@@ -116,10 +127,130 @@ export class GameLogic extends Component {
         return true;
     }
 
+    /** 硬币在桌面边界反弹（考虑围墙厚度与所有缺口） */
+    private _applyWallBounce(): void {
+        const halfW = this.tableWidth / 2 - this.wallThickness - this.coinRadius;
+        const halfH = this.tableHeight / 2 - this.wallThickness - this.coinRadius;
+        const hw = this.tableWidth / 2;
+        const hh = this.tableHeight / 2;
+        const hg = this.gapWidth / 2;
+
+        for (const coin of this.coinGroup.children) {
+            const rb = coin.getComponent(RigidBody2D);
+            if (!rb) continue;
+
+            const pos = coin.position;
+            const vel = rb.linearVelocity;
+            let newX = pos.x;
+            let newY = pos.y;
+            let newVx = vel.x;
+            let newVy = vel.y;
+            let bounced = false;
+
+            // 检查硬币当前是否处于某面墙的缺口范围内
+            const inGap = (wallSide: number, alongPos: number): boolean =>
+                this.gaps.some(g => g.side === wallSide && Math.abs(alongPos - g.center) < hg);
+
+            // 右墙反弹（缺口处跳过）
+            if (pos.x > halfW && vel.x > 0) {
+                if (!inGap(1, pos.y)) {
+                    newX = halfW;
+                    newVx = -vel.x * 0.7;
+                    bounced = true;
+                }
+            } else if (pos.x < -halfW && vel.x < 0) {
+                if (!inGap(3, pos.y)) {
+                    newX = -halfW;
+                    newVx = -vel.x * 0.7;
+                    bounced = true;
+                }
+            }
+
+            // 上墙反弹（缺口处跳过）
+            if (pos.y > halfH && vel.y > 0) {
+                if (!inGap(0, pos.x)) {
+                    newY = halfH;
+                    newVy = -vel.y * 0.7;
+                    bounced = true;
+                }
+            } else if (pos.y < -halfH && vel.y < 0) {
+                if (!inGap(2, pos.x)) {
+                    newY = -halfH;
+                    newVy = -vel.y * 0.7;
+                    bounced = true;
+                }
+            }
+
+            // 缺口侧边反弹（遍历所有缺口）
+            if (this.gaps.length > 0) {
+                const out = { x: newX, y: newY, vx: newVx, vy: newVy };
+                if (this._checkGapSideBounce(pos, vel, hw, hh, hg, out)) {
+                    newX = out.x; newY = out.y;
+                    newVx = out.vx; newVy = out.vy;
+                    bounced = true;
+                }
+            }
+
+            if (bounced) {
+                coin.setPosition(newX, newY, 0);
+                rb.linearVelocity = new Vec2(newVx, newVy);
+            }
+        }
+    }
+
+    /** 缺口侧边反弹检测（遍历所有缺口） */
+    private _checkGapSideBounce(
+        pos: Vec3, vel: Vec2,
+        hw: number, hh: number, hg: number,
+        out: { x: number; y: number; vx: number; vy: number },
+    ): boolean {
+        const cr = this.coinRadius;
+        for (const gap of this.gaps) {
+            if (gap.side === 0 || gap.side === 2) {
+                // 上/下墙缺口：侧边为竖直面
+                const wallBot = gap.side === 0 ? hh - this.wallThickness : -(hh - this.wallThickness);
+                const wallTop = gap.side === 0 ? hh : -hh;
+                const overlapsY = pos.y + cr > Math.min(wallBot, wallTop) && pos.y - cr < Math.max(wallBot, wallTop);
+                if (!overlapsY) continue;
+
+                const rEdge = gap.center + hg;
+                if (pos.x + cr > rEdge && pos.x < rEdge + cr && vel.x >= 0) {
+                    out.x = rEdge - cr; out.vx = -vel.x * 0.7; return true;
+                }
+                const lEdge = gap.center - hg;
+                if (pos.x - cr < lEdge && pos.x > lEdge - cr && vel.x <= 0) {
+                    out.x = lEdge + cr; out.vx = -vel.x * 0.7; return true;
+                }
+            } else {
+                // 左/右墙缺口：侧边为水平面
+                const wallL = gap.side === 3 ? -(hw - this.wallThickness) : hw - this.wallThickness;
+                const wallR = gap.side === 3 ? -hw : hw;
+                const overlapsX = pos.x + cr > Math.min(wallL, wallR) && pos.x - cr < Math.max(wallL, wallR);
+                if (!overlapsX) continue;
+
+                const tEdge = gap.center + hg;
+                if (pos.y + cr > tEdge && pos.y < tEdge + cr && vel.y >= 0) {
+                    out.y = tEdge - cr; out.vy = -vel.y * 0.7; return true;
+                }
+                const bEdge = gap.center - hg;
+                if (pos.y - cr < bEdge && pos.y > bEdge - cr && vel.y <= 0) {
+                    out.y = bEdge + cr; out.vy = -vel.y * 0.7; return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private checkCoinFalls() {
+        const hw = this.tableWidth / 2;
+        const hh = this.tableHeight / 2;
+
         for (let i = this.coinGroup.children.length - 1; i >= 0; i--) {
-            let coin = this.coinGroup.children[i];
-            if (Vec3.distance(coin.position, Vec3.ZERO) > this.tableRadius) {
+            const coin = this.coinGroup.children[i];
+            const pos = coin.position;
+
+            // 硬币中点离开桌面范围 → 掉落
+            if (Math.abs(pos.x) > hw || Math.abs(pos.y) > hh) {
                 this.onCoinFall(coin);
             }
         }
@@ -127,6 +258,7 @@ export class GameLogic extends Component {
 
     private onCoinFall(coin: Node) {
         console.log("检测到硬币坠落，执行销毁...");
+        SoundManager.instance.playCoinFall();
         this.coinFallCount++;
         coin.destroy();
     }
@@ -270,6 +402,18 @@ export class GameLogic extends Component {
                     rb.linearDamping = this.coinDamping;
                 }
             }
+        }
+    }
+
+    /** 将当前 coinRadius 同步到所有已有硬币（尺寸 + 碰撞器） */
+    public syncCoinRadius(): void {
+        const r = this.coinRadius;
+        for (const coin of this.coinGroup.children) {
+            coin.setScale(1, 1, 1);
+            const ut = coin.getComponent(UITransform);
+            if (ut) ut.setContentSize(r * 2, r * 2);
+            const cc = coin.getComponent(CircleCollider2D);
+            if (cc) cc.radius = r;
         }
     }
 }

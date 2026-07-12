@@ -33,6 +33,9 @@ export class CoinController extends Component {
             return;
         }
 
+        // 禁止硬币自转（只平移不旋转）
+        this._rigidBody.fixedRotation = true;
+
         // 节点鼠标事件
         this.node.on(Node.EventType.MOUSE_DOWN, this._onPointerDown, this);
         this.node.on(Node.EventType.MOUSE_MOVE, this._onMouseMove, this);
