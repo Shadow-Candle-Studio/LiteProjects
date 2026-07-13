@@ -1,10 +1,13 @@
-import { _decorator, Component, Node, Vec2, RigidBody2D, ERigidBody2DType, input, Input, EventMouse, EventTouch, Color, Sprite, Graphics } from 'cc';
+import { _decorator, Component, Node, Vec2, RigidBody2D, ERigidBody2DType, EventTouch, Color, Sprite, CircleCollider2D } from 'cc';
 import { GameLogic } from './GameLogic';
 import { SoundManager } from './SoundManager';
 const { ccclass } = _decorator;
 
 @ccclass('CoinController')
 export class CoinController extends Component {
+    private static _anyDragging: boolean = false;
+    private static _lastWorldPos: Vec2 = new Vec2();
+
     private _allowedOperation: boolean = false;
     private _rigidBody: RigidBody2D | null = null;
     private _isDragging: boolean = false;
@@ -37,16 +40,20 @@ export class CoinController extends Component {
         // 禁止硬币自转（只平移不旋转）
         this._rigidBody.fixedRotation = true;
 
-        // 节点鼠标事件
-        this.node.on(Node.EventType.MOUSE_DOWN, this._onPointerDown, this);
-        this.node.on(Node.EventType.MOUSE_MOVE, this._onMouseMove, this);
-        this.node.on(Node.EventType.MOUSE_UP, this._onPointerUp, this);
+        // 设置物理属性：质量、摩擦力、弹性
+        const collider = this.node.getComponent(CircleCollider2D);
+        if (collider) {
+            collider.friction = 1;
+            collider.restitution = 0.6;
+            collider.density = 2 / Math.PI * Math.pow(collider.radius, 2)
+        }
+
+        // 节点触摸事件（TOUCH_START/MOVE/END 在同一节点上，Touch 会 capture 后续事件到同一节点）
+        this.node.on(Node.EventType.TOUCH_START, this._onPointerDown, this);
     }
 
     onDestroy() {
-        this.node.off(Node.EventType.MOUSE_DOWN, this._onPointerDown, this);
-        this.node.off(Node.EventType.MOUSE_MOVE, this._onMouseMove, this);
-        this.node.off(Node.EventType.MOUSE_UP, this._onPointerUp, this);
+        this.node.off(Node.EventType.TOUCH_START, this._onPointerDown, this);
         this._unregisterGlobalEvents();
     }
 
@@ -63,6 +70,15 @@ export class CoinController extends Component {
     }
 
     update(dt: number) {
+        // 拖拽中每帧重绘箭头（兜底：即使 Canvas 冒泡事件偶发卡顿也能持续更新）
+        if (this._isDragging) {
+            const graphics = this._gameLogic?.dragGraphics;
+            if (graphics) {
+                this._drawDragLineFromPos(CoinController._lastWorldPos);
+            }
+            // 不提前 return：拖拽中也可能需要更新 indicator
+        }
+
         if (!this._indicatorActive) return;
 
         this._indicatorTime += dt;
@@ -74,13 +90,16 @@ export class CoinController extends Component {
         }
     }
 
-    private _onPointerDown(event: EventMouse | EventTouch): void {
+    private _onPointerDown(event: EventTouch): void {
         if (!this._allowedOperation) return;
+        // 已经有硬币在拖拽中，不再响应（防止 Cocos Creator 在鼠标经过其他节点时误触 MOUSE_DOWN）
+        if (CoinController._anyDragging) return;
 
         // 防御：如果之前拖拽未正常结束（如鼠标移出窗口），先清理
         if (this._isDragging) {
             console.warn('[CoinController] 修复残留拖拽状态');
             this._isDragging = false;
+            CoinController._anyDragging = false;
             this._unregisterGlobalEvents();
             if (this._rigidBody) {
                 this._rigidBody.type = ERigidBody2DType.Dynamic;
@@ -93,44 +112,87 @@ export class CoinController extends Component {
 
         this._isDragging = true;
         event.getLocation(this._dragStartPos);
+        // 同步更新缓存位置，防止 update() 轮询时读到未初始化的 (0,0)
+        event.getLocation(CoinController._lastWorldPos);
 
         // 冻结物理，防止拖拽期间受物理影响
         if (this._rigidBody) {
             this._rigidBody.type = ERigidBody2DType.Static;
         }
 
-        // 注册全局追踪事件（桌面鼠标 + 移动端触摸各一套，平台自动选择）
-        input.on(Input.EventType.MOUSE_MOVE, this._onMouseMove, this);
-        input.on(Input.EventType.MOUSE_UP, this._onPointerUp, this);
-        // input.on(Input.EventType.TOUCH_MOVE, this._onTouchMove, this);
-        // input.on(Input.EventType.TOUCH_END, this._onPointerUp, this);
-        // input.on(Input.EventType.TOUCH_CANCEL, this._onPointerUp, this);
+        // 标记全局拖拽锁定（防止其他硬币同时进入拖拽状态）
+        CoinController._anyDragging = true;
+
+        // 在当前硬币节点注册 Touch 事件（Cocos Creator 保证 TOUCH_MOVE/END 始终派发给同一节点）
+        this.node.on(Node.EventType.TOUCH_MOVE, this._onTouchMove, this);
+        this.node.on(Node.EventType.TOUCH_END, this._onPointerUp, this);
+        this.node.on(Node.EventType.TOUCH_CANCEL, this._onPointerUp, this);
         this._eventRegistered = true;
     }
 
     private _unregisterGlobalEvents(): void {
         if (!this._eventRegistered) return;
         this._eventRegistered = false;
+        CoinController._anyDragging = false;
 
-        input.off(Input.EventType.MOUSE_MOVE, this._onMouseMove, this);
-        input.off(Input.EventType.MOUSE_UP, this._onPointerUp, this);
-        // input.off(Input.EventType.TOUCH_MOVE, this._onTouchMove, this);
-        // input.off(Input.EventType.TOUCH_END, this._onPointerUp, this);
-        // input.off(Input.EventType.TOUCH_CANCEL, this._onPointerUp, this);
-    }
-
-    private _onMouseMove(event: EventMouse): void {
-        if (!this._isDragging) return;
-        this._drawDragLine(event);
+        this.node.off(Node.EventType.TOUCH_MOVE, this._onTouchMove, this);
+        this.node.off(Node.EventType.TOUCH_END, this._onPointerUp, this);
+        this.node.off(Node.EventType.TOUCH_CANCEL, this._onPointerUp, this);
     }
 
     private _onTouchMove(event: EventTouch): void {
+        // 持续缓存鼠标位置，供 update 轮询兜底
+        event.getLocation(CoinController._lastWorldPos);
         if (!this._isDragging) return;
         this._drawDragLine(event);
     }
 
+    /** 根据鼠标位置绘制拖拽引导线（从 Event 对象读取） */
+    private _drawDragLineFromPos(mousePos: Vec2): void {
+        const graphics = this._gameLogic?.dragGraphics;
+        if (!graphics) return;
+
+        const mid = this.node.position;
+        // dragStartPos 是鼠标按下时记录的 screen/UI 坐标
+        const dx = mousePos.x - this._dragStartPos.x;
+        const dy = mousePos.y - this._dragStartPos.y;
+
+        const tailX = mid.x + dx;
+        const tailY = mid.y + dy;
+        const headX = mid.x - dx;
+        const headY = mid.y - dy;
+
+        graphics.clear();
+        graphics.lineWidth = 4;
+        graphics.strokeColor = new Color(255, 100, 100);
+        graphics.moveTo(headX, headY);
+        graphics.lineTo(tailX, tailY);
+        graphics.stroke();
+
+        const dirX = headX - tailX;
+        const dirY = headY - tailY;
+        const len = Math.sqrt(dirX * dirX + dirY * dirY);
+        if (len > 4) {
+            const nx = dirX / len;
+            const ny = dirY / len;
+            const arrowSize = 12;
+            const arrowWidth = 6;
+            const px = -ny * arrowWidth;
+            const py = nx * arrowWidth;
+            const baseX = headX - nx * arrowSize;
+            const baseY = headY - ny * arrowSize;
+
+            graphics.fillColor = new Color(255, 100, 100);
+            graphics.moveTo(headX, headY);
+            graphics.lineTo(baseX + px, baseY + py);
+            graphics.lineTo(baseX - px, baseY - py);
+            graphics.close();
+            graphics.fill();
+        }
+    }
+
     /** 绘制拖拽引导线：中点 = 硬币位置，尾部 = 拖拽方向延伸 */
-    private _drawDragLine(event: EventMouse | EventTouch): void {
+    private _drawDragLine(event: EventTouch): void {
         const graphics = this._gameLogic?.dragGraphics;
         if (!graphics) return;
 
@@ -179,7 +241,7 @@ export class CoinController extends Component {
         }
     }
 
-    private _onPointerUp(event: EventMouse | EventTouch): void {
+    private _onPointerUp(event: EventTouch): void {
         if (!this._isDragging) return;
         this._isDragging = false;
         this._unregisterGlobalEvents();

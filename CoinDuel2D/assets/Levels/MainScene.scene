@@ -586,7 +586,7 @@
     "coinRadius": 32,
     "speedThreshold": 0.05,
     "velocityFactor": 0.5,
-    "coinDamping": 4,
+    "coinDamping": 4.5,
     "dragGraphics": {
       "__id__": 12
     },

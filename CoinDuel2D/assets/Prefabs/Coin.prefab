@@ -156,6 +156,7 @@
     "_group": 1,
     "_type": 2,
     "_allowSleep": true,
+    "_mass": 2,
     "_gravityScale": 1,
     "_linearDamping": 0.5,
     "_angularDamping": 0,
@@ -188,8 +189,8 @@
     "_group": 1,
     "_density": 1,
     "_sensor": false,
-    "_friction": 0.2,
-    "_restitution": 0.8,
+    "_friction": 1,
+    "_restitution": 0.6,
     "_offset": {
       "__type__": "cc.Vec2",
       "x": 0,
