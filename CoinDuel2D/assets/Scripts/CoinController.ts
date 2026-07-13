@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, Vec2, RigidBody2D, ERigidBody2DType, input, Input, EventMouse, EventTouch, Color, Sprite, Graphics } from 'cc';
 import { GameLogic } from './GameLogic';
+import { SoundManager } from './SoundManager';
 const { ccclass } = _decorator;
 
 @ccclass('CoinController')
@@ -207,6 +208,9 @@ export class CoinController extends Component {
         const factor = this._gameLogic?.velocityFactor ?? 5;
         const velocity = new Vec2(-dx * factor, -dy * factor);
         this._rigidBody.linearVelocity = velocity;
+
+        // 播放发射音效
+        SoundManager.instance.playShot();
 
         // 通知 GameLogic：标记此硬币为活跃弹射、进入物理模拟阶段
         if (this._gameLogic) {

@@ -299,8 +299,6 @@
     },
     "_enabled": true,
     "__prefab": null,
-    "tableWidth": 1280,
-    "tableHeight": 720,
     "wallThickness": 16,
     "wallColor": {
       "__type__": "cc.Color",
@@ -585,8 +583,6 @@
     "coinGroup": {
       "__id__": 8
     },
-    "tableWidth": 1280,
-    "tableHeight": 720,
     "coinRadius": 32,
     "speedThreshold": 0.05,
     "velocityFactor": 0.5,
@@ -4696,8 +4692,16 @@
     },
     "_enabled": true,
     "__prefab": null,
-    "hit": {
-      "__uuid__": "d1c8c711-8729-4890-a941-05909073d57c",
+    "collisionWall": {
+      "__uuid__": "6e476b52-5a75-462a-b4a4-b1785026a4ec",
+      "__expectedType__": "cc.AudioClip"
+    },
+    "collisionCoin": {
+      "__uuid__": "445cf655-039c-4b2d-a1d5-a232c61e069d",
+      "__expectedType__": "cc.AudioClip"
+    },
+    "shot": {
+      "__uuid__": "6d2cb71b-d663-40fc-bca2-bcaab5a04a39",
       "__expectedType__": "cc.AudioClip"
     },
     "coinfall": {

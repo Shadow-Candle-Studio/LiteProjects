@@ -94,7 +94,8 @@ export class GameLogic extends Component {
         const otherNode = nodeA === this._activeShotCoin ? nodeB : nodeA;
         if (!otherNode.getComponent(CoinController)) return;
 
-        SoundManager.instance.playHit();
+        // 硬币与硬币碰撞音效
+        SoundManager.instance.playCollisionCoin();
         this.coinHitCount++;
 
         this.onCoinHitByActiveShot(otherNode);
@@ -194,6 +195,8 @@ export class GameLogic extends Component {
             if (bounced) {
                 coin.setPosition(newX, newY, 0);
                 rb.linearVelocity = new Vec2(newVx, newVy);
+                // 硬币与墙碰撞音效
+                SoundManager.instance.playCollisionWall();
             }
         }
     }
