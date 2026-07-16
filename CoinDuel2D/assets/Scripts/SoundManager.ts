@@ -1,4 +1,4 @@
-import { _decorator, AudioClip, AudioSource, Component, Node } from 'cc';
+import { _decorator, AudioClip, AudioSource, Component, Node, resources } from 'cc';
 const { ccclass, property } = _decorator;
 
 @ccclass('SoundManager')
@@ -49,6 +49,22 @@ export class SoundManager extends Component {
         if (this.coinfall && this.audioSource){
             this.audioSource.playOneShot(this.coinfall);
         }
+    }
+
+    /** 播放任意 AudioClip（用于硬币自定义碰撞音效） */
+    public playClip(clip: AudioClip): void {
+        if (clip && this.audioSource) {
+            this.audioSource.playOneShot(clip);
+        }
+    }
+
+    /** 游戏结束音效 */
+    public playGameOver(): void {
+        resources.load('gameover', AudioClip, (err: any, clip: AudioClip) => {
+            if (!err && clip && this.audioSource) {
+                this.audioSource.playOneShot(clip);
+            }
+        });
     }
 }
 

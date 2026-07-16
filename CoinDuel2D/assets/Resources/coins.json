@@ -1,0 +1,12 @@
+{
+    "coins":{
+        "1":{
+            "texture":"texture_coin_meme1.png",
+            "hit_sfx":"sfx_coin_meme1.mp3"
+        },
+        "2":{
+            "texture":"texture_coin_meme2.png",
+            "hit_sfx":"sfx_coin_meme2.mp3"
+        }
+    }
+}

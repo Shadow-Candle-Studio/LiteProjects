@@ -1,7 +1,7 @@
-import { _decorator, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D } from 'cc';
-import { RoundManager } from './RoundManager';
-import { GameLogic } from './GameLogic';
+import { _decorator, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip } from 'cc';
 import { CoinController } from './CoinController';
+import { GameLogic } from './GameLogic';
+import { RoundManager } from './RoundManager';
 import { UIManager } from './UIManager';
 import { TableController } from './TableController';
 const { ccclass, property } = _decorator;
@@ -137,6 +137,88 @@ export class GameScene extends Component {
         if (event.keyCode === KeyCode.KEY_Q && this._debugPanel) {
             this._debugPanel.active = !this._debugPanel.active;
         }
+
+        // 数字键 1-9：读取 coins.json 配置并切换所有硬币贴图/音效
+        if (event.keyCode >= KeyCode.DIGIT_1 && event.keyCode <= KeyCode.DIGIT_9) {
+            const keyIndex = event.keyCode - KeyCode.DIGIT_1 + 1;
+            this._applyCoinConfig(keyIndex.toString());
+        }
+    }
+
+    /**
+     * 读取 coins.json，根据 key 查找对应硬币配置并应用到场上所有硬币
+     * @param key coins.json 中的硬币类型标识，如 "1", "2"
+     */
+    private _applyCoinConfig(key: string): void {
+        resources.load('coins', (err: any, asset: any) => {
+            if (err) {
+                console.warn('[GameScene] 加载 coins.json 失败:', err);
+                return;
+            }
+
+            const coinsData = asset.json?.coins;
+            if (!coinsData) {
+                console.warn('[GameScene] coins.json 格式错误：缺少 coins 字段');
+                return;
+            }
+
+            const config = coinsData[key] as { texture?: string; hit_sfx?: string } | undefined;
+            if (!config) {
+                console.log(`[GameScene] coins.json 中未找到 key "${key}" 的配置，不做处理`);
+                return;
+            }
+
+            const textureFile = config.texture;
+            const hitSfxFile = config.hit_sfx;
+            if (!textureFile) {
+                console.warn(`[GameScene] key "${key}" 缺少 texture 字段`);
+                return;
+            }
+
+            // 去除扩展名用于 resources.load
+            const texBaseName = textureFile.replace(/\.[^/.]+$/, '');
+            const sfxBaseName = hitSfxFile ? hitSfxFile.replace(/\.[^/.]+$/, '') : null;
+
+            console.log(`[GameScene] 切换硬币贴图为 ${textureFile}，碰撞音效为 ${hitSfxFile || '默认'}`);
+
+            // 并行加载贴图（SpriteFrame 子资源）和音效，然后应用到所有硬币
+            let loadedSprite: SpriteFrame | null = null;
+            let loadedClip: AudioClip | null = null;
+            let pending = 1 + (sfxBaseName ? 1 : 0);
+
+            const applyToCoins = () => {
+                if (--pending > 0) return;
+                for (const coin of this.gameLogic.coinGroup.children) {
+                    const ctrl = coin.getComponent(CoinController);
+                    if (ctrl) {
+                        ctrl.setAppearance(loadedSprite, loadedClip, key);
+                    }
+                }
+            };
+
+            // 图片资源需指定 SpriteFrame 子资源路径
+            resources.load(texBaseName + '/spriteFrame', SpriteFrame, (errTex: any, spriteFrame: SpriteFrame) => {
+                if (!errTex && spriteFrame) {
+                    loadedSprite = spriteFrame;
+                } else {
+                    console.warn(`[GameScene] 加载贴图 ${textureFile} 失败:`, errTex);
+                }
+                applyToCoins();
+            });
+
+            if (sfxBaseName) {
+                resources.load(sfxBaseName, AudioClip, (errSfx: any, clip: AudioClip) => {
+                    if (!errSfx && clip) {
+                        loadedClip = clip;
+                    } else {
+                        console.warn(`[GameScene] 加载音效 ${hitSfxFile} 失败:`, errSfx);
+                    }
+                    applyToCoins();
+                });
+            } else {
+                applyToCoins();
+            }
+        });
     }
 }
 

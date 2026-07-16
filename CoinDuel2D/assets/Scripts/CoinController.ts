@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec2, RigidBody2D, ERigidBody2DType, EventTouch, Color, Sprite, CircleCollider2D } from 'cc';
+import { _decorator, Component, Node, Vec2, RigidBody2D, ERigidBody2DType, EventTouch, Color, Sprite, CircleCollider2D, SpriteFrame, AudioClip } from 'cc';
 import { GameLogic } from './GameLogic';
 import { SoundManager } from './SoundManager';
 const { ccclass } = _decorator;
@@ -17,6 +17,11 @@ export class CoinController extends Component {
     private _indicatorActive: boolean = false;
     private _indicatorTime: number = 0;
 
+    /** 当前硬币类型（coins.json 中的 key，如 "1", "2"） */
+    private _coinTypeKey: string = '';
+    /** 缓存的自定义碰撞音效 AudioClip */
+    private _hitSfxClip: AudioClip | null = null;
+
     public get allowedOperation(): boolean {
         return this._allowedOperation;
     }
@@ -28,6 +33,37 @@ export class CoinController extends Component {
     /** 外部注入 GameLogic 引用 */
     public setGameLogic(gl: GameLogic): void {
         this._gameLogic = gl;
+    }
+
+    /** 获取缓存的自定义碰撞音效 */
+    public get hitSfxClip(): AudioClip | null {
+        return this._hitSfxClip;
+    }
+
+    /** 获取当前硬币类型 key */
+    public get coinTypeKey(): string {
+        return this._coinTypeKey;
+    }
+
+    /**
+     * 切换硬币贴图、碰撞音效和类型标识（资源由 GameScene 预先加载好传入）
+     * @param spriteFrame 目标贴图 SpriteFrame，传 null 不改变
+     * @param hitSfxClip  目标碰撞音效 AudioClip，传 null 不改变
+     * @param typeKey     硬币类型 key（如 "1", "2"）
+     */
+    public setAppearance(spriteFrame: SpriteFrame | null, hitSfxClip: AudioClip | null, typeKey: string): void {
+        this._coinTypeKey = typeKey;
+
+        if (spriteFrame) {
+            const sprite = this.node.getComponent(Sprite);
+            if (sprite) {
+                sprite.spriteFrame = spriteFrame;
+            }
+        }
+
+        if (hitSfxClip) {
+            this._hitSfxClip = hitSfxClip;
+        }
     }
 
     start() {

@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec2, Vec3, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D, AudioClip } from 'cc';
 import { CoinController } from './CoinController';
 import { Leaderboard } from './Leaderboard';
 import { SoundManager } from './SoundManager';
@@ -92,10 +92,16 @@ export class GameLogic extends Component {
 
         // 只处理硬币-硬币碰撞，跳过围墙碰撞
         const otherNode = nodeA === this._activeShotCoin ? nodeB : nodeA;
-        if (!otherNode.getComponent(CoinController)) return;
+        const hitCtrl = otherNode.getComponent(CoinController);
+        if (!hitCtrl) return;
 
-        // 硬币与硬币碰撞音效
-        SoundManager.instance.playCollisionCoin();
+        // 根据被撞硬币的配置播放碰撞音效
+        if (hitCtrl.hitSfxClip) {
+            SoundManager.instance.playClip(hitCtrl.hitSfxClip);
+        } else {
+            SoundManager.instance.playCollisionCoin();
+        }
+
         this.coinHitCount++;
 
         this.onCoinHitByActiveShot(otherNode);
@@ -331,6 +337,7 @@ export class GameLogic extends Component {
     /** 游戏结束处理 */
     private _handleGameOver(): void {
         console.log(">>> 游戏结束 <<<");
+        SoundManager.instance.playGameOver();
         const duration = Math.floor((Date.now() - this._gameStartTime) / 1000);
         if (this.score > 0) {
             Leaderboard.addEntry(this.score, duration);
