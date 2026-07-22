@@ -60,6 +60,12 @@ export class GameLogic extends Component {
     /** 慢动作是否生效中 */
     private _isSlowMotion: boolean = false;
 
+    /** 慢动作开始时间（毫秒） */
+    private _slowMotionStartTime: number = 0;
+
+    /** 慢动作最长持续毫秒数 */
+    private readonly _slowMotionMaxDuration: number = 3000;
+
     /** 设置游戏物理速度倍率（只改 fixedTimeStep，不重置累积器） */
     private _setGameSpeed(speed: number): void {
         PhysicsSystem2D.instance.fixedTimeStep = (1 / 60) * speed;
@@ -67,6 +73,9 @@ export class GameLogic extends Component {
             PhysicsSystem2D.instance.resetAccumulator(0);
         }
         this._isSlowMotion = speed < 1;
+        if (this._isSlowMotion) {
+            this._slowMotionStartTime = Date.now();
+        }
     }
 
     /** 恢复速度到正常值（仅在慢动作时生效） */
@@ -152,10 +161,15 @@ export class GameLogic extends Component {
         // 2. 桌面边界反弹（含缺口侧边）
         this._applyWallBounce();
 
-        // 3. 摄像机跟踪：发射中跟随硬币，否则平滑回到原始位置
+        // 3. 慢动作超时保护：3秒后自动恢复
+        if (this._isSlowMotion && Date.now() - this._slowMotionStartTime >= this._slowMotionMaxDuration) {
+            this._restoreSpeed();
+        }
+
+        // 4. 摄像机跟踪：发射中跟随硬币，否则平滑回到原始位置
         this._updateCamera(deltaTime);
 
-        // 4. 物理模拟中：检查是否静止
+        // 5. 物理模拟中：检查是否静止
         if (this.currentPhase === GamePhase.ANIMATING) {
             if (this.isAllCoinsStopped()) {
                 this.currentPhase = GamePhase.SETTLING;
@@ -476,7 +490,7 @@ export class GameLogic extends Component {
         this._lastHitCoin = null;
         this._setCoinsInteraction(false);
         // 发射时开启慢动作
-        this._setGameSpeed(0.05);
+        this._setGameSpeed(0.3);
     }
 
     // 允许用户操作状态
