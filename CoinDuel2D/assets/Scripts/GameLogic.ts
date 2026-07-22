@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec2, Vec3, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D, AudioClip } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D, AudioClip, Camera } from 'cc';
 import { CoinController } from './CoinController';
 import { Leaderboard } from './Leaderboard';
 import { SoundManager } from './SoundManager';
@@ -51,6 +51,30 @@ export class GameLogic extends Component {
     private _lastHitCoin: Node | null = null;
     private _gameStartTime: number = 0;
 
+    // ── 摄像机追踪 ──
+    private _mainCameraNode: Node | null = null;
+    private _mainCameraComp: Camera | null = null;
+    private _originalCamPos: Vec3 = new Vec3();
+    private _defaultOrthoHeight: number = 0;
+
+    /** 慢动作是否生效中 */
+    private _isSlowMotion: boolean = false;
+
+    /** 设置游戏物理速度倍率（只改 fixedTimeStep，不重置累积器） */
+    private _setGameSpeed(speed: number): void {
+        PhysicsSystem2D.instance.fixedTimeStep = (1 / 60) * speed;
+        if (speed >= 1) {
+            PhysicsSystem2D.instance.resetAccumulator(0);
+        }
+        this._isSlowMotion = speed < 1;
+    }
+
+    /** 恢复速度到正常值（仅在慢动作时生效） */
+    private _restoreSpeed(): void {
+        if (!this._isSlowMotion) return;
+        this._setGameSpeed(1);
+    }
+
     public score: number = 0;
     public onGameOver: (() => void) | null = null;
     public onScoreUpdate: ((score: number) => void) | null = null;
@@ -69,6 +93,17 @@ export class GameLogic extends Component {
             const gNode = new Node('DragLine');
             this.coinGroup.addChild(gNode);
             this.dragGraphics = gNode.addComponent(Graphics);
+        }
+
+        // 获取 MainCamera 并保存原始位置和默认 orthoHeight
+        const camNode = this.node.parent?.getChildByName('MainCamera');
+        if (camNode) {
+            this._mainCameraNode = camNode;
+            this._originalCamPos.set(camNode.position);
+            this._mainCameraComp = camNode.getComponent(Camera);
+            if (this._mainCameraComp) {
+                this._defaultOrthoHeight = this._mainCameraComp.orthoHeight;
+            }
         }
 
         // 注册全局碰撞回调
@@ -95,6 +130,9 @@ export class GameLogic extends Component {
         const hitCtrl = otherNode.getComponent(CoinController);
         if (!hitCtrl) return;
 
+        // 硬币-硬币碰撞 → 恢复速度
+        this._restoreSpeed();
+
         // 根据被撞硬币的配置播放碰撞音效
         if (hitCtrl.hitSfxClip) {
             SoundManager.instance.playClip(hitCtrl.hitSfxClip);
@@ -114,11 +152,58 @@ export class GameLogic extends Component {
         // 2. 桌面边界反弹（含缺口侧边）
         this._applyWallBounce();
 
-        // 3. 物理模拟中：检查是否静止
+        // 3. 摄像机跟踪：发射中跟随硬币，否则平滑回到原始位置
+        this._updateCamera(deltaTime);
+
+        // 4. 物理模拟中：检查是否静止
         if (this.currentPhase === GamePhase.ANIMATING) {
             if (this.isAllCoinsStopped()) {
                 this.currentPhase = GamePhase.SETTLING;
                 this.processResult();
+            }
+        }
+    }
+
+    /** 摄像机跟随逻辑（位置 + orthoHeight 缩放） */
+    private _updateCamera(dt: number): void {
+        if (!this._mainCameraNode || !this._mainCameraComp) return;
+
+        const speed = 6;
+
+        if (this._isSlowMotion && this._activeShotCoin) {
+            // 慢动作中：平滑跟踪硬币位置 + 放大到 orthoHeight=100
+            const target = this._activeShotCoin.position;
+            const camPos = this._mainCameraNode.position;
+            const t = Math.min(1, dt * speed);
+            this._mainCameraNode.setPosition(
+                camPos.x + (target.x - camPos.x) * t,
+                camPos.y + (target.y - camPos.y) * t,
+                this._originalCamPos.z,
+            );
+            const curH = this._mainCameraComp.orthoHeight;
+            this._mainCameraComp.orthoHeight = curH + (200 - curH) * Math.min(1, dt * speed);
+        } else {
+            // 慢动作结束：平滑回到原始位置 + 原始缩放
+            const camPos = this._mainCameraNode.position;
+            const dx = this._originalCamPos.x - camPos.x;
+            const dy = this._originalCamPos.y - camPos.y;
+            const distSq = dx * dx + dy * dy;
+            if (distSq > 0.1) {
+                const t = Math.min(1, dt * speed);
+                this._mainCameraNode.setPosition(
+                    camPos.x + dx * t,
+                    camPos.y + dy * t,
+                    this._originalCamPos.z,
+                );
+            } else {
+                this._mainCameraNode.setPosition(this._originalCamPos);
+            }
+            const curH = this._mainCameraComp.orthoHeight;
+            const diffH = this._defaultOrthoHeight - curH;
+            if (Math.abs(diffH) > 0.1) {
+                this._mainCameraComp.orthoHeight = curH + diffH * Math.min(1, dt * speed);
+            } else {
+                this._mainCameraComp.orthoHeight = this._defaultOrthoHeight;
             }
         }
     }
@@ -199,6 +284,8 @@ export class GameLogic extends Component {
             }
 
             if (bounced) {
+                // 撞到墙 → 恢复速度
+                this._restoreSpeed();
                 coin.setPosition(newX, newY, 0);
                 rb.linearVelocity = new Vec2(newVx, newVy);
                 // 硬币与墙碰撞音效
@@ -267,6 +354,8 @@ export class GameLogic extends Component {
 
     private onCoinFall(coin: Node) {
         console.log("检测到硬币坠落，执行销毁...");
+        // 硬币掉落 → 恢复速度
+        this._restoreSpeed();
         SoundManager.instance.playCoinFall();
         this.coinFallCount++;
         coin.destroy();
@@ -337,6 +426,7 @@ export class GameLogic extends Component {
     /** 游戏结束处理 */
     private _handleGameOver(): void {
         console.log(">>> 游戏结束 <<<");
+        this._restoreSpeed();
         SoundManager.instance.playGameOver();
         const duration = Math.floor((Date.now() - this._gameStartTime) / 1000);
         if (this.score > 0) {
@@ -349,12 +439,14 @@ export class GameLogic extends Component {
     /** 游戏胜利（桌面仅剩 1 枚硬币） */
     private _handleGameWin(): void {
         console.log(">>> 游戏胜利 <<<");
+        this._restoreSpeed();
         this._setCoinsInteraction(false);
         this.onGameWin?.();
     }
 
     /** 命中 1 枚硬币后的连击延续流程 */
     private _continueWithLockedCoin(): void {
+        this._restoreSpeed();
         this.currentPhase = GamePhase.WAITING_PLAYER;
 
         // 先禁用所有硬币
@@ -383,10 +475,13 @@ export class GameLogic extends Component {
         this.coinFallCount = 0;
         this._lastHitCoin = null;
         this._setCoinsInteraction(false);
+        // 发射时开启慢动作
+        this._setGameSpeed(0.05);
     }
 
     // 允许用户操作状态
     public waitingPlayerOperation(){
+        this._restoreSpeed();
         this.currentPhase = GamePhase.WAITING_PLAYER;
         this._activeShotCoin = null;
         this._lockedCoin = null;
