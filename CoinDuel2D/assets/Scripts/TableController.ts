@@ -33,23 +33,25 @@ export class TableController extends Component {
     private _wallGraphics: Graphics = null!;   // 四边围墙
 
     protected start(): void {
-        const canvas = this.node.parent;
-        if (!canvas) return;
+        const parent = this.node.parent;
+        if (!parent) return;
 
         // 绿色桌面
         const tableNode = new Node('TableGreen');
-        canvas.addChild(tableNode);
+        tableNode.layer = 1; // WORLD
+        parent.addChild(tableNode);
         tableNode.setPosition(0, 0, 0);
         this._tableGraphics = tableNode.addComponent(Graphics);
 
         // 围墙（在桌面之上，硬币之下）
         const wallNode = new Node('Walls');
-        canvas.addChild(wallNode);
+        wallNode.layer = 1; // WORLD
+        parent.addChild(wallNode);
         wallNode.setPosition(0, 0, 0);
         this._wallGraphics = wallNode.addComponent(Graphics);
 
         // 渲染顺序：TableGreen → Walls → CoinGroup
-        const coinGroup = canvas.getChildByName('CoinGroup');
+        const coinGroup = parent.getChildByName('CoinGroup');
         if (coinGroup) {
             const idx = coinGroup.getSiblingIndex();
             tableNode.setSiblingIndex(idx);

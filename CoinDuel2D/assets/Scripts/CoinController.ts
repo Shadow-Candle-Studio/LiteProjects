@@ -106,7 +106,7 @@ export class CoinController extends Component {
     }
 
     update(dt: number) {
-        // 拖拽中每帧重绘箭头（兜底：即使 Canvas 冒泡事件偶发卡顿也能持续更新）
+        // 拖拽中每帧重绘箭头（兜底：即使冒泡事件偶发卡顿也能持续更新）
         if (this._isDragging) {
             const graphics = this._gameLogic?.dragGraphics;
             if (graphics) {

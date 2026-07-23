@@ -37,6 +37,7 @@ export class GameScene extends Component {
         } else {
             console.warn('未找到 Table 节点，动态创建');
             const newNode = new Node('Table');
+            newNode.layer = 1; // WORLD
             this.node.parent?.addChild(newNode);
             this.tableController = newNode.addComponent(TableController);
         }

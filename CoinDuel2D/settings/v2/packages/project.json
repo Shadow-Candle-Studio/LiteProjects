@@ -4,5 +4,11 @@
     "gravity": {
       "y": 0
     }
-  }
+  },
+  "layer": [
+    {
+      "name": "WORLD",
+      "value": 1
+    }
+  ]
 }

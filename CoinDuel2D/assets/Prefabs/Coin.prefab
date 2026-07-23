@@ -56,7 +56,7 @@
       "z": 1
     },
     "_mobility": 0,
-    "_layer": 33554432,
+    "_layer": 1,
     "_euler": {
       "__type__": "cc.Vec3",
       "x": 0,
@@ -156,7 +156,6 @@
     "_group": 1,
     "_type": 2,
     "_allowSleep": true,
-    "_mass": 2,
     "_gravityScale": 1,
     "_linearDamping": 0.5,
     "_angularDamping": 0,

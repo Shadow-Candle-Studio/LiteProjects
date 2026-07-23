@@ -32,6 +32,15 @@ export class GameLogic extends Component {
     @property({ tooltip: "硬币滑动阻尼（值越大摩擦越大，减速越快）" })
     public coinDamping: number = 2;
 
+    @property({ tooltip: "首次碰撞时暂停物理的时长（秒），用于增强撞击感" })
+    public hitPauseDuration: number = 0.01;
+
+    @property({ tooltip: "摄像机拉近过渡时长（秒），值越大过渡越慢，默认0.5" })
+    public cameraZoomInDuration: number = 0.5;
+
+    @property({ tooltip: "摄像机恢复过渡时长（秒），值越大过渡越慢，默认0.5" })
+    public cameraZoomOutDuration: number = 0.5;
+
     // ── 围墙与缺口数据（每局由 GameScene 从 TableController 同步） ──
     /** 围墙厚度 */
     public wallThickness: number = 8;
@@ -65,6 +74,9 @@ export class GameLogic extends Component {
 
     /** 慢动作最长持续毫秒数 */
     private readonly _slowMotionMaxDuration: number = 3000;
+
+    /** 首次碰撞暂停中 */
+    private _isHitPausing: boolean = false;
 
     /** 设置游戏物理速度倍率（只改 fixedTimeStep，不重置累积器） */
     private _setGameSpeed(speed: number): void {
@@ -100,6 +112,7 @@ export class GameLogic extends Component {
         // 自动创建拖拽引导线 Graphics 节点（挂在 coinGroup 下，与硬币同坐标系）
         if (!this.dragGraphics) {
             const gNode = new Node('DragLine');
+            gNode.layer = 1; // WORLD
             this.coinGroup.addChild(gNode);
             this.dragGraphics = gNode.addComponent(Graphics);
         }
@@ -139,8 +152,13 @@ export class GameLogic extends Component {
         const hitCtrl = otherNode.getComponent(CoinController);
         if (!hitCtrl) return;
 
-        // 硬币-硬币碰撞 → 恢复速度
-        this._restoreSpeed();
+        // 首次碰撞：暂停物理增强撞击感，暂停结束后恢复速度
+        if (this.coinHitCount === 0 && this.hitPauseDuration > 0) {
+            this._pauseAndRestore();
+        } else {
+            // 后续碰撞直接恢复速度
+            this._restoreSpeed();
+        }
 
         // 根据被撞硬币的配置播放碰撞音效
         if (hitCtrl.hitSfxClip) {
@@ -152,6 +170,17 @@ export class GameLogic extends Component {
         this.coinHitCount++;
 
         this.onCoinHitByActiveShot(otherNode);
+    }
+
+    /** 首次碰撞时暂停物理，暂停结束后恢复速度 */
+    private _pauseAndRestore(): void {
+        if (this._isHitPausing) return;
+        this._isHitPausing = true;
+        this._setGameSpeed(0);
+        this.scheduleOnce(() => {
+            this._isHitPausing = false;
+            this._restoreSpeed();
+        }, this.hitPauseDuration);
     }
 
     update(deltaTime: number) {
@@ -182,28 +211,28 @@ export class GameLogic extends Component {
     private _updateCamera(dt: number): void {
         if (!this._mainCameraNode || !this._mainCameraComp) return;
 
-        const speed = 6;
-
         if (this._isSlowMotion && this._activeShotCoin) {
-            // 慢动作中：平滑跟踪硬币位置 + 放大到 orthoHeight=100
+            // 慢动作中：平滑跟踪硬币位置 + 放大到 orthoHeight=200
+            const factor = 3 / Math.max(this.cameraZoomInDuration, 0.001);
+            const t = Math.min(1, dt * factor);
             const target = this._activeShotCoin.position;
             const camPos = this._mainCameraNode.position;
-            const t = Math.min(1, dt * speed);
             this._mainCameraNode.setPosition(
                 camPos.x + (target.x - camPos.x) * t,
                 camPos.y + (target.y - camPos.y) * t,
                 this._originalCamPos.z,
             );
             const curH = this._mainCameraComp.orthoHeight;
-            this._mainCameraComp.orthoHeight = curH + (200 - curH) * Math.min(1, dt * speed);
+            this._mainCameraComp.orthoHeight = curH + (200 - curH) * t;
         } else {
             // 慢动作结束：平滑回到原始位置 + 原始缩放
+            const factor = 3 / Math.max(this.cameraZoomOutDuration, 0.001);
+            const t = Math.min(1, dt * factor);
             const camPos = this._mainCameraNode.position;
             const dx = this._originalCamPos.x - camPos.x;
             const dy = this._originalCamPos.y - camPos.y;
             const distSq = dx * dx + dy * dy;
             if (distSq > 0.1) {
-                const t = Math.min(1, dt * speed);
                 this._mainCameraNode.setPosition(
                     camPos.x + dx * t,
                     camPos.y + dy * t,
@@ -215,7 +244,7 @@ export class GameLogic extends Component {
             const curH = this._mainCameraComp.orthoHeight;
             const diffH = this._defaultOrthoHeight - curH;
             if (Math.abs(diffH) > 0.1) {
-                this._mainCameraComp.orthoHeight = curH + diffH * Math.min(1, dt * speed);
+                this._mainCameraComp.orthoHeight = curH + diffH * t;
             } else {
                 this._mainCameraComp.orthoHeight = this._defaultOrthoHeight;
             }
