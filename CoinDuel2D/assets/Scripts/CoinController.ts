@@ -305,15 +305,14 @@ export class CoinController extends Component {
         // 反方向发射 - 速度与拖拽距离成正比（系数从 GameLogic 读取）
         const factor = this._gameLogic?.velocityFactor ?? 5;
         const velocity = new Vec2(-dx * factor, -dy * factor);
-        this._rigidBody.linearVelocity = velocity;
 
-        // 播放发射音效
-        SoundManager.instance.playShot();
-
-        // 通知 GameLogic：标记此硬币为活跃弹射、进入物理模拟阶段
+        // 通知 GameLogic 执行带特效的发射流程
         if (this._gameLogic) {
-            this._gameLogic.setActiveShotCoin(this.node);
-            this._gameLogic.startSimulation();
+            this._gameLogic.launchCoin(this.node, velocity);
+        } else {
+            // fallback：直接发射
+            this._rigidBody.linearVelocity = velocity;
+            SoundManager.instance.playShot();
         }
     }
 }

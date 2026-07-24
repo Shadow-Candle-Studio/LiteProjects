@@ -187,7 +187,7 @@
     "_priority": 0,
     "_fov": 45,
     "_fovAxis": 0,
-    "_orthoHeight": 601.7629774730657,
+    "_orthoHeight": 360,
     "_near": 0,
     "_far": 2000,
     "_color": {
@@ -585,11 +585,21 @@
     },
     "coinRadius": 32,
     "speedThreshold": 0.05,
-    "velocityFactor": 0.5,
+    "velocityFactor": 0.7,
     "coinDamping": 4.5,
-    "hitPauseDuration": 0.2,
-    "cameraZoomInSpeed": 12,
-    "cameraZoomOutSpeed": 6,
+    "hitPauseDuration": 0.1,
+    "cameraZoomInDuration": 0.5,
+    "cameraZoomOutDuration": 0.5,
+    "cameraTrackDuration": 2,
+    "hitParticlePrefab": {
+      "__uuid__": "623ead49-1e8b-47bb-b9a4-fd1536fac07d",
+      "__expectedType__": "cc.Prefab"
+    },
+    "launchEffectPrefab": {
+      "__uuid__": "edc006ba-71dc-4c39-a740-8675f39e95c5",
+      "__expectedType__": "cc.Prefab"
+    },
+    "launchAnimSpeed": 2,
     "dragGraphics": {
       "__id__": 12
     },
@@ -840,7 +850,7 @@
     "_priority": 1,
     "_fov": 45,
     "_fovAxis": 0,
-    "_orthoHeight": 601.7629774730657,
+    "_orthoHeight": 360,
     "_near": 0,
     "_far": 2000,
     "_color": {
