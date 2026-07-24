@@ -107,6 +107,14 @@ export class GameLogic extends Component {
     /** 追踪开始时间（ms） */
     private _trackStartTime: number = 0;
 
+    /** 当前拖拽距离（拖拽时用于镜头缩放，0=未拖拽） */
+    private _dragDistance: number = 0;
+
+    /** 设置拖拽距离（由 CoinController 每帧更新），用于拖拽时拉近镜头 */
+    public setDragDistance(dist: number): void {
+        this._dragDistance = dist;
+    }
+
     /** 设置游戏物理速度倍率（只改 fixedTimeStep，不重置累积器） */
     private _setGameSpeed(speed: number): void {
         PhysicsSystem2D.instance.fixedTimeStep = (1 / 60) * speed;
@@ -283,7 +291,7 @@ export class GameLogic extends Component {
         if (!this._mainCameraNode || !this._mainCameraComp) return;
 
         if (this._isSlowMotion && this._activeShotCoin?.isValid) {
-            // 慢动作中：平滑跟踪硬币位置 + 放大到 orthoHeight=200
+            // 慢动作中：平滑跟踪硬币位置（不拉近镜头）
             const factor = 3 / Math.max(this.cameraZoomInDuration, 0.001);
             const t = Math.min(1, dt * factor);
             const target = this._activeShotCoin.position;
@@ -293,8 +301,6 @@ export class GameLogic extends Component {
                 camPos.y + (target.y - camPos.y) * t,
                 this._originalCamPos.z,
             );
-            const curH = this._mainCameraComp.orthoHeight;
-            this._mainCameraComp.orthoHeight = curH + (200 - curH) * t;
         } else if (this._isTrackingHitCoin && this._trackTargetNode?.isValid) {
             // 追踪被撞硬币（正常缩放），超时或节点销毁后自动恢复
             const factor = 3 / Math.max(this.cameraZoomOutDuration, 0.001);
@@ -310,8 +316,33 @@ export class GameLogic extends Component {
             if (Date.now() - this._trackStartTime >= this.cameraTrackDuration * 1000) {
                 this._stopTrackHitCoin();
             }
+        } else if (this._dragDistance > 0) {
+            // 拖拽中：平滑回到原始位置 + 根据拖拽距离拉近镜头
+            const camPos = this._mainCameraNode.position;
+            const dx = this._originalCamPos.x - camPos.x;
+            const dy = this._originalCamPos.y - camPos.y;
+            const distSq = dx * dx + dy * dy;
+            if (distSq > 0.1) {
+                const t = Math.min(1, dt * 3 / Math.max(this.cameraZoomOutDuration, 0.001));
+                this._mainCameraNode.setPosition(
+                    camPos.x + dx * t,
+                    camPos.y + dy * t,
+                    this._originalCamPos.z,
+                );
+            } else {
+                this._mainCameraNode.setPosition(this._originalCamPos);
+            }
+            // 根据拖拽距离计算目标 orthoHeight（越远拉得越近）
+            const dragZoomFactor = 0.1;
+            const targetH = Math.max(50, this._defaultOrthoHeight - this._dragDistance * dragZoomFactor);
+            const curH = this._mainCameraComp.orthoHeight;
+            const diffH = targetH - curH;
+            if (Math.abs(diffH) > 0.1) {
+                const t = Math.min(1, dt * 3 / Math.max(this.cameraZoomInDuration, 0.001));
+                this._mainCameraComp.orthoHeight = curH + diffH * t;
+            }
         } else {
-            // 慢动作结束：平滑回到原始位置 + 原始缩放
+            // 慢动作/追踪结束：平滑回到原始位置 + 原始缩放
             const factor = 3 / Math.max(this.cameraZoomOutDuration, 0.001);
             const t = Math.min(1, dt * factor);
             const camPos = this._mainCameraNode.position;

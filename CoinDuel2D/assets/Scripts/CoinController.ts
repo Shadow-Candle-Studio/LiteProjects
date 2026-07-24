@@ -146,6 +146,9 @@ export class CoinController extends Component {
             }
         }
 
+        // 复位拖拽距离
+        this._gameLogic?.setDragDistance(0);
+
         this._isDragging = true;
         event.getLocation(this._dragStartPos);
         // 同步更新缓存位置，防止 update() 轮询时读到未初始化的 (0,0)
@@ -180,6 +183,12 @@ export class CoinController extends Component {
         // 持续缓存鼠标位置，供 update 轮询兜底
         event.getLocation(CoinController._lastWorldPos);
         if (!this._isDragging) return;
+        // 报告拖拽距离，用于镜头拉近
+        if (this._gameLogic) {
+            const dx = CoinController._lastWorldPos.x - this._dragStartPos.x;
+            const dy = CoinController._lastWorldPos.y - this._dragStartPos.y;
+            this._gameLogic.setDragDistance(Math.sqrt(dx * dx + dy * dy));
+        }
         this._drawDragLine(event);
     }
 
@@ -281,6 +290,9 @@ export class CoinController extends Component {
         if (!this._isDragging) return;
         this._isDragging = false;
         this._unregisterGlobalEvents();
+
+        // 复位拖拽距离
+        this._gameLogic?.setDragDistance(0);
 
         // 清除拖拽引导线
         const graphics = this._gameLogic?.dragGraphics;
