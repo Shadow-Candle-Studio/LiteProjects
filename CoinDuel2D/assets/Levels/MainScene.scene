@@ -587,14 +587,11 @@
     "speedThreshold": 0.05,
     "velocityFactor": 1,
     "coinDamping": 4.5,
-    "hitPauseDuration": 0.1,
+    "hitPauseDuration": 0.01,
     "cameraZoomInDuration": 0.5,
     "cameraZoomOutDuration": 0.5,
     "cameraTrackDuration": 2,
-    "hitParticlePrefab": {
-      "__uuid__": "623ead49-1e8b-47bb-b9a4-fd1536fac07d",
-      "__expectedType__": "cc.Prefab"
-    },
+    "hitParticlePrefab": null,
     "launchEffectPrefab": {
       "__uuid__": "edc006ba-71dc-4c39-a740-8675f39e95c5",
       "__expectedType__": "cc.Prefab"
@@ -4872,7 +4869,7 @@
       "__id__": 19
     },
     "_children": [],
-    "_active": true,
+    "_active": false,
     "_components": [
       {
         "__id__": 122
