@@ -1,6 +1,6 @@
-import { _decorator, Component, Node, Vec2, Vec3, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D, AudioClip, Camera, Prefab, instantiate, ParticleSystem2D, Animation } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D, AudioClip, Camera } from 'cc';
 import { CoinController } from './CoinController';
-import { EffectGoHelper } from './EffectGoHelper';
+import { HitEffectManager } from './HitEffectManager';
 import { Leaderboard } from './Leaderboard';
 import { SoundManager } from './SoundManager';
 const { ccclass, property } = _decorator;
@@ -33,26 +33,8 @@ export class GameLogic extends Component {
     @property({ tooltip: "硬币滑动阻尼（值越大摩擦越大，减速越快）" })
     public coinDamping: number = 2;
 
-    @property({ tooltip: "首次碰撞时暂停物理的时长（秒），用于增强撞击感" })
-    public hitPauseDuration: number = 0.01;
-
-    @property({ tooltip: "摄像机拉近过渡时长（秒），值越大过渡越慢，默认0.5" })
-    public cameraZoomInDuration: number = 0.5;
-
-    @property({ tooltip: "摄像机恢复过渡时长（秒），值越大过渡越慢，默认0.5" })
-    public cameraZoomOutDuration: number = 0.5;
-
-    @property({ tooltip: "首次碰撞后追踪被撞硬币的时长（秒），追踪结束后恢复摄像机" })
-    public cameraTrackDuration: number = 2.0;
-
-    @property({ type: Prefab, tooltip: "硬币首次碰撞时的粒子特效预制体" })
-    public hitParticlePrefab: Prefab | null = null;
-
-    @property({ type: Prefab, tooltip: "硬币发射时的特效预制体（effect_launch），播放完自动发射" })
-    public launchEffectPrefab: Prefab | null = null;
-
-    @property({ tooltip: "发射特效动画播放速度倍率（1=正常，2=二倍速，0.5=慢放）" })
-    public launchAnimSpeed: number = 1;
+    @property({ type: HitEffectManager, tooltip: "击中特效管理器（控制拖拽拉近/发射追踪/暂停/震动/粒子/碰撞追踪/恢复）" })
+    public hitEffectManager: HitEffectManager | null = null;
 
     // ── 围墙与缺口数据（每局由 GameScene 从 TableController 同步） ──
     /** 围墙厚度 */
@@ -88,31 +70,9 @@ export class GameLogic extends Component {
     /** 慢动作最长持续毫秒数 */
     private readonly _slowMotionMaxDuration: number = 3000;
 
-    /** 首次碰撞暂停中 */
-    private _isHitPausing: boolean = false;
-
-    /** 屏幕震动中 */
-    private _isShaking: boolean = false;
-    /** 震动开始时间（ms） */
-    private _shakeStartTime: number = 0;
-    /** 震动结束时间（ms） */
-    private _shakeEndTime: number = 0;
-    /** 震动方向（归一化） */
-    private _shakeDir: Vec2 = new Vec2(1, 0);
-
-    /** 正在追踪被撞硬币 */
-    private _isTrackingHitCoin: boolean = false;
-    /** 被追踪的被撞硬币节点 */
-    private _trackTargetNode: Node | null = null;
-    /** 追踪开始时间（ms） */
-    private _trackStartTime: number = 0;
-
-    /** 当前拖拽距离（拖拽时用于镜头缩放，0=未拖拽） */
-    private _dragDistance: number = 0;
-
-    /** 设置拖拽距离（由 CoinController 每帧更新），用于拖拽时拉近镜头 */
+    /** 设置拖拽距离（由 CoinController 每帧更新），委托给 HitEffectManager */
     public setDragDistance(dist: number): void {
-        this._dragDistance = dist;
+        this.hitEffectManager?.setDragDistance(dist);
     }
 
     /** 设置游戏物理速度倍率（只改 fixedTimeStep，不重置累积器） */
@@ -189,14 +149,14 @@ export class GameLogic extends Component {
         const hitCtrl = otherNode.getComponent(CoinController);
         if (!hitCtrl) return;
 
-        // 首次碰撞：暂停物理增强撞击感，暂停结束后恢复速度、播放粒子、追踪被撞硬币
-        if (this.coinHitCount === 0 && this.hitPauseDuration > 0) {
+        // 首次碰撞：委托给 HitEffectManager 处理特效
+        if (this.coinHitCount === 0) {
             const hitPos = new Vec3(
                 (nodeA.position.x + nodeB.position.x) / 2,
                 (nodeA.position.y + nodeB.position.y) / 2,
                 0,
             );
-            this._pauseAndRestore(hitPos, otherNode);
+            this.hitEffectManager?.onHit(hitPos, otherNode, this._activeShotCoin, this);
         } else {
             // 后续碰撞直接恢复速度
             this._restoreSpeed();
@@ -214,52 +174,21 @@ export class GameLogic extends Component {
         this.onCoinHitByActiveShot(otherNode);
     }
 
-    /** 首次碰撞时暂停物理，暂停结束后恢复速度、播放粒子、追踪被撞硬币 */
-    private _pauseAndRestore(hitPos: Vec3, hitCoin: Node): void {
-        if (this._isHitPausing) return;
-        this._isHitPausing = true;
-        this._setGameSpeed(0);
-        // 屏幕震动：沿被撞硬币即将移动的方向（发射硬币→被撞硬币），一去一回
-        const dir = new Vec2(
-            hitCoin.position.x - (this._activeShotCoin?.position.x ?? 0),
-            hitCoin.position.y - (this._activeShotCoin?.position.y ?? 0),
-        );
-        const len = dir.length();
-        if (len > 0.001) { dir.x /= len; dir.y /= len; }
-        this._startShake(this.hitPauseDuration, dir);
-        this.scheduleOnce(() => {
-            this._isHitPausing = false;
-            this._restoreSpeed();
-            // 在碰撞点生成粒子特效
-            if (this.hitParticlePrefab) {
-                const particleNode = instantiate(this.hitParticlePrefab);
-                this.node.parent?.addChild(particleNode);
-                particleNode.setPosition(hitPos);
-            }
-            // 开始追踪被撞硬币
-            this._startTrackHitCoin(hitCoin);
-        }, this.hitPauseDuration);
+    // ── 供 HitEffectManager 调用的公开桥接方法 ──
+
+    /** 设置物理速度（公开桥接） */
+    public setGameSpeed(speed: number): void {
+        this._setGameSpeed(speed);
     }
 
-    /** 开始追踪被撞硬币，持续 cameraTrackDuration 秒后自动恢复摄像机 */
-    private _startTrackHitCoin(coin: Node): void {
-        this._isTrackingHitCoin = true;
-        this._trackTargetNode = coin;
-        this._trackStartTime = Date.now();
+    /** 恢复物理速度（公开桥接） */
+    public restoreSpeed(): void {
+        this._restoreSpeed();
     }
 
-    /** 开始屏幕震动，沿指定方向一去一回，持续指定时长（秒） */
-    private _startShake(duration: number, dir: Vec2): void {
-        this._isShaking = true;
-        this._shakeStartTime = Date.now();
-        this._shakeEndTime = this._shakeStartTime + duration * 1000;
-        this._shakeDir.set(dir);
-    }
-
-    /** 停止追踪被撞硬币 */
-    private _stopTrackHitCoin(): void {
-        this._isTrackingHitCoin = false;
-        this._trackTargetNode = null;
+    /** 向世界根节点添加子节点（公开桥接，用于特效） */
+    public addChildToWorld(node: Node): void {
+        this.node.parent?.addChild(node);
     }
 
     update(deltaTime: number) {
@@ -286,104 +215,17 @@ export class GameLogic extends Component {
         }
     }
 
-    /** 摄像机跟随逻辑（位置 + orthoHeight 缩放 + 屏幕震动） */
+    /** 摄像机跟随逻辑，委托给 HitEffectManager */
     private _updateCamera(dt: number): void {
         if (!this._mainCameraNode || !this._mainCameraComp) return;
-
-        if (this._isSlowMotion && this._activeShotCoin?.isValid) {
-            // 慢动作中：平滑跟踪硬币位置（不拉近镜头）
-            const factor = 3 / Math.max(this.cameraZoomInDuration, 0.001);
-            const t = Math.min(1, dt * factor);
-            const target = this._activeShotCoin.position;
-            const camPos = this._mainCameraNode.position;
-            this._mainCameraNode.setPosition(
-                camPos.x + (target.x - camPos.x) * t,
-                camPos.y + (target.y - camPos.y) * t,
-                this._originalCamPos.z,
-            );
-        } else if (this._isTrackingHitCoin && this._trackTargetNode?.isValid) {
-            // 追踪被撞硬币（正常缩放），超时或节点销毁后自动恢复
-            const factor = 3 / Math.max(this.cameraZoomOutDuration, 0.001);
-            const t = Math.min(1, dt * factor);
-            const target = this._trackTargetNode.position;
-            const camPos = this._mainCameraNode.position;
-            this._mainCameraNode.setPosition(
-                camPos.x + (target.x - camPos.x) * t,
-                camPos.y + (target.y - camPos.y) * t,
-                this._originalCamPos.z,
-            );
-            // 检查追踪时长是否已到
-            if (Date.now() - this._trackStartTime >= this.cameraTrackDuration * 1000) {
-                this._stopTrackHitCoin();
-            }
-        } else if (this._dragDistance > 0) {
-            // 拖拽中：平滑回到原始位置 + 根据拖拽距离拉近镜头
-            const camPos = this._mainCameraNode.position;
-            const dx = this._originalCamPos.x - camPos.x;
-            const dy = this._originalCamPos.y - camPos.y;
-            const distSq = dx * dx + dy * dy;
-            if (distSq > 0.1) {
-                const t = Math.min(1, dt * 3 / Math.max(this.cameraZoomOutDuration, 0.001));
-                this._mainCameraNode.setPosition(
-                    camPos.x + dx * t,
-                    camPos.y + dy * t,
-                    this._originalCamPos.z,
-                );
-            } else {
-                this._mainCameraNode.setPosition(this._originalCamPos);
-            }
-            // 根据拖拽距离计算目标 orthoHeight（越远拉得越近）
-            const dragZoomFactor = 0.1;
-            const targetH = Math.max(50, this._defaultOrthoHeight - this._dragDistance * dragZoomFactor);
-            const curH = this._mainCameraComp.orthoHeight;
-            const diffH = targetH - curH;
-            if (Math.abs(diffH) > 0.1) {
-                const t = Math.min(1, dt * 3 / Math.max(this.cameraZoomInDuration, 0.001));
-                this._mainCameraComp.orthoHeight = curH + diffH * t;
-            }
-        } else {
-            // 慢动作/追踪结束：平滑回到原始位置 + 原始缩放
-            const factor = 3 / Math.max(this.cameraZoomOutDuration, 0.001);
-            const t = Math.min(1, dt * factor);
-            const camPos = this._mainCameraNode.position;
-            const dx = this._originalCamPos.x - camPos.x;
-            const dy = this._originalCamPos.y - camPos.y;
-            const distSq = dx * dx + dy * dy;
-            if (distSq > 0.1) {
-                this._mainCameraNode.setPosition(
-                    camPos.x + dx * t,
-                    camPos.y + dy * t,
-                    this._originalCamPos.z,
-                );
-            } else {
-                this._mainCameraNode.setPosition(this._originalCamPos);
-            }
-            const curH = this._mainCameraComp.orthoHeight;
-            const diffH = this._defaultOrthoHeight - curH;
-            if (Math.abs(diffH) > 0.1) {
-                this._mainCameraComp.orthoHeight = curH + diffH * t;
-            } else {
-                this._mainCameraComp.orthoHeight = this._defaultOrthoHeight;
-            }
-        }
-
-        // 屏幕震动：沿被撞硬币移动方向一去一回（一整个正弦周期）
-        if (this._isShaking) {
-            const elapsed = Date.now() - this._shakeStartTime;
-            const duration = this._shakeEndTime - this._shakeStartTime;
-            if (elapsed < duration && duration > 0) {
-                const progress = elapsed / duration;                               // 0→1
-                const amplitude = Math.sin(progress * Math.PI * 2) * 4;            // 一去一回
-                const pos = this._mainCameraNode.position;
-                this._mainCameraNode.setPosition(
-                    pos.x + this._shakeDir.x * amplitude,
-                    pos.y + this._shakeDir.y * amplitude,
-                    pos.z,
-                );
-            } else {
-                this._isShaking = false;
-            }
-        }
+        this.hitEffectManager?.updateCamera(
+            dt,
+            this._mainCameraNode,
+            this._mainCameraComp,
+            this._originalCamPos,
+            this._defaultOrthoHeight,
+            this._isSlowMotion,
+        );
     }
 
     // 检查所有硬币是否都停下了
@@ -605,7 +447,7 @@ export class GameLogic extends Component {
     private _handleGameOver(): void {
         console.log(">>> 游戏结束 <<<");
         this._restoreSpeed();
-        this._stopTrackHitCoin();
+        this.hitEffectManager?.stopTracking();
         SoundManager.instance.playGameOver();
         const duration = Math.floor((Date.now() - this._gameStartTime) / 1000);
         if (this.score > 0) {
@@ -619,7 +461,7 @@ export class GameLogic extends Component {
     private _handleGameWin(): void {
         console.log(">>> 游戏胜利 <<<");
         this._restoreSpeed();
-        this._stopTrackHitCoin();
+        this.hitEffectManager?.stopTracking();
         this._setCoinsInteraction(false);
         this.onGameWin?.();
     }
@@ -648,40 +490,19 @@ export class GameLogic extends Component {
         }
     }
 
-    /** 发射硬币：先播放特效，特效完成后执行实际发射 */
+    /** 发射硬币：委托 HitEffectManager 处理发射特效，然后进入物理模拟 */
     public launchCoin(coin: Node, velocity: Vec2): void {
         this.setActiveShotCoin(coin);
-
-        if (this.launchEffectPrefab) {
-            const effectNode = instantiate(this.launchEffectPrefab);
-            effectNode.setPosition(coin.position);
-            this.node.parent?.addChild(effectNode);
-
-            const anim = effectNode.getComponent(Animation);
-            if (anim) {
-                // 添加辅助组件，让动画剪辑中的 "go" 事件能触发发射
-                const helper = effectNode.addComponent(EffectGoHelper);
-                helper.onGo = () => {
-                    //effectNode.destroy();
-                    this._doLaunch(coin, velocity);
-                };
-                const animState = anim.getState(anim.defaultClip?.name ?? '');
-                if (animState) animState.speed = this.launchAnimSpeed;
-                anim.play();
-                return;
-            }
-        }
-
-        // 没有特效或没有 Animation 组件，直接发射
         this._doLaunch(coin, velocity);
     }
 
-    /** 实际执行发射：设置速度、播放音效、进入物理模拟 */
+    /** 实际执行发射：设置速度、播放音效、触发管理器特效、进入物理模拟 */
     private _doLaunch(coin: Node, velocity: Vec2): void {
         const rb = coin.getComponent(RigidBody2D);
         if (!rb) return;
         rb.linearVelocity = velocity;
         SoundManager.instance.playShot();
+        this.hitEffectManager?.onLaunch(coin, this);
         this.startSimulation();
     }
 
@@ -692,14 +513,13 @@ export class GameLogic extends Component {
         this.coinFallCount = 0;
         this._lastHitCoin = null;
         this._setCoinsInteraction(false);
-        // 发射时开启慢动作
-        this._setGameSpeed(0.3);
+        // 游戏速度由 HitEffectManager.onLaunch 控制
     }
 
     // 允许用户操作状态
     public waitingPlayerOperation(){
         this._restoreSpeed();
-        this._stopTrackHitCoin();
+        this.hitEffectManager?.stopTracking();
         this.currentPhase = GamePhase.WAITING_PLAYER;
         this._activeShotCoin = null;
         this._lockedCoin = null;
