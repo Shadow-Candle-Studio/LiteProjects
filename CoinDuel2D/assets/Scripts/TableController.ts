@@ -48,7 +48,7 @@ export class TableController extends Component {
         this._tableSprite.type = Sprite.Type.SIMPLE;
 
         // 加载桌面纹理
-        resources.load('texture_table_1/spriteFrame', SpriteFrame, (err, sf) => {
+        resources.load('textures/table_1/spriteFrame', SpriteFrame, (err, sf) => {
             if (!err && sf && this._tableSprite) {
                 this._tableSprite.spriteFrame = sf;
             } else {
@@ -64,7 +64,7 @@ export class TableController extends Component {
         this._wallNode = wallNode;
 
         // 加载围墙纹理
-        resources.load('texture_wall_1/spriteFrame', SpriteFrame, (err, sf) => {
+        resources.load('textures/wall_1/spriteFrame', SpriteFrame, (err, sf) => {
             if (!err && sf) {
                 this._wallSpriteFrame = sf;
                 // 如果纹理加载时围墙已创建，刷新纹理

@@ -18,6 +18,9 @@ export class HitEffectManager extends Component {
     @property({ tooltip: "蓄力时镜头根据拖拽距离拉近" })
     public enableDragZoom: boolean = true;
 
+    @property({ tooltip: "蓄力时预测目标硬币并高亮为红色" })
+    public enableDragPrediction: boolean = true;
+
     // ── 发射阶段 ──
     @property({ tooltip: "发射时播放蓄力完毕特效（effect_launch）" })
     public enableLaunchEffect: boolean = true;
@@ -219,6 +222,51 @@ export class HitEffectManager extends Component {
                 this._startTrackHitCoin(hitCoin);
             }
         }
+    }
+
+    /**
+     * 预测发射硬币将会撞击的第一个硬币基于圆扫掠检测。
+     * 从发射硬币位置沿方向步进，检查移动圆是否与目标圆相交。
+     * @param fromPos 发射硬币世界坐标
+     * @param direction 发射方向（归一化向量）
+     * @param radius 硬币半径
+     * @param maxDistance 最大搜索距离
+     */
+    public predictHitCoin(fromPos: Vec3, direction: Vec2, radius: number = 32, maxDistance: number = 2000): Node | null {
+        const minDist = radius * 2;
+        const stepSize = radius; // 每一步约一个半径，不漏检
+
+        // 收集所有硬币（排除自身用 fromPos 近似判断）
+        const targets: { pos: Vec2; node: Node }[] = [];
+        const gl = this.node.parent?.getComponent(GameLogic)
+                  ?? this.getComponent(GameLogic);
+        if (gl?.coinGroup) {
+            for (const child of gl.coinGroup.children) {
+                const ddx = child.position.x - fromPos.x;
+                const ddy = child.position.y - fromPos.y;
+                if (ddx * ddx + ddy * ddy > 10) { // 排除自身
+                    targets.push({ pos: new Vec2(child.position.x, child.position.y), node: child });
+                }
+            }
+        }
+
+        let px = fromPos.x + direction.x * (radius + 1);
+        let py = fromPos.y + direction.y * (radius + 1);
+        let dist = 0;
+
+        while (dist < maxDistance) {
+            for (const t of targets) {
+                const dx = px - t.pos.x;
+                const dy = py - t.pos.y;
+                if (dx * dx + dy * dy < minDist * minDist) {
+                    return t.node;
+                }
+            }
+            px += direction.x * stepSize;
+            py += direction.y * stepSize;
+            dist += stepSize;
+        }
+        return null;
     }
 
     /** 停止追踪 */

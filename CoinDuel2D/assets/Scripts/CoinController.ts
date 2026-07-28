@@ -146,8 +146,9 @@ export class CoinController extends Component {
             }
         }
 
-        // 复位拖拽距离
+        // 复位拖拽距离和预测
         this._gameLogic?.setDragDistance(0);
+        this._clearPredictedTarget();
 
         this._isDragging = true;
         event.getLocation(this._dragStartPos);
@@ -179,6 +180,9 @@ export class CoinController extends Component {
         this.node.off(Node.EventType.TOUCH_CANCEL, this._onPointerUp, this);
     }
 
+    /** 当前高亮的预测目标硬币 */
+    private _predictedTarget: Node | null = null;
+
     private _onTouchMove(event: EventTouch): void {
         // 持续缓存鼠标位置，供 update 轮询兜底
         event.getLocation(CoinController._lastWorldPos);
@@ -188,8 +192,41 @@ export class CoinController extends Component {
             const dx = CoinController._lastWorldPos.x - this._dragStartPos.x;
             const dy = CoinController._lastWorldPos.y - this._dragStartPos.y;
             this._gameLogic.setDragDistance(Math.sqrt(dx * dx + dy * dy));
+
+            // 预测目标硬币并高亮
+            const hem = this._gameLogic.hitEffectManager;
+            if (hem?.enableDragPrediction) {
+                const dir = new Vec2(-dx, -dy);
+                const len = dir.length();
+                if (len > 0.001) { dir.x /= len; dir.y /= len; }
+                const coinRadius = this._gameLogic?.coinRadius ?? 32;
+                const predicted = hem.predictHitCoin(this.node.position, dir, coinRadius);
+                this._setPredictedTarget(predicted);
+            }
         }
         this._drawDragLine(event);
+    }
+
+    /** 高亮/取消高亮预测目标硬币 */
+    private _setPredictedTarget(coin: Node | null): void {
+        if (this._predictedTarget && this._predictedTarget !== coin) {
+            const oldSprite = this._predictedTarget.getComponent(Sprite);
+            if (oldSprite) oldSprite.color = Color.WHITE;
+        }
+        if (coin) {
+            const sprite = coin.getComponent(Sprite);
+            if (sprite) sprite.color = new Color(255, 100, 100);
+        }
+        this._predictedTarget = coin;
+    }
+
+    /** 清理预测高亮 */
+    private _clearPredictedTarget(): void {
+        if (this._predictedTarget) {
+            const sprite = this._predictedTarget.getComponent(Sprite);
+            if (sprite) sprite.color = Color.WHITE;
+            this._predictedTarget = null;
+        }
     }
 
     /** 根据鼠标位置绘制拖拽引导线（从 Event 对象读取） */
@@ -291,8 +328,9 @@ export class CoinController extends Component {
         this._isDragging = false;
         this._unregisterGlobalEvents();
 
-        // 复位拖拽距离
+        // 复位拖拽距离和预测
         this._gameLogic?.setDragDistance(0);
+        this._clearPredictedTarget();
 
         // 清除拖拽引导线
         const graphics = this._gameLogic?.dragGraphics;
