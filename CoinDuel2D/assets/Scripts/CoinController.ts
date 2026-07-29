@@ -16,6 +16,8 @@ export class CoinController extends Component {
     private _eventRegistered: boolean = false;
     private _indicatorActive: boolean = false;
     private _indicatorTime: number = 0;
+    /** 其他硬币拖拽时，本硬币高亮为绿色（表示可被打击） */
+    private _targetableActive: boolean = false;
 
     /** 当前硬币类型（coins.json 中的 key，如 "1", "2"） */
     private _coinTypeKey: string = '';
@@ -111,13 +113,18 @@ export class CoinController extends Component {
             this._drawDragLineFromPos(CoinController._lastWorldPos);
         }
 
-        if (!this._indicatorActive) return;
+        if (!this._indicatorActive && !this._targetableActive) return;
 
         this._indicatorTime += dt;
-        // sin 波归一化到 0~1：t=0 → 黄色(255,255,0)，t=1 → 白色(255,255,255)
         const t = (Math.sin(this._indicatorTime * Math.PI * 2) + 1) / 2;
         const sprite = this.node.getComponent(Sprite);
-        if (sprite) {
+        if (!sprite) return;
+
+        if (this._targetableActive) {
+            // 绿色脉冲：t=0 → 绿色(0,255,0)，t=1 → 白色(255,255,255)
+            sprite.color = new Color(Math.floor((1 - t) * 255), 255, Math.floor((1 - t) * 255));
+        } else {
+            // 黄色脉冲：t=0 → 黄色(255,255,0)，t=1 → 白色(255,255,255)
             sprite.color = new Color(255, 255, Math.floor(t * 255));
         }
     }
@@ -138,6 +145,7 @@ export class CoinController extends Component {
                 this._rigidBody.gravityScale = 1;
             }
             this._hideDragArrow();
+            this._clearTargetableAll();
         }
 
         // 复位拖拽距离和预测
@@ -152,6 +160,16 @@ export class CoinController extends Component {
 
         // 开始循环播放拖拽音效
         SoundManager.instance.startCoinDrag();
+
+        // 其他硬币高亮为绿色（表示可被打击）
+        const coinGroup = this._gameLogic?.coinGroup;
+        if (coinGroup) {
+            for (const child of coinGroup.children) {
+                if (child === this.node) continue;
+                const ctrl = child.getComponent(CoinController);
+                if (ctrl) ctrl.showTargetable(true);
+            }
+        }
 
         // 冻结物理，防止拖拽期间受物理影响
         if (this._rigidBody) {
@@ -218,6 +236,26 @@ export class CoinController extends Component {
             if (sprite) sprite.color = new Color(255, 100, 100);
         }
         this._predictedTarget = coin;
+    }
+
+    /** 设置本硬币的可被打击高亮状态（绿色脉冲） */
+    public showTargetable(show: boolean): void {
+        this._targetableActive = show;
+        this._indicatorTime = 0;
+        if (!show) {
+            const sprite = this.node.getComponent(Sprite);
+            if (sprite) sprite.color = Color.WHITE;
+        }
+    }
+
+    /** 清除所有硬币的可被打击高亮 */
+    private _clearTargetableAll(): void {
+        const coinGroup = this._gameLogic?.coinGroup;
+        if (!coinGroup) return;
+        for (const child of coinGroup.children) {
+            const ctrl = child.getComponent(CoinController);
+            if (ctrl) ctrl.showTargetable(false);
+        }
     }
 
     /** 清理预测高亮 */
@@ -309,6 +347,7 @@ export class CoinController extends Component {
         this._gameLogic?.setDragDistance(0);
         this._clearPredictedTarget();
         this._hideDragArrow();
+        this._clearTargetableAll();
 
         if (!this._rigidBody) return;
 

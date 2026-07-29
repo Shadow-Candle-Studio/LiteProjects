@@ -74,7 +74,6 @@ export class SoundManager extends Component {
     public startCoinDrag(): void {
         if (!this.coindrag || !this.audioSource) return;
         if (this.audioSource.playing) return;
-        console.log(this.audioSource.playing);
         this.audioSource.clip = this.coindrag;
         this.audioSource.play();
     }

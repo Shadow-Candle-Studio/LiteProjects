@@ -604,7 +604,7 @@
       "__expectedType__": "cc.Prefab"
     },
     "launchAnimSpeed": 3,
-    "hitPauseDuration": 0.2,
+    "hitPauseDuration": 0.1,
     "hitParticlePrefab": {
       "__uuid__": "256d1ec0-b500-4012-9240-7ce692361477",
       "__expectedType__": "cc.Prefab"
