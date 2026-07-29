@@ -19,6 +19,10 @@ export class CoinController extends Component {
     /** 其他硬币拖拽时，本硬币高亮为绿色（表示可被打击） */
     private _targetableActive: boolean = false;
 
+    /** 拖拽箭头 Sprite 节点与组件 */
+    private _dragArrowNode: Node | null = null;
+    private _dragArrowSprite: Sprite | null = null;
+
     /** 当前硬币类型（coins.json 中的 key，如 "1", "2"） */
     private _coinTypeKey: string = '';
     /** 缓存的自定义碰撞音效 AudioClip */
