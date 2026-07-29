@@ -17,6 +17,9 @@ export class SoundManager extends Component {
     @property(AudioClip)
     public coinfall:AudioClip = null;
 
+    @property(AudioClip)
+    public coindrag:AudioClip = null;
+    
     private audioSource:AudioSource = null;
 
     protected onLoad(): void {
@@ -60,11 +63,20 @@ export class SoundManager extends Component {
 
     /** 游戏结束音效 */
     public playGameOver(): void {
-        resources.load('gameover', AudioClip, (err: any, clip: AudioClip) => {
+        resources.load('sounds/gameover', AudioClip, (err: any, clip: AudioClip) => {
             if (!err && clip && this.audioSource) {
                 this.audioSource.playOneShot(clip);
             }
         });
+    }
+
+    /** 播放一次拖拽音效（若已在播放则跳过） */
+    public startCoinDrag(): void {
+        if (!this.coindrag || !this.audioSource) return;
+        if (this.audioSource.playing) return;
+        console.log(this.audioSource.playing);
+        this.audioSource.clip = this.coindrag;
+        this.audioSource.play();
     }
 }
 

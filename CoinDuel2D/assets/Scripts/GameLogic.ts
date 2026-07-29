@@ -425,8 +425,12 @@ export class GameLogic extends Component {
                     this._activeShotCoin = null;
                 }
 
-                // 3. 胜利条件：桌面只剩最后一枚硬币（即刚弹出的已移除，仅剩 target）
-                if (this.coinGroup.children.length <= 1) {
+                // 3. 胜利条件：桌面只剩最后一枚硬币（排除 DragLine 等非硬币节点）
+                let coinCount = 0;
+                for (const child of this.coinGroup.children) {
+                    if (child.getComponent(CoinController)) coinCount++;
+                }
+                if (coinCount <= 1) {
                     this._handleGameWin();
                     return;
                 }

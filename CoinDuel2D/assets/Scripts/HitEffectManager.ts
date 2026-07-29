@@ -209,11 +209,12 @@ export class HitEffectManager extends Component {
             this._doHitPause(hitPos, hitCoin, shotCoin, gl);
         } else {
             // 无暂停，直接触发其他特效
+            const dir = this._calcShakeDir(hitCoin, shotCoin);
             if (this.enableHitParticle && this.hitParticlePrefab) {
-                this._spawnParticle(hitPos, gl);
+                this._spawnParticle(hitPos, dir, gl);
             }
             if (this.enableHitShake) {
-                this._startShake(0.05, this._calcShakeDir(hitCoin, shotCoin));
+                this._startShake(0.05, dir);
             }
             if (this.enableHitSubCamera) {
                 this._showSubCamera(hitPos);
@@ -357,6 +358,13 @@ export class HitEffectManager extends Component {
     /** 击中停顿 + 连锁特效 */
     private _doHitPause(hitPos: Vec3, hitCoin: Node, shotCoin: Node | null, gl: GameLogic): void {
         this.isHitPausing = true;
+
+        // 先播放撞击效果（按冲击方向旋转）
+        if (this.enableHitParticle && this.hitParticlePrefab) {
+            this._spawnParticle(hitPos, this._calcShakeDir(hitCoin, shotCoin), gl);
+        }
+
+        // 再暂停物理
         gl.setGameSpeed(0);
 
         if (this.enableHitShake) {
@@ -370,20 +378,20 @@ export class HitEffectManager extends Component {
             this.isHitPausing = false;
             gl.restoreSpeed();
 
-            if (this.enableHitParticle && this.hitParticlePrefab) {
-                this._spawnParticle(hitPos, gl);
-            }
             if (this.enableHitTracking) {
                 this._startTrackHitCoin(hitCoin);
             }
         }, this.hitPauseDuration);
     }
 
-    /** 生成飞溅粒子 */
-    private _spawnParticle(pos: Vec3, gl: GameLogic): void {
+    /** 生成飞溅粒子（按冲击方向旋转，默认朝上） */
+    private _spawnParticle(pos: Vec3, dir: Vec2, gl: GameLogic): void {
         const node = instantiate(this.hitParticlePrefab!);
         gl.addChildToWorld(node);
         node.setPosition(pos);
+        // 方向朝上 (0,1)，旋转到冲击方向
+        const angle = Math.atan2(dir.y, dir.x) * 180 / Math.PI - 90;
+        node.eulerAngles = new Vec3(0, 0, angle);
     }
 
     /** 开启子画面摄像机 */

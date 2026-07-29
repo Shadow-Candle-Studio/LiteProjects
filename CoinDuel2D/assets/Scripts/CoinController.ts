@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec2, RigidBody2D, ERigidBody2DType, EventTouch, Color, Sprite, CircleCollider2D, SpriteFrame, AudioClip } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3, RigidBody2D, ERigidBody2DType, EventTouch, Color, Sprite, CircleCollider2D, SpriteFrame, AudioClip, resources, UITransform } from 'cc';
 import { GameLogic } from './GameLogic';
 import { SoundManager } from './SoundManager';
 const { ccclass } = _decorator;
@@ -106,13 +106,9 @@ export class CoinController extends Component {
     }
 
     update(dt: number) {
-        // 拖拽中每帧重绘箭头（兜底：即使冒泡事件偶发卡顿也能持续更新）
+        // 拖拽中每帧更新箭头（Sprite 方式，由 _drawDragLineFromPos 处理）
         if (this._isDragging) {
-            const graphics = this._gameLogic?.dragGraphics;
-            if (graphics) {
-                this._drawDragLineFromPos(CoinController._lastWorldPos);
-            }
-            // 不提前 return：拖拽中也可能需要更新 indicator
+            this._drawDragLineFromPos(CoinController._lastWorldPos);
         }
 
         if (!this._indicatorActive) return;
@@ -141,19 +137,21 @@ export class CoinController extends Component {
                 this._rigidBody.type = ERigidBody2DType.Dynamic;
                 this._rigidBody.gravityScale = 1;
             }
-            if (this._gameLogic?.dragGraphics) {
-                this._gameLogic.dragGraphics.clear();
-            }
+            this._hideDragArrow();
         }
 
         // 复位拖拽距离和预测
         this._gameLogic?.setDragDistance(0);
         this._clearPredictedTarget();
+        this._hideDragArrow();
 
         this._isDragging = true;
         event.getLocation(this._dragStartPos);
         // 同步更新缓存位置，防止 update() 轮询时读到未初始化的 (0,0)
         event.getLocation(CoinController._lastWorldPos);
+
+        // 开始循环播放拖拽音效
+        SoundManager.instance.startCoinDrag();
 
         // 冻结物理，防止拖拽期间受物理影响
         if (this._rigidBody) {
@@ -187,6 +185,8 @@ export class CoinController extends Component {
         // 持续缓存鼠标位置，供 update 轮询兜底
         event.getLocation(CoinController._lastWorldPos);
         if (!this._isDragging) return;
+        // 播放一次拖拽音效（若已在播放则跳过）
+        SoundManager.instance.startCoinDrag();
         // 报告拖拽距离，用于镜头拉近
         if (this._gameLogic) {
             const dx = CoinController._lastWorldPos.x - this._dragStartPos.x;
@@ -229,98 +229,75 @@ export class CoinController extends Component {
         }
     }
 
-    /** 根据鼠标位置绘制拖拽引导线（从 Event 对象读取） */
-    private _drawDragLineFromPos(mousePos: Vec2): void {
-        const graphics = this._gameLogic?.dragGraphics;
-        if (!graphics) return;
+    /** 创建或获取拖拽箭头 Sprite */
+    private _getDragArrow(): { node: Node; sprite: Sprite } | null {
+        if (this._dragArrowSprite) return { node: this._dragArrowNode!, sprite: this._dragArrowSprite };
 
-        const mid = this.node.position;
-        // dragStartPos 是鼠标按下时记录的 screen/UI 坐标
-        const dx = mousePos.x - this._dragStartPos.x;
-        const dy = mousePos.y - this._dragStartPos.y;
+        const gl = this._gameLogic;
+        if (!gl?.coinGroup) return null;
 
-        const tailX = mid.x + dx;
-        const tailY = mid.y + dy;
-        const headX = mid.x - dx;
-        const headY = mid.y - dy;
+        const node = new Node('DragArrow');
+        node.layer = 1; // WORLD
+        gl.coinGroup.addChild(node);
 
-        graphics.clear();
-        graphics.lineWidth = 4;
-        graphics.strokeColor = new Color(255, 100, 100);
-        graphics.moveTo(headX, headY);
-        graphics.lineTo(tailX, tailY);
-        graphics.stroke();
+        const ut = node.addComponent(UITransform);
+        ut.setContentSize(32, 32);
+        ut.setAnchorPoint(0.5, 0.5);
 
-        const dirX = headX - tailX;
-        const dirY = headY - tailY;
-        const len = Math.sqrt(dirX * dirX + dirY * dirY);
-        if (len > 4) {
-            const nx = dirX / len;
-            const ny = dirY / len;
-            const arrowSize = 12;
-            const arrowWidth = 6;
-            const px = -ny * arrowWidth;
-            const py = nx * arrowWidth;
-            const baseX = headX - nx * arrowSize;
-            const baseY = headY - ny * arrowSize;
+        const sprite = node.addComponent(Sprite);
+        sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        sprite.color = new Color(255, 100, 100);
 
-            graphics.fillColor = new Color(255, 100, 100);
-            graphics.moveTo(headX, headY);
-            graphics.lineTo(baseX + px, baseY + py);
-            graphics.lineTo(baseX - px, baseY - py);
-            graphics.close();
-            graphics.fill();
-        }
+        // 异步加载箭头贴图
+        resources.load('textures/arraw/spriteFrame', SpriteFrame, (err, sf) => {
+            if (!err && sf && this._dragArrowSprite) {
+                this._dragArrowSprite.spriteFrame = sf;
+            }
+        });
+
+        this._dragArrowNode = node;
+        this._dragArrowSprite = sprite;
+        return { node, sprite };
     }
 
-    /** 绘制拖拽引导线：中点 = 硬币位置，尾部 = 拖拽方向延伸 */
-    private _drawDragLine(event: EventTouch): void {
-        const graphics = this._gameLogic?.dragGraphics;
-        if (!graphics) return;
+    /** 更新拖拽箭头（Sprite 方式：根据拖拽方向旋转 + 根据距离拉长） */
+    private _updateDragArrow(dx: number, dy: number): void {
+        const arrow = this._getDragArrow();
+        if (!arrow) return;
 
-        // 以硬币自身位置为中点
-        const mid = this.node.position;
-        // 拖拽差值（屏幕像素），映射到世界坐标
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 5) { arrow.node.active = false; return; }
+
+        arrow.node.active = true;
+        arrow.node.setPosition(this.node.position);
+
+        // 箭头默认朝上 (0,1)，旋转到发射方向 (-dx, -dy)
+        const angle = Math.atan2(-dy, -dx) * 180 / Math.PI - 90;
+        arrow.node.eulerAngles = new Vec3(0, 0, angle);
+
+        // 根据拖拽距离拉长（单位高度 1px，最小 10）
+        const height = Math.max(10, dist * 2);
+        arrow.node.getComponent(UITransform)!.setContentSize(32, height);
+    }
+
+    /** 隐藏拖拽箭头 */
+    private _hideDragArrow(): void {
+        if (this._dragArrowNode) this._dragArrowNode.active = false;
+    }
+
+    /** 根据鼠标位置绘制拖拽引导线（Sprite 方式） */
+    private _drawDragLineFromPos(mousePos: Vec2): void {
+        const dx = mousePos.x - this._dragStartPos.x;
+        const dy = mousePos.y - this._dragStartPos.y;
+        this._updateDragArrow(dx, dy);
+    }
+
+    /** 绘制拖拽引导线（Sprite 方式） */
+    private _drawDragLine(event: EventTouch): void {
         const cur = event.getLocation();
         const dx = cur.x - this._dragStartPos.x;
         const dy = cur.y - this._dragStartPos.y;
-
-        // 尾部 = 中点 + 拖拽偏移（拖多远线画多长）
-        const tailX = mid.x + dx;
-        const tailY = mid.y + dy;
-        // 头部 = 中点向反方向延伸相同距离（中点反射）
-        const headX = mid.x - dx;
-        const headY = mid.y - dy;
-
-        graphics.clear();
-        graphics.lineWidth = 4;
-        graphics.strokeColor = new Color(255, 100, 100);
-        graphics.moveTo(headX, headY);
-        graphics.lineTo(tailX, tailY);
-        graphics.stroke();
-
-        // 在头部端（反射点）绘制箭头，指向发射方向
-        const dirX = headX - tailX;  // 发射方向：从鼠标 → 头部
-        const dirY = headY - tailY;
-        const len = Math.sqrt(dirX * dirX + dirY * dirY);
-        if (len > 4) {
-            const nx = dirX / len;
-            const ny = dirY / len;
-            const arrowSize = 12;
-            const arrowWidth = 6;
-            const px = -ny * arrowWidth;
-            const py = nx * arrowWidth;
-            // 箭尾基点（向尾部偏移）
-            const baseX = headX - nx * arrowSize;
-            const baseY = headY - ny * arrowSize;
-
-            graphics.fillColor = new Color(255, 100, 100);
-            graphics.moveTo(headX, headY);
-            graphics.lineTo(baseX + px, baseY + py);
-            graphics.lineTo(baseX - px, baseY - py);
-            graphics.close();
-            graphics.fill();
-        }
+        this._updateDragArrow(dx, dy);
     }
 
     private _onPointerUp(event: EventTouch): void {
@@ -331,12 +308,7 @@ export class CoinController extends Component {
         // 复位拖拽距离和预测
         this._gameLogic?.setDragDistance(0);
         this._clearPredictedTarget();
-
-        // 清除拖拽引导线
-        const graphics = this._gameLogic?.dragGraphics;
-        if (graphics) {
-            graphics.clear();
-        }
+        this._hideDragArrow();
 
         if (!this._rigidBody) return;
 
