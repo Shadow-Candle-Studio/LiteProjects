@@ -27,6 +27,9 @@ export class CoinController extends Component {
     private _dragArrowNode: Node | null = null;
     private _dragArrowSprite: Sprite | null = null;
 
+    /** 经墙面限位后的拖拽向量（箭头尾部不进入墙内） */
+    private _clampedDragVec: Vec2 = new Vec2();
+
     /** 当前硬币类型（coins.json 中的 key，如 "1", "2"） */
     private _coinTypeKey: string = '';
     /** 缓存的自定义碰撞音效 AudioClip */
@@ -221,12 +224,13 @@ export class CoinController extends Component {
         if (!this._isDragging) return;
         // 播放一次拖拽音效（若已在播放则跳过）
         SoundManager.instance.startCoinDrag();
-        // 报告拖拽距离，用于镜头拉近
+        // 先绘制箭头（计算墙面限位后的拖拽向量）
+        this._drawDragLine(event);
+        // 使用限位后的拖拽距离
+        const dx = this._clampedDragVec.x;
+        const dy = this._clampedDragVec.y;
         if (this._gameLogic) {
-            const dx = CoinController._lastWorldPos.x - this._dragStartPos.x;
-            const dy = CoinController._lastWorldPos.y - this._dragStartPos.y;
             this._gameLogic.setDragDistance(Math.sqrt(dx * dx + dy * dy));
-
             // 预测目标硬币并高亮
             const hem = this._gameLogic.hitEffectManager;
             if (hem?.enableDragPrediction) {
@@ -238,7 +242,6 @@ export class CoinController extends Component {
                 this._setPredictedTarget(predicted);
             }
         }
-        this._drawDragLine(event);
     }
 
     /** 高亮/取消高亮预测目标硬币 */
@@ -272,6 +275,32 @@ export class CoinController extends Component {
             const ctrl = child.getComponent(CoinController);
             if (ctrl) ctrl.showTargetable(false);
         }
+    }
+
+    /**
+     * 计算经墙面限位后的拖拽向量。
+     * 箭头尾部 = 硬币位置 + 拖拽向量，不能超出桌面可玩区域（墙内），
+     * 超出时截断到边界，确保力度计算基于实际可视的箭头长度。
+     */
+    private _calcClampedDrag(rawDx: number, rawDy: number): Vec2 {
+        const gl = this._gameLogic;
+        if (!gl) return new Vec2(rawDx, rawDy);
+
+        // 箭头尾部可到墙内边缘（不受硬币半径限制）
+        const halfW = gl.tableWidth / 2 - gl.wallThickness;
+        const halfH = gl.tableHeight / 2 - gl.wallThickness;
+        const coinPos = this.node.position;
+
+        // 箭头尾部原始位置
+        let tailX = coinPos.x + rawDx;
+        let tailY = coinPos.y + rawDy;
+
+        // 限位到可玩区域
+        tailX = Math.max(-halfW, Math.min(halfW, tailX));
+        tailY = Math.max(-halfH, Math.min(halfH, tailY));
+
+        // 从限位后的尾部反算拖拽向量
+        return new Vec2(tailX - coinPos.x, tailY - coinPos.y);
     }
 
     /** 清理预测高亮 */
@@ -339,19 +368,21 @@ export class CoinController extends Component {
         if (this._dragArrowNode) this._dragArrowNode.active = false;
     }
 
-    /** 根据鼠标位置绘制拖拽引导线（Sprite 方式） */
+    /** 根据鼠标位置绘制拖拽引导线（经墙面限位后更新箭头） */
     private _drawDragLineFromPos(mousePos: Vec2): void {
-        const dx = mousePos.x - this._dragStartPos.x;
-        const dy = mousePos.y - this._dragStartPos.y;
-        this._updateDragArrow(dx, dy);
+        const rawDx = mousePos.x - this._dragStartPos.x;
+        const rawDy = mousePos.y - this._dragStartPos.y;
+        this._clampedDragVec = this._calcClampedDrag(rawDx, rawDy);
+        this._updateDragArrow(this._clampedDragVec.x, this._clampedDragVec.y);
     }
 
-    /** 绘制拖拽引导线（Sprite 方式） */
+    /** 绘制拖拽引导线（经墙面限位后更新箭头） */
     private _drawDragLine(event: EventTouch): void {
         const cur = event.getLocation();
-        const dx = cur.x - this._dragStartPos.x;
-        const dy = cur.y - this._dragStartPos.y;
-        this._updateDragArrow(dx, dy);
+        const rawDx = cur.x - this._dragStartPos.x;
+        const rawDy = cur.y - this._dragStartPos.y;
+        this._clampedDragVec = this._calcClampedDrag(rawDx, rawDy);
+        this._updateDragArrow(this._clampedDragVec.x, this._clampedDragVec.y);
     }
 
     private _onPointerUp(event: EventTouch): void {
@@ -371,10 +402,9 @@ export class CoinController extends Component {
         this._rigidBody.type = ERigidBody2DType.Dynamic;
         this._rigidBody.gravityScale = 1;
 
-        // 计算拖拽向量
-        const endPos = event.getLocation();
-        const dx = endPos.x - this._dragStartPos.x;
-        const dy = endPos.y - this._dragStartPos.y;
+        // 使用墙面限位后的拖拽向量计算速度（与箭头视觉一致）
+        const dx = this._clampedDragVec.x;
+        const dy = this._clampedDragVec.y;
 
         // 拖拽距离太短则忽略（防误触）
         if (dx * dx + dy * dy < 25) return;
