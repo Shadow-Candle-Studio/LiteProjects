@@ -7,6 +7,10 @@ const { ccclass } = _decorator;
 export class CoinController extends Component {
     private static _anyDragging: boolean = false;
     private static _lastWorldPos: Vec2 = new Vec2();
+    /** 从 coins.json 读取的 source_color */
+    public static sourceColor: Color = Color.YELLOW;
+    /** 从 coins.json 读取的 target_color */
+    public static targetColor: Color = Color.GREEN;
 
     private _allowedOperation: boolean = false;
     private _rigidBody: RigidBody2D | null = null;
@@ -106,7 +110,7 @@ export class CoinController extends Component {
         if (!show) {
             const sprite = this.node.getComponent(Sprite);
             if (sprite) {
-                sprite.color = Color.YELLOW;
+                sprite.color = Color.WHITE;
             }
         }
     }
@@ -125,11 +129,19 @@ export class CoinController extends Component {
         if (!sprite) return;
 
         if (this._targetableActive) {
-            // 绿色脉冲：t=0 → 绿色(0,255,0)，t=1 → 白色(255,255,255)
-            sprite.color = new Color(Math.floor((1 - t) * 255), 255, Math.floor((1 - t) * 255));
+            // 目标颜色脉冲：t=0 → targetColor，t=1 → 白色(255,255,255)
+            sprite.color = new Color(
+                Math.floor(CoinController.targetColor.r + (255 - CoinController.targetColor.r) * t),
+                Math.floor(CoinController.targetColor.g + (255 - CoinController.targetColor.g) * t),
+                Math.floor(CoinController.targetColor.b + (255 - CoinController.targetColor.b) * t),
+            );
         } else {
-            // 黄色脉冲：t=0 → 黄色(255,255,0)，t=1 → 白色(255,255,255)
-            sprite.color = new Color(255, 255, Math.floor(t * 255));
+            // 选中颜色脉冲：t=0 → sourceColor，t=1 → 白色(255,255,255)
+            sprite.color = new Color(
+                Math.floor(CoinController.sourceColor.r + (255 - CoinController.sourceColor.r) * t),
+                Math.floor(CoinController.sourceColor.g + (255 - CoinController.sourceColor.g) * t),
+                Math.floor(CoinController.sourceColor.b + (255 - CoinController.sourceColor.b) * t),
+            );
         }
     }
 

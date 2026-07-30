@@ -163,6 +163,17 @@ export class GameScene extends Component {
                 return;
             }
 
+            // 读取全局颜色配置
+            const parseHex = (hex: string) => new Color(
+                parseInt(hex.slice(1, 3), 16),
+                parseInt(hex.slice(3, 5), 16),
+                parseInt(hex.slice(5, 7), 16), 255,
+            );
+            const srcHex = asset.json?.source_color as string | undefined;
+            if (srcHex?.length >= 7) CoinController.sourceColor = parseHex(srcHex);
+            const tgtHex = asset.json?.target_color as string | undefined;
+            if (tgtHex?.length >= 7) CoinController.targetColor = parseHex(tgtHex);
+
             const config = coinsData[key] as { texture?: string; hit_sfx?: string } | undefined;
             if (!config) {
                 console.log(`[GameScene] coins.json 中未找到 key "${key}" 的配置，不做处理`);

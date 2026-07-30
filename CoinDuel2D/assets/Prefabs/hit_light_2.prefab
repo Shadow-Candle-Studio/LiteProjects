@@ -83,7 +83,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "light",
+    "_name": "light1",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {

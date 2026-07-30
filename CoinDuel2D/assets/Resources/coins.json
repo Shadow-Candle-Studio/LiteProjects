@@ -1,4 +1,6 @@
 {
+    "source_color":"#ffff00",
+    "target_color":"#00ff00",
     "coins":{
         "1":{
             "texture":"textures/coin_meme1.png",

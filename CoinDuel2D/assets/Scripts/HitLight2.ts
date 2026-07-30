@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec2, Vec3 } from 'cc';
+import { _decorator, Component, Node, ParticleSystem2D, Vec2, Vec3 } from 'cc';
 const { ccclass } = _decorator;
 
 /**
@@ -7,9 +7,11 @@ const { ccclass } = _decorator;
 @ccclass('HitLight2')
 export class HitLight2 extends Component {
     private _children: Node[] = [];
+    private _light1:ParticleSystem2D = null;
+    private _light2:ParticleSystem2D = null;
     private _defautScale:Vec3[] = [];
     private _elapsed: number = 0;
-    private readonly _duration: number = 0.3;
+    private _duration: number = 0.3;
 
     start() {
         // 收集 5 个子节点
@@ -23,6 +25,16 @@ export class HitLight2 extends Component {
                 this._children.push(child);
             }
         }
+        const ln1 = this.node.getChildByName("light1");
+        if (ln1) this._light1 = ln1.getComponent(ParticleSystem2D);
+        const ln2 = this.node.getChildByName("light2");
+        if (ln2) this._light2 = ln2.getComponent(ParticleSystem2D);
+    }
+
+    public play(duration:number){
+        this._duration = duration;
+        if (this._light1) this._light1.duration = this._duration;
+        if (this._light2) this._light2.duration = this._duration;
     }
 
     update(deltaTime: number) {

@@ -1,6 +1,7 @@
 import { _decorator, Component, Node, Vec2, Vec3, Prefab, instantiate, Camera, Sprite, SpriteFrame, RenderTexture, UITransform, Animation } from 'cc';
 import { GameLogic } from './GameLogic';
 import { EffectGoHelper } from './EffectGoHelper';
+import { HitLight2 } from './HitLight2';
 const { ccclass, property } = _decorator;
 
 /**
@@ -392,6 +393,11 @@ export class HitEffectManager extends Component {
         // 方向朝上 (0,1)，旋转到冲击方向
         const angle = Math.atan2(dir.y, dir.x) * 180 / Math.PI - 90;
         node.eulerAngles = new Vec3(0, 0, angle);
+
+        let hitlight:HitLight2 = node.getComponent(HitLight2);
+        if (hitlight){
+            hitlight.play(0.2);
+        }
     }
 
     /** 开启子画面摄像机 */
