@@ -181,7 +181,7 @@
       "b": 255,
       "a": 255
     },
-    "duration": 0.1,
+    "duration": 0.2,
     "emissionRate": 999.999985098839,
     "life": 0.1,
     "lifeVar": 0.1,
@@ -386,7 +386,7 @@
       "b": 255,
       "a": 255
     },
-    "duration": 0.1,
+    "duration": 0.2,
     "emissionRate": 999.999985098839,
     "life": 0.1,
     "lifeVar": 0.1,
@@ -394,8 +394,8 @@
     "angleVar": 0,
     "startSize": 50,
     "startSizeVar": 0,
-    "endSize": 300,
-    "endSizeVar": 300,
+    "endSize": 500,
+    "endSizeVar": 500,
     "startSpin": 0,
     "startSpinVar": 0,
     "endSpin": 0,
@@ -528,7 +528,7 @@
     "_lscale": {
       "__type__": "cc.Vec3",
       "x": 0.2,
-      "y": 0.5,
+      "y": 1,
       "z": 1
     },
     "_mobility": 0,
@@ -664,7 +664,7 @@
     "_lscale": {
       "__type__": "cc.Vec3",
       "x": 0.5,
-      "y": 0.5,
+      "y": 1,
       "z": 1
     },
     "_mobility": 0,
@@ -800,7 +800,7 @@
     "_lscale": {
       "__type__": "cc.Vec3",
       "x": 1,
-      "y": 1,
+      "y": 2,
       "z": 1
     },
     "_mobility": 0,
@@ -936,7 +936,7 @@
     "_lscale": {
       "__type__": "cc.Vec3",
       "x": 0.5,
-      "y": 0.5,
+      "y": 1,
       "z": 1
     },
     "_mobility": 0,
@@ -1072,7 +1072,7 @@
     "_lscale": {
       "__type__": "cc.Vec3",
       "x": 0.2,
-      "y": 0.5,
+      "y": 1,
       "z": 1
     },
     "_mobility": 0,

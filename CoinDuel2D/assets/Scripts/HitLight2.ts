@@ -1,4 +1,4 @@
-import { _decorator, Component, Node } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3 } from 'cc';
 const { ccclass } = _decorator;
 
 /**
@@ -7,15 +7,18 @@ const { ccclass } = _decorator;
 @ccclass('HitLight2')
 export class HitLight2 extends Component {
     private _children: Node[] = [];
+    private _defautScale:Vec3[] = [];
     private _elapsed: number = 0;
-    private readonly _duration: number = 0.2;
+    private readonly _duration: number = 0.3;
 
     start() {
         // 收集 5 个子节点
         const names = ['sp1', 'sp2', 'sp3', 'sp4', 'sp5'];
-        for (const name of names) {
-            const child = this.node.getChildByName(name);
+        for (let i=0; i<names.length; i++) {
+            let nodename = names[i]
+            const child = this.node.getChildByName(nodename);
             if (child) {
+                this._defautScale[i] = child.getScale();
                 child.setScale(1, 0.1, 1);
                 this._children.push(child);
             }
@@ -27,9 +30,11 @@ export class HitLight2 extends Component {
         const progress = Math.min(this._elapsed / this._duration, 1);
 
         // scaleY: 0.1 → 1.0
-        for (const child of this._children) {
-            const sy = 0.1 + progress * 0.9;
-            child.setScale(1, sy, 1);
+        for (let i=0; i<this._children.length; i++) {
+            let child = this._children[i];
+            child.setScale(0.1 + progress * this._defautScale[i].x, 
+                            0.1 + progress * this._defautScale[i].y, 
+                            1);
         }
 
         if (progress >= 1) {
