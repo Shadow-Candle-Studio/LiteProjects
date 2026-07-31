@@ -1,4 +1,4 @@
-import { _decorator, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip } from 'cc';
+import { _decorator, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip, Color } from 'cc';
 import { CoinController } from './CoinController';
 import { GameLogic } from './GameLogic';
 import { RoundManager } from './RoundManager';
@@ -21,6 +21,8 @@ export class GameScene extends Component {
     private _debugPanel: Node | null = null;
     /** 缺口宽度基数（从 TableController 面板值快照） */
     private _baseGapWidth: number = 80;
+    /** 缓存的 coins.json 数据 */
+    private _coinsConfig: any = null;
 
     private level:number = 1;
 
@@ -53,6 +55,9 @@ export class GameScene extends Component {
 
         // 快照缺口宽度基数
         this._baseGapWidth = this.tableController.gapWidth;
+
+        // 启动时读取全局 coins.json 配置
+        this._loadCoinsConfig();
 
         this.startNewRound();
 
@@ -146,91 +151,101 @@ export class GameScene extends Component {
         }
     }
 
-    /**
-     * 读取 coins.json，根据 key 查找对应硬币配置并应用到场上所有硬币
-     * @param key coins.json 中的硬币类型标识，如 "1", "2"
-     */
-    private _applyCoinConfig(key: string): void {
+    /** 启动时读取全局 coins.json，缓存数据并应用全局颜色 */
+    private _loadCoinsConfig(): void {
         resources.load('coins', (err: any, asset: any) => {
             if (err) {
                 console.warn('[GameScene] 加载 coins.json 失败:', err);
                 return;
             }
+            this._coinsConfig = asset.json ?? {};
 
-            const coinsData = asset.json?.coins;
-            if (!coinsData) {
-                console.warn('[GameScene] coins.json 格式错误：缺少 coins 字段');
-                return;
-            }
-
-            // 读取全局颜色配置
+            // 应用全局颜色配置
             const parseHex = (hex: string) => new Color(
                 parseInt(hex.slice(1, 3), 16),
                 parseInt(hex.slice(3, 5), 16),
                 parseInt(hex.slice(5, 7), 16), 255,
             );
-            const srcHex = asset.json?.source_color as string | undefined;
+            const srcHex = this._coinsConfig.source_color as string | undefined;
             if (srcHex?.length >= 7) CoinController.sourceColor = parseHex(srcHex);
-            const tgtHex = asset.json?.target_color as string | undefined;
+            const tgtHex = this._coinsConfig.target_color as string | undefined;
             if (tgtHex?.length >= 7) CoinController.targetColor = parseHex(tgtHex);
+        });
+    }
 
-            const config = coinsData[key] as { texture?: string; hit_sfx?: string } | undefined;
-            if (!config) {
-                console.log(`[GameScene] coins.json 中未找到 key "${key}" 的配置，不做处理`);
-                return;
-            }
+    /**
+     * 使用缓存的 coins.json 配置，根据 key 查找并应用到场上所有硬币
+     * @param key coins.json 中的硬币类型标识，如 "1", "2"
+     */
+    private _applyCoinConfig(key: string): void {
+        const asset = this._coinsConfig;
+        if (!asset) {
+            console.warn('[GameScene] coins.json 尚未加载完成');
+            return;
+        }
 
-            const textureFile = config.texture;
-            const hitSfxFile = config.hit_sfx;
-            if (!textureFile) {
-                console.warn(`[GameScene] key "${key}" 缺少 texture 字段`);
-                return;
-            }
+        const coinsData = asset.coins;
+        if (!coinsData) {
+            console.warn('[GameScene] coins.json 格式错误：缺少 coins 字段');
+            return;
+        }
 
-            // 去除扩展名用于 resources.load
-            const texBaseName = textureFile.replace(/\.[^/.]+$/, '');
-            const sfxBaseName = hitSfxFile ? hitSfxFile.replace(/\.[^/.]+$/, '') : null;
+        const config = coinsData[key] as { texture?: string; hit_sfx?: string } | undefined;
+        if (!config) {
+            console.log(`[GameScene] coins.json 中未找到 key "${key}" 的配置，不做处理`);
+            return;
+        }
 
-            console.log(`[GameScene] 切换硬币贴图为 ${textureFile}，碰撞音效为 ${hitSfxFile || '默认'}`);
+        const textureFile = config.texture;
+        const hitSfxFile = config.hit_sfx;
+        if (!textureFile) {
+            console.warn(`[GameScene] key "${key}" 缺少 texture 字段`);
+            return;
+        }
 
-            // 并行加载贴图（SpriteFrame 子资源）和音效，然后应用到所有硬币
-            let loadedSprite: SpriteFrame | null = null;
-            let loadedClip: AudioClip | null = null;
-            let pending = 1 + (sfxBaseName ? 1 : 0);
+        // 去除扩展名用于 resources.load
+        const texBaseName = textureFile.replace(/\.[^/.]+$/, '');
+        const sfxBaseName = hitSfxFile ? hitSfxFile.replace(/\.[^/.]+$/, '') : null;
 
-            const applyToCoins = () => {
-                if (--pending > 0) return;
-                for (const coin of this.gameLogic.coinGroup.children) {
-                    const ctrl = coin.getComponent(CoinController);
-                    if (ctrl) {
-                        ctrl.setAppearance(loadedSprite, loadedClip, key);
-                    }
+        console.log(`[GameScene] 切换硬币贴图为 ${textureFile}，碰撞音效为 ${hitSfxFile || '默认'}`);
+
+        // 并行加载贴图（SpriteFrame 子资源）和音效，然后应用到所有硬币
+        let loadedSprite: SpriteFrame | null = null;
+        let loadedClip: AudioClip | null = null;
+        let pending = 1 + (sfxBaseName ? 1 : 0);
+
+        const applyToCoins = () => {
+            if (--pending > 0) return;
+            for (const coin of this.gameLogic.coinGroup.children) {
+                const ctrl = coin.getComponent(CoinController);
+                if (ctrl) {
+                    ctrl.setAppearance(loadedSprite, loadedClip, key);
                 }
-            };
+            }
+        };
 
-            // 图片资源需指定 SpriteFrame 子资源路径
-            resources.load(texBaseName + '/spriteFrame', SpriteFrame, (errTex: any, spriteFrame: SpriteFrame) => {
-                if (!errTex && spriteFrame) {
-                    loadedSprite = spriteFrame;
+        // 图片资源需指定 SpriteFrame 子资源路径
+        resources.load(texBaseName + '/spriteFrame', SpriteFrame, (errTex: any, spriteFrame: SpriteFrame) => {
+            if (!errTex && spriteFrame) {
+                loadedSprite = spriteFrame;
+            } else {
+                console.warn(`[GameScene] 加载贴图 ${textureFile} 失败:`, errTex);
+            }
+            applyToCoins();
+        });
+
+        if (sfxBaseName) {
+            resources.load(sfxBaseName, AudioClip, (errSfx: any, clip: AudioClip) => {
+                if (!errSfx && clip) {
+                    loadedClip = clip;
                 } else {
-                    console.warn(`[GameScene] 加载贴图 ${textureFile} 失败:`, errTex);
+                    console.warn(`[GameScene] 加载音效 ${hitSfxFile} 失败:`, errSfx);
                 }
                 applyToCoins();
             });
-
-            if (sfxBaseName) {
-                resources.load(sfxBaseName, AudioClip, (errSfx: any, clip: AudioClip) => {
-                    if (!errSfx && clip) {
-                        loadedClip = clip;
-                    } else {
-                        console.warn(`[GameScene] 加载音效 ${hitSfxFile} 失败:`, errSfx);
-                    }
-                    applyToCoins();
-                });
-            } else {
-                applyToCoins();
-            }
-        });
+        } else {
+            applyToCoins();
+        }
     }
 }
 
