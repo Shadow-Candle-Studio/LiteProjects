@@ -29,6 +29,8 @@ export class CoinController extends Component {
 
     /** 经墙面限位后的拖拽向量（箭头尾部不进入墙内） */
     private _clampedDragVec: Vec2 = new Vec2();
+    /** 鼠标是否位于墙内（用于触发拒绝音效） */
+    private _mouseInWall: boolean = false;
 
     /** 当前硬币类型（coins.json 中的 key，如 "1", "2"） */
     private _coinTypeKey: string = '';
@@ -172,6 +174,7 @@ export class CoinController extends Component {
         this._clearPredictedTarget();
         this._hideDragArrow();
 
+        this._mouseInWall = false;
         this._isDragging = true;
         event.getLocation(this._dragStartPos);
         // 同步更新缓存位置，防止 update() 轮询时读到未初始化的 (0,0)
@@ -294,6 +297,13 @@ export class CoinController extends Component {
         // 箭头尾部原始位置
         let tailX = coinPos.x + rawDx;
         let tailY = coinPos.y + rawDy;
+
+        // 检测鼠标是否超出墙内（触发拒绝音效）
+        const nowInWall = Math.abs(tailX) > halfW || Math.abs(tailY) > halfH;
+        if (nowInWall && !this._mouseInWall) {
+            SoundManager.instance.startNegative();
+        }
+        this._mouseInWall = nowInWall;
 
         // 限位到可玩区域
         tailX = Math.max(-halfW, Math.min(halfW, tailX));

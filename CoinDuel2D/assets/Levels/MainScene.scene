@@ -596,7 +596,7 @@
     "enableHitShake": false,
     "enableHitParticle": true,
     "enableHitSubCamera": false,
-    "enableHitTracking": true,
+    "enableHitTracking": false,
     "cameraZoomInDuration": 0.5,
     "cameraZoomOutDuration": 0.5,
     "launchEffectPrefab": {
@@ -5066,6 +5066,10 @@
     },
     "coindrag": {
       "__uuid__": "b08a12c2-f485-4d9d-a85f-96bcb8da34f2",
+      "__expectedType__": "cc.AudioClip"
+    },
+    "negative": {
+      "__uuid__": "b9112fcd-6f85-4eb7-b6af-d08c02cabc4e",
       "__expectedType__": "cc.AudioClip"
     },
     "_id": "11BEnfyKdADLkY9AS6nJhQ"

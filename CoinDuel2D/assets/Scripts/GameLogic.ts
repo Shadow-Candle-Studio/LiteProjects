@@ -206,7 +206,17 @@ export class GameLogic extends Component {
         // 4. 摄像机跟踪：发射中跟随硬币，否则平滑回到原始位置
         this._updateCamera(deltaTime);
 
-        // 5. 物理模拟中：检查是否静止
+        // 5. 摄像机还原后，启用待命的下一次击打
+        if (this._pendingLockedCoin && this.hitEffectManager?.isCameraAtRest) {
+            const ctrl = this._pendingLockedCoin.getComponent(CoinController);
+            if (ctrl) {
+                ctrl.allowedOperation = true;
+                ctrl.showIndicator(true);
+            }
+            this._pendingLockedCoin = null;
+        }
+
+        // 6. 物理模拟中：检查是否静止
         if (this.currentPhase === GamePhase.ANIMATING) {
             if (this.isAllCoinsStopped()) {
                 this.currentPhase = GamePhase.SETTLING;
@@ -452,6 +462,7 @@ export class GameLogic extends Component {
         console.log(">>> 游戏结束 <<<");
         this._restoreSpeed();
         this.hitEffectManager?.stopTracking();
+        this._pendingLockedCoin = null;
         SoundManager.instance.playGameOver();
         const duration = Math.floor((Date.now() - this._gameStartTime) / 1000);
         if (this.score > 0) {
@@ -466,14 +477,14 @@ export class GameLogic extends Component {
         console.log(">>> 游戏胜利 <<<");
         this._restoreSpeed();
         this.hitEffectManager?.stopTracking();
+        this._pendingLockedCoin = null;
         this._setCoinsInteraction(false);
         this.onGameWin?.();
     }
 
-    /** 命中 1 枚硬币后的连击延续流程 */
+    /** 命中 1 枚硬币后的连击延续流程（延迟到摄像机还原后才启用操作） */
     private _continueWithLockedCoin(): void {
         this._restoreSpeed();
-        this.currentPhase = GamePhase.WAITING_PLAYER;
 
         // 先禁用所有硬币
         for (const coin of this.coinGroup.children) {
@@ -484,15 +495,13 @@ export class GameLogic extends Component {
             }
         }
 
-        // 只启用被锁定的硬币
-        if (this._lockedCoin) {
-            const ctrl = this._lockedCoin.getComponent(CoinController);
-            if (ctrl) {
-                ctrl.allowedOperation = true;
-                ctrl.showIndicator(true);
-            }
-        }
+        // 等待摄像机还原后启用操作
+        this._pendingLockedCoin = this._lockedCoin;
+        this.currentPhase = GamePhase.WAITING_PLAYER;
     }
+
+    /** 待摄像机还原后启用的锁定硬币 */
+    private _pendingLockedCoin: Node | null = null;
 
     /** 发射硬币：委托 HitEffectManager 处理发射特效，然后进入物理模拟 */
     public launchCoin(coin: Node, velocity: Vec2): void {
@@ -524,6 +533,7 @@ export class GameLogic extends Component {
     public waitingPlayerOperation(){
         this._restoreSpeed();
         this.hitEffectManager?.stopTracking();
+        this._pendingLockedCoin = null;
         this.currentPhase = GamePhase.WAITING_PLAYER;
         this._activeShotCoin = null;
         this._lockedCoin = null;

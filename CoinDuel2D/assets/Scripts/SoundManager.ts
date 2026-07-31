@@ -20,6 +20,9 @@ export class SoundManager extends Component {
     @property(AudioClip)
     public coindrag:AudioClip = null;
     
+    @property(AudioClip)
+    public negative:AudioClip = null;
+
     private audioSource:AudioSource = null;
 
     protected onLoad(): void {
@@ -76,6 +79,12 @@ export class SoundManager extends Component {
         if (this.audioSource.playing) return;
         this.audioSource.clip = this.coindrag;
         this.audioSource.play();
+    }
+
+    /** 播放一次拒绝音效（one-shot，可与拖拽音效叠加） */
+    public startNegative(): void {
+        if (!this.negative || !this.audioSource) return;
+        this.audioSource.playOneShot(this.negative);
     }
 }
 

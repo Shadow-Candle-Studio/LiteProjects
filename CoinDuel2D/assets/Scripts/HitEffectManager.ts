@@ -117,6 +117,9 @@ export class HitEffectManager extends Component {
     public trackTargetNode: Node | null = null;
     public trackStartTime: number = 0;
 
+    /** 摄像机是否在原始位置（无追踪、无恢复动作） */
+    public isCameraAtRest: boolean = true;
+
     // ── 子画面预创建 ──
     private _subCamNode: Node | null = null;
     private _subCam: Camera | null = null;
@@ -309,6 +312,17 @@ export class HitEffectManager extends Component {
         else {
             this._restorePosition(dt, camNode, origPos, this.cameraZoomOutDuration);
             this._restoreOrthoHeight(dt, camComp, defaultOrthoHeight, this.cameraZoomOutDuration);
+        }
+
+        // ── 判断摄像机是否回到原始位置（无追踪、无拖拽、位置/缩放已稳定） ──
+        if (!isSlowMotion && !this.isTrackingHitCoin && this._dragDistance === 0) {
+            const pos = camNode.position;
+            const dx = origPos.x - pos.x;
+            const dy = origPos.y - pos.y;
+            const dh = defaultOrthoHeight - camComp.orthoHeight;
+            this.isCameraAtRest = (dx * dx + dy * dy <= 0.1 && Math.abs(dh) <= 0.1);
+        } else {
+            this.isCameraAtRest = false;
         }
 
         // ── 屏幕震动 ──
