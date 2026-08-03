@@ -298,10 +298,18 @@ export class CoinController extends Component {
         let tailX = coinPos.x + rawDx;
         let tailY = coinPos.y + rawDy;
 
-        // 检测鼠标是否超出墙内（触发拒绝音效）
+        // 检测鼠标是否超出墙内（触发拒绝音效 + 摄像机震动）
         const nowInWall = Math.abs(tailX) > halfW || Math.abs(tailY) > halfH;
         if (nowInWall && !this._mouseInWall) {
             SoundManager.instance.startNegative();
+            // 震动方向：硬币中心 → 鼠标位置（= raw 拖拽向量方向）
+            const hem = this._gameLogic.hitEffectManager;
+            if (hem) {
+                const dir = new Vec2(rawDx, rawDy);
+                const len = dir.length();
+                if (len > 0.001) { dir.x /= len; dir.y /= len; }
+                hem.shakeCamera(0.1, dir);
+            }
         }
         this._mouseInWall = nowInWall;
 

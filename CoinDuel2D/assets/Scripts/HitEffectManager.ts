@@ -444,6 +444,11 @@ export class HitEffectManager extends Component {
         return dir;
     }
 
+    /** 公开：触发一次方向性摄像机震动 */
+    public shakeCamera(duration: number, dir: Vec2): void {
+        this._startShake(duration, dir);
+    }
+
     private _startShake(duration: number, dir: Vec2): void {
         this.isShaking = true;
         this.shakeStartTime = Date.now();
