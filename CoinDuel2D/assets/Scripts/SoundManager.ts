@@ -23,11 +23,32 @@ export class SoundManager extends Component {
     @property(AudioClip)
     public negative:AudioClip = null;
 
+    @property(AudioClip)
+    public dragIncrease:AudioClip = null;
+
+    @property(AudioClip)
+    public dragDecrease:AudioClip = null;
+
+    @property(AudioClip)
+    public dragRelease:AudioClip = null;
+
     private audioSource:AudioSource = null;
+    /** 专门用于拖拽方向循环音效的独立 AudioSource（避免与主音效冲突） */
+    private _dirLoopSource:AudioSource = null;
+    /** 当前循环播放的方向音效 clip */
+    private _dirLoopClip:AudioClip = null;
 
     protected onLoad(): void {
         SoundManager.instance =  this;
         this.audioSource = this.getComponent(AudioSource);
+        // 动态创建独立的方向循环音源
+        const node = this.node;
+        let src = node.getComponent(AudioSource);
+        if (src && src !== this.audioSource) {
+            this._dirLoopSource = src;
+        } else {
+            this._dirLoopSource = node.addComponent(AudioSource);
+        }
     }
 
     /** 硬币与硬币碰撞 */
@@ -85,6 +106,44 @@ export class SoundManager extends Component {
     public startNegative(): void {
         if (!this.negative || !this.audioSource) return;
         this.audioSource.playOneShot(this.negative);
+    }
+
+    /** 开始循环播放拖拽增加音效（若已在循环则跳过，不刷屏） */
+    public startDragIncreaseLoop(): void {
+        if (this.dragIncrease && this._dirLoopSource) {
+            if (this._dirLoopClip === this.dragIncrease && this._dirLoopSource.playing) return;
+            this._dirLoopSource.stop();
+            this._dirLoopSource.clip = this.dragIncrease;
+            this._dirLoopSource.loop = true;
+            this._dirLoopSource.play();
+            this._dirLoopClip = this.dragIncrease;
+        }
+    }
+
+    /** 开始循环播放拖拽减少音效（若已在循环则跳过，不刷屏） */
+    public startDragDecreaseLoop(): void {
+        if (this.dragDecrease && this._dirLoopSource) {
+            if (this._dirLoopClip === this.dragDecrease && this._dirLoopSource.playing) return;
+            this._dirLoopSource.stop();
+            this._dirLoopSource.clip = this.dragDecrease;
+            this._dirLoopSource.loop = true;
+            this._dirLoopSource.play();
+            this._dirLoopClip = this.dragDecrease;
+        }
+    }
+
+    /** 停止拖拽方向循环音效 */
+    public stopDragDirectionLoop(): void {
+        if (this._dirLoopSource && this._dirLoopClip) {
+            this._dirLoopSource.stop();
+            this._dirLoopSource.clip = null;
+            this._dirLoopClip = null;
+        }
+    }
+
+    /** 松开音效 */
+    public playDragRelease(): void {
+        if (this.dragRelease && this.audioSource) this.audioSource.playOneShot(this.dragRelease);
     }
 }
 

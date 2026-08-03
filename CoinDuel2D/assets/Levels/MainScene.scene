@@ -187,7 +187,7 @@
     "_priority": 0,
     "_fov": 45,
     "_fovAxis": 0,
-    "_orthoHeight": 365.7142857142857,
+    "_orthoHeight": 361.633428300095,
     "_near": 0,
     "_far": 2000,
     "_color": {
@@ -851,7 +851,7 @@
     "_priority": 1,
     "_fov": 45,
     "_fovAxis": 0,
-    "_orthoHeight": 365.7142857142857,
+    "_orthoHeight": 361.633428300095,
     "_near": 0,
     "_far": 2000,
     "_color": {
@@ -5072,6 +5072,9 @@
       "__uuid__": "b9112fcd-6f85-4eb7-b6af-d08c02cabc4e",
       "__expectedType__": "cc.AudioClip"
     },
+    "dragIncrease": null,
+    "dragDecrease": null,
+    "dragRelease": null,
     "_id": "11BEnfyKdADLkY9AS6nJhQ"
   },
   {

@@ -4,6 +4,7 @@ import { GameLogic } from './GameLogic';
 import { RoundManager } from './RoundManager';
 import { UIManager } from './UIManager';
 import { TableController } from './TableController';
+import { SoundManager } from './SoundManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('GameScene')
@@ -170,6 +171,25 @@ export class GameScene extends Component {
             if (srcHex?.length >= 7) CoinController.sourceColor = parseHex(srcHex);
             const tgtHex = this._coinsConfig.target_color as string | undefined;
             if (tgtHex?.length >= 7) CoinController.targetColor = parseHex(tgtHex);
+
+            // 加载拖拽音效到 SoundManager
+            const sm = SoundManager.instance;
+            if (sm) {
+                const loadSfx = (field: string) => {
+                    const base = (this._coinsConfig[field] as string)?.replace(/\.[^/.]+$/, '');
+                    if (!base) return;
+                    resources.load(base, AudioClip, (sfxErr: any, clip: AudioClip) => {
+                        if (!sfxErr && clip) {
+                            if (field === 'drag_increase_sfx') sm.dragIncrease = clip;
+                            else if (field === 'drag_decrease_sfx') sm.dragDecrease = clip;
+                            else if (field === 'drag_release_sfx') sm.dragRelease = clip;
+                        }
+                    });
+                };
+                loadSfx('drag_increase_sfx');
+                loadSfx('drag_decrease_sfx');
+                loadSfx('drag_release_sfx');
+            }
         });
     }
 

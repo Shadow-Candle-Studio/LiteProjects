@@ -31,6 +31,10 @@ export class CoinController extends Component {
     private _clampedDragVec: Vec2 = new Vec2();
     /** 鼠标是否位于墙内（用于触发拒绝音效） */
     private _mouseInWall: boolean = false;
+    /** 上一次拖拽距离（用于判断增加/减少音效） */
+    private _lastDragDist: number = 0;
+    /** 当前拖拽方向音效状态：'increase' | 'decrease' | null */
+    private _dragSoundDir: 'increase' | 'decrease' | null = null;
 
     /** 当前硬币类型（coins.json 中的 key，如 "1", "2"） */
     private _coinTypeKey: string = '';
@@ -175,6 +179,8 @@ export class CoinController extends Component {
         this._hideDragArrow();
 
         this._mouseInWall = false;
+        this._lastDragDist = 0;
+        this._dragSoundDir = null;
         this._isDragging = true;
         event.getLocation(this._dragStartPos);
         // 同步更新缓存位置，防止 update() 轮询时读到未初始化的 (0,0)
@@ -229,6 +235,8 @@ export class CoinController extends Component {
         SoundManager.instance.startCoinDrag();
         // 先绘制箭头（计算墙面限位后的拖拽向量）
         this._drawDragLine(event);
+        // 距离增加/减少音效
+        this._checkDragDistSound();
         // 使用限位后的拖拽距离
         const dx = this._clampedDragVec.x;
         const dy = this._clampedDragVec.y;
@@ -277,6 +285,30 @@ export class CoinController extends Component {
         for (const child of coinGroup.children) {
             const ctrl = child.getComponent(CoinController);
             if (ctrl) ctrl.showTargetable(false);
+        }
+    }
+
+    /** 根据拖拽距离增减切换循环音效（仅在方向变化时切换，不刷屏） */
+    private _checkDragDistSound(): void {
+        const dist = this._clampedDragVec.length();
+        const threshold = 1;
+        let dir: 'increase' | 'decrease' | null = null;
+        if (dist > this._lastDragDist + threshold) {
+            dir = 'increase';
+        } else if (dist < this._lastDragDist - threshold) {
+            dir = 'decrease';
+        }
+        this._lastDragDist = dist;
+
+        if (dir === this._dragSoundDir) return; // 方向未变，不切换
+        this._dragSoundDir = dir;
+
+        if (dir === 'increase') {
+            SoundManager.instance.startDragIncreaseLoop();
+        } else if (dir === 'decrease') {
+            SoundManager.instance.startDragDecreaseLoop();
+        } else {
+            SoundManager.instance.stopDragDirectionLoop();
         }
     }
 
@@ -413,6 +445,8 @@ export class CoinController extends Component {
         this._clearPredictedTarget();
         this._hideDragArrow();
         this._clearTargetableAll();
+        SoundManager.instance.stopDragDirectionLoop();
+        SoundManager.instance.playDragRelease();
 
         if (!this._rigidBody) return;
 
