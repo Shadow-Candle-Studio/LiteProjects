@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec2, Vec3, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D, AudioClip, Camera } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D, Camera } from 'cc';
 import { CoinController } from './CoinController';
 import { HitEffectManager } from './HitEffectManager';
 import { Leaderboard } from './Leaderboard';
@@ -162,9 +162,10 @@ export class GameLogic extends Component {
             this._restoreSpeed();
         }
 
-        // 根据被撞硬币的配置播放碰撞音效
-        if (hitCtrl.hitSfxClip) {
-            SoundManager.instance.playClip(hitCtrl.hitSfxClip);
+        // 被打击硬币切换被打击贴图 + 播放被打击音效（优先使用 config.json 配置的 hitted_sfx）
+        hitCtrl.showHit();
+        if (hitCtrl.hittedSfxClip) {
+            SoundManager.instance.playClip(hitCtrl.hittedSfxClip);
         } else {
             SoundManager.instance.playCollisionCoin();
         }
@@ -509,12 +510,25 @@ export class GameLogic extends Component {
         this._doLaunch(coin, velocity);
     }
 
-    /** 实际执行发射：设置速度、播放音效、触发管理器特效、进入物理模拟 */
+    /** 实际执行发射：设置速度、切换发射贴图、播放音效、触发管理器特效、进入物理模拟 */
     private _doLaunch(coin: Node, velocity: Vec2): void {
         const rb = coin.getComponent(RigidBody2D);
         if (!rb) return;
         rb.linearVelocity = velocity;
-        SoundManager.instance.playShot();
+
+        // 切换发射贴图 + 播放发射音效（优先使用 config.json 配置的 shot_sfx）
+        const ctrl = coin.getComponent(CoinController);
+        if (ctrl) {
+            ctrl.showShot();
+            if (ctrl.shotSfxClip) {
+                SoundManager.instance.playClip(ctrl.shotSfxClip);
+            } else {
+                SoundManager.instance.playShot();
+            }
+        } else {
+            SoundManager.instance.playShot();
+        }
+
         this.hitEffectManager?.onLaunch(coin, this);
         this.startSimulation();
     }

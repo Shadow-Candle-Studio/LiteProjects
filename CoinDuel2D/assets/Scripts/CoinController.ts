@@ -7,9 +7,9 @@ const { ccclass } = _decorator;
 export class CoinController extends Component {
     private static _anyDragging: boolean = false;
     private static _lastWorldPos: Vec2 = new Vec2();
-    /** 从 coins.json 读取的 source_color */
+    /** 从 config.json 读取的 source_color */
     public static sourceColor: Color = Color.YELLOW;
-    /** 从 coins.json 读取的 target_color */
+    /** 从 config.json 读取的 target_color */
     public static targetColor: Color = Color.GREEN;
 
     private _allowedOperation: boolean = false;
@@ -36,10 +36,25 @@ export class CoinController extends Component {
     /** 当前拖拽方向音效状态：'increase' | 'decrease' | null */
     private _dragSoundDir: 'increase' | 'decrease' | null = null;
 
-    /** 当前硬币类型（coins.json 中的 key，如 "1", "2"） */
+    /** 当前硬币类型（config.json 中的 key，如 "1", "2"） */
     private _coinTypeKey: string = '';
-    /** 缓存的自定义碰撞音效 AudioClip */
-    private _hitSfxClip: AudioClip | null = null;
+    /** 当前贴图状态：默认/空闲/拖拽/发射/被打击 */
+    private _textureState: 'default' | 'idle' | 'aim' | 'shot' | 'hit' = 'default';
+
+    /** 默认贴图（基础/回退外观） */
+    private _defaultFrame: SpriteFrame | null = null;
+    /** 空闲时贴图 */
+    private _idleFrame: SpriteFrame | null = null;
+    /** 拖拽时贴图 */
+    private _aimFrame: SpriteFrame | null = null;
+    /** 发射时贴图 */
+    private _shotFrame: SpriteFrame | null = null;
+    /** 被打击时贴图 */
+    private _hittedFrame: SpriteFrame | null = null;
+    /** 发射音效 */
+    private _shotSfxClip: AudioClip | null = null;
+    /** 被打击音效 */
+    private _hittedSfxClip: AudioClip | null = null;
 
     public get allowedOperation(): boolean {
         return this._allowedOperation;
@@ -54,35 +69,90 @@ export class CoinController extends Component {
         this._gameLogic = gl;
     }
 
-    /** 获取缓存的自定义碰撞音效 */
-    public get hitSfxClip(): AudioClip | null {
-        return this._hitSfxClip;
-    }
-
     /** 获取当前硬币类型 key */
     public get coinTypeKey(): string {
         return this._coinTypeKey;
     }
 
+    /** 获取发射音效 */
+    public get shotSfxClip(): AudioClip | null {
+        return this._shotSfxClip;
+    }
+
+    /** 获取被打击音效 */
+    public get hittedSfxClip(): AudioClip | null {
+        return this._hittedSfxClip;
+    }
+
     /**
-     * 切换硬币贴图、碰撞音效和类型标识（资源由 GameScene 预先加载好传入）
-     * @param spriteFrame 目标贴图 SpriteFrame，传 null 不改变
-     * @param hitSfxClip  目标碰撞音效 AudioClip，传 null 不改变
-     * @param typeKey     硬币类型 key（如 "1", "2"）
+     * 设置硬币各状态的贴图与音效（资源由 GameScene 预先加载好传入）。
+     * 传入 null / 缺省字段表示不改变对应资源。
      */
-    public setAppearance(spriteFrame: SpriteFrame | null, hitSfxClip: AudioClip | null, typeKey: string): void {
-        this._coinTypeKey = typeKey;
+    public setAppearance(config: {
+        defaultFrame?: SpriteFrame | null;
+        idleFrame?: SpriteFrame | null;
+        aimFrame?: SpriteFrame | null;
+        shotFrame?: SpriteFrame | null;
+        hittedFrame?: SpriteFrame | null;
+        shotSfxClip?: AudioClip | null;
+        hittedSfxClip?: AudioClip | null;
+        typeKey: string;
+    }): void {
+        this._coinTypeKey = config.typeKey;
+        if (config.defaultFrame) this._defaultFrame = config.defaultFrame;
+        if (config.idleFrame) this._idleFrame = config.idleFrame;
+        if (config.aimFrame) this._aimFrame = config.aimFrame;
+        if (config.shotFrame) this._shotFrame = config.shotFrame;
+        if (config.hittedFrame) this._hittedFrame = config.hittedFrame;
+        if (config.shotSfxClip) this._shotSfxClip = config.shotSfxClip;
+        if (config.hittedSfxClip) this._hittedSfxClip = config.hittedSfxClip;
+        // 重新应用当前状态的贴图
+        this._applyTexture();
+    }
 
-        if (spriteFrame) {
-            const sprite = this.node.getComponent(Sprite);
-            if (sprite) {
-                sprite.spriteFrame = spriteFrame;
-            }
-        }
+    /** 切换为默认贴图（基础/回退外观） */
+    public showDefault(): void {
+        this._textureState = 'default';
+        this._applyTexture();
+    }
 
-        if (hitSfxClip) {
-            this._hitSfxClip = hitSfxClip;
+    /** 切换为空闲贴图（等待操作时） */
+    public showIdle(): void {
+        this._textureState = 'idle';
+        this._applyTexture();
+    }
+
+    /** 切换为拖拽贴图（瞄准中） */
+    public showAim(): void {
+        this._textureState = 'aim';
+        this._applyTexture();
+    }
+
+    /** 切换为发射贴图 */
+    public showShot(): void {
+        this._textureState = 'shot';
+        this._applyTexture();
+    }
+
+    /** 切换为被打击贴图 */
+    public showHit(): void {
+        this._textureState = 'hit';
+        this._applyTexture();
+    }
+
+    /** 按当前状态应用贴图（对应帧缺失时保持不变） */
+    private _applyTexture(): void {
+        const sprite = this.node.getComponent(Sprite);
+        if (!sprite) return;
+        let frame: SpriteFrame | null = null;
+        switch (this._textureState) {
+            case 'default': frame = this._defaultFrame; break;
+            case 'idle':    frame = this._idleFrame; break;
+            case 'aim':     frame = this._aimFrame; break;
+            case 'shot':    frame = this._shotFrame; break;
+            case 'hit':     frame = this._hittedFrame; break;
         }
+        if (frame) sprite.spriteFrame = frame;
     }
 
     start() {
@@ -121,6 +191,9 @@ export class CoinController extends Component {
             if (sprite) {
                 sprite.color = Color.WHITE;
             }
+        } else {
+            // 进入等待操作状态 → 空闲贴图
+            this.showIdle();
         }
     }
 
@@ -182,6 +255,8 @@ export class CoinController extends Component {
         this._lastDragDist = 0;
         this._dragSoundDir = null;
         this._isDragging = true;
+        // 拖拽瞄准中 → 拖拽贴图
+        this.showAim();
         event.getLocation(this._dragStartPos);
         // 同步更新缓存位置，防止 update() 轮询时读到未初始化的 (0,0)
         event.getLocation(CoinController._lastWorldPos);
@@ -435,7 +510,7 @@ export class CoinController extends Component {
         this._updateDragArrow(this._clampedDragVec.x, this._clampedDragVec.y);
     }
 
-    private _onPointerUp(event: EventTouch): void {
+    private _onPointerUp(_event: EventTouch): void {
         if (!this._isDragging) return;
         this._isDragging = false;
         this._unregisterGlobalEvents();

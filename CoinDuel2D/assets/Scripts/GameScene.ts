@@ -17,12 +17,14 @@ export class GameScene extends Component {
     public coinPrefab:Prefab = null;
     @property(UIManager)
     public uiManager:UIManager = null;
+    @property({ tooltip: "开局使用的硬币 id（config.json 中 coins 的 key，默认为 1）" })
+    public coinId: string = "1";
 
     private tableController: TableController = null!;
     private _debugPanel: Node | null = null;
     /** 缺口宽度基数（从 TableController 面板值快照） */
     private _baseGapWidth: number = 80;
-    /** 缓存的 coins.json 数据 */
+    /** 缓存的 config.json 数据 */
     private _coinsConfig: any = null;
 
     private level:number = 1;
@@ -57,7 +59,7 @@ export class GameScene extends Component {
         // 快照缺口宽度基数
         this._baseGapWidth = this.tableController.gapWidth;
 
-        // 启动时读取全局 coins.json 配置
+        // 启动时读取全局 config.json 配置
         this._loadCoinsConfig();
 
         this.startNewRound();
@@ -130,6 +132,11 @@ export class GameScene extends Component {
             ctrl.setGameLogic(this.gameLogic);
         }
         this.gameLogic.waitingPlayerOperation();
+
+        // 开局按指定 coin id 应用外观（配置已加载时）
+        if (this._coinsConfig) {
+            this._applyCoinConfig(this.coinId);
+        }
     }
 
     private clearCoins(){
@@ -145,18 +152,18 @@ export class GameScene extends Component {
             this._debugPanel.active = !this._debugPanel.active;
         }
 
-        // 数字键 1-9：读取 coins.json 配置并切换所有硬币贴图/音效
+        // 数字键 1-9：读取 config.json 配置并切换所有硬币贴图/音效
         if (event.keyCode >= KeyCode.DIGIT_1 && event.keyCode <= KeyCode.DIGIT_9) {
             const keyIndex = event.keyCode - KeyCode.DIGIT_1 + 1;
             this._applyCoinConfig(keyIndex.toString());
         }
     }
 
-    /** 启动时读取全局 coins.json，缓存数据并应用全局颜色 */
+    /** 启动时读取全局 config.json，缓存数据并应用全局颜色 */
     private _loadCoinsConfig(): void {
-        resources.load('coins', (err: any, asset: any) => {
+        resources.load('config', (err: any, asset: any) => {
             if (err) {
-                console.warn('[GameScene] 加载 coins.json 失败:', err);
+                console.warn('[GameScene] 加载 config.json 失败:', err);
                 return;
             }
             this._coinsConfig = asset.json ?? {};
@@ -190,82 +197,116 @@ export class GameScene extends Component {
                 loadSfx('drag_decrease_sfx');
                 loadSfx('drag_release_sfx');
             }
+
+            // 全局配置加载完成，按开局 coinId 应用硬币外观
+            this._applyCoinConfig(this.coinId);
         });
     }
 
     /**
-     * 使用缓存的 coins.json 配置，根据 key 查找并应用到场上所有硬币
-     * @param key coins.json 中的硬币类型标识，如 "1", "2"
+     * 使用缓存的 config.json 配置，根据 key 查找并应用到场上所有硬币
+     * @param key config.json 中的硬币类型标识，如 "1", "2"
      */
     private _applyCoinConfig(key: string): void {
         const asset = this._coinsConfig;
         if (!asset) {
-            console.warn('[GameScene] coins.json 尚未加载完成');
+            console.warn('[GameScene] config.json 尚未加载完成');
             return;
         }
 
         const coinsData = asset.coins;
         if (!coinsData) {
-            console.warn('[GameScene] coins.json 格式错误：缺少 coins 字段');
+            console.warn('[GameScene] config.json 格式错误：缺少 coins 字段');
             return;
         }
 
-        const config = coinsData[key] as { texture?: string; hit_sfx?: string } | undefined;
+        const config = coinsData[key] as {
+            texture?: string;
+            idle_texture?: string;
+            aim_texture?: string;
+            shot_texture?: string;
+            hitted_texture?: string;
+            shot_sfx?: string;
+            hitted_sfx?: string;
+        } | undefined;
         if (!config) {
-            console.log(`[GameScene] coins.json 中未找到 key "${key}" 的配置，不做处理`);
+            console.log(`[GameScene] config.json 中未找到 key "${key}" 的配置，不做处理`);
             return;
         }
 
-        const textureFile = config.texture;
-        const hitSfxFile = config.hit_sfx;
-        if (!textureFile) {
-            console.warn(`[GameScene] key "${key}" 缺少 texture 字段`);
-            return;
-        }
+        console.log(`[GameScene] 切换硬币为 ${key} 号外观（默认/空闲/拖拽/发射/被打击 贴图 + 发射/被打击 音效）`);
 
-        // 去除扩展名用于 resources.load
-        const texBaseName = textureFile.replace(/\.[^/.]+$/, '');
-        const sfxBaseName = hitSfxFile ? hitSfxFile.replace(/\.[^/.]+$/, '') : null;
-
-        console.log(`[GameScene] 切换硬币贴图为 ${textureFile}，碰撞音效为 ${hitSfxFile || '默认'}`);
-
-        // 并行加载贴图（SpriteFrame 子资源）和音效，然后应用到所有硬币
-        let loadedSprite: SpriteFrame | null = null;
-        let loadedClip: AudioClip | null = null;
-        let pending = 1 + (sfxBaseName ? 1 : 0);
+        // 并行加载各状态贴图（SpriteFrame 子资源）和音效，全部就绪后应用到所有硬币
+        let defaultFrame: SpriteFrame | null = null;
+        let idleFrame: SpriteFrame | null = null;
+        let aimFrame: SpriteFrame | null = null;
+        let shotFrame: SpriteFrame | null = null;
+        let hittedFrame: SpriteFrame | null = null;
+        let shotClip: AudioClip | null = null;
+        let hittedClip: AudioClip | null = null;
+        let total = 0;
+        let loaded = 0;
 
         const applyToCoins = () => {
-            if (--pending > 0) return;
+            loaded++;
+            if (loaded < total) return;
             for (const coin of this.gameLogic.coinGroup.children) {
                 const ctrl = coin.getComponent(CoinController);
                 if (ctrl) {
-                    ctrl.setAppearance(loadedSprite, loadedClip, key);
+                    ctrl.setAppearance({
+                        defaultFrame,
+                        idleFrame,
+                        aimFrame,
+                        shotFrame,
+                        hittedFrame,
+                        shotSfxClip: shotClip,
+                        hittedSfxClip: hittedClip,
+                        typeKey: key,
+                    });
                 }
             }
         };
 
         // 图片资源需指定 SpriteFrame 子资源路径
-        resources.load(texBaseName + '/spriteFrame', SpriteFrame, (errTex: any, spriteFrame: SpriteFrame) => {
-            if (!errTex && spriteFrame) {
-                loadedSprite = spriteFrame;
-            } else {
-                console.warn(`[GameScene] 加载贴图 ${textureFile} 失败:`, errTex);
-            }
-            applyToCoins();
-        });
-
-        if (sfxBaseName) {
-            resources.load(sfxBaseName, AudioClip, (errSfx: any, clip: AudioClip) => {
-                if (!errSfx && clip) {
-                    loadedClip = clip;
+        const loadFrame = (field: keyof typeof config, assign: (f: SpriteFrame) => void) => {
+            const file = config[field];
+            if (!file) return;
+            total++;
+            const base = file.replace(/\.[^/.]+$/, '');
+            resources.load(base + '/spriteFrame', SpriteFrame, (err: any, sf: SpriteFrame) => {
+                if (!err && sf) {
+                    assign(sf);
                 } else {
-                    console.warn(`[GameScene] 加载音效 ${hitSfxFile} 失败:`, errSfx);
+                    console.warn(`[GameScene] 加载贴图 ${file} 失败:`, err);
                 }
                 applyToCoins();
             });
-        } else {
-            applyToCoins();
-        }
+        };
+        const loadClip = (field: keyof typeof config, assign: (c: AudioClip) => void) => {
+            const file = config[field];
+            if (!file) return;
+            total++;
+            const base = file.replace(/\.[^/.]+$/, '');
+            resources.load(base, AudioClip, (err: any, clip: AudioClip) => {
+                if (!err && clip) {
+                    assign(clip);
+                } else {
+                    console.warn(`[GameScene] 加载音效 ${file} 失败:`, err);
+                }
+                applyToCoins();
+            });
+        };
+
+        loadFrame('texture', f => { defaultFrame = f; });
+        loadFrame('idle_texture', f => { idleFrame = f; });
+        loadFrame('aim_texture', f => { aimFrame = f; });
+        loadFrame('shot_texture', f => { shotFrame = f; });
+        loadFrame('hitted_texture', f => { hittedFrame = f; });
+        loadClip('shot_sfx', c => { shotClip = c; });
+        loadClip('hitted_sfx', c => { hittedClip = c; });
+
+        // 无任何可加载资源时也会应用一次（保持当前贴图，仅记录类型 key）
+        applyToCoins();
     }
 }
 

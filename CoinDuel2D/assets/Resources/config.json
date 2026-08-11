@@ -1,0 +1,19 @@
+{
+    "source_color":"#ffff00",
+    "target_color":"#00ff00",
+    "drag_increase_sfx":"sounds/coin_drag.wav",
+    "drag_decrease_sfx":"sounds/coin_drag.wav",
+    "drag_release_sfx":"sounds/drag_release.wav",
+    "coins":{
+        "1":{
+            "texture":"textures/coin_1.png",
+            "idle_texture":"textures/coin_1.png",
+            "aim_texture":"textures/coin_1_aim.png",
+            "shot_texture":"textures/coin_1_shot.png",
+            "hitted_texture":"textures/coin_1_hitted.png",
+
+            "shot_sfx":"sounds/coin_1_shot.wav",
+            "hitted_sfx":"sounds/coin_1_hitted.wav"
+        }
+    }
+}
