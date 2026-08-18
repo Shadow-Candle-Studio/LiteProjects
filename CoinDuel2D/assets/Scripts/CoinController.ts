@@ -12,6 +12,19 @@ export class CoinController extends Component {
     /** 从 config.json 读取的 target_color */
     public static targetColor: Color = Color.GREEN;
 
+    /**
+     * 获取硬币的 Sprite 组件。
+     * Coin.prefab 中 Sprite 已移到子节点 "Sprite" 上，优先从子节点查找，找不到时回退到节点自身。
+     */
+    public static getCoinSprite(node: Node): Sprite | null {
+        const child = node.getChildByName('Sprite');
+        if (child) {
+            const s = child.getComponent(Sprite);
+            if (s) return s;
+        }
+        return node.getComponent(Sprite);
+    }
+
     private _allowedOperation: boolean = false;
     private _rigidBody: RigidBody2D | null = null;
     private _isDragging: boolean = false;
@@ -142,7 +155,7 @@ export class CoinController extends Component {
 
     /** 按当前状态应用贴图（对应帧缺失时保持不变） */
     private _applyTexture(): void {
-        const sprite = this.node.getComponent(Sprite);
+        const sprite = CoinController.getCoinSprite(this.node);
         if (!sprite) return;
         let frame: SpriteFrame | null = null;
         switch (this._textureState) {
@@ -187,7 +200,7 @@ export class CoinController extends Component {
         this._indicatorTime = 0;
 
         if (!show) {
-            const sprite = this.node.getComponent(Sprite);
+            const sprite = CoinController.getCoinSprite(this.node);
             if (sprite) {
                 sprite.color = Color.WHITE;
             }
@@ -207,7 +220,7 @@ export class CoinController extends Component {
 
         this._indicatorTime += dt;
         const t = (Math.sin(this._indicatorTime * Math.PI * 2) + 1) / 2;
-        const sprite = this.node.getComponent(Sprite);
+        const sprite = CoinController.getCoinSprite(this.node);
         if (!sprite) return;
 
         if (this._targetableActive) {
@@ -333,11 +346,11 @@ export class CoinController extends Component {
     /** 高亮/取消高亮预测目标硬币 */
     private _setPredictedTarget(coin: Node | null): void {
         if (this._predictedTarget && this._predictedTarget !== coin) {
-            const oldSprite = this._predictedTarget.getComponent(Sprite);
+            const oldSprite = CoinController.getCoinSprite(this._predictedTarget);
             if (oldSprite) oldSprite.color = Color.WHITE;
         }
         if (coin) {
-            const sprite = coin.getComponent(Sprite);
+            const sprite = CoinController.getCoinSprite(coin);
             if (sprite) sprite.color = new Color(255, 100, 100);
         }
         this._predictedTarget = coin;
@@ -348,7 +361,7 @@ export class CoinController extends Component {
         this._targetableActive = show;
         this._indicatorTime = 0;
         if (!show) {
-            const sprite = this.node.getComponent(Sprite);
+            const sprite = CoinController.getCoinSprite(this.node);
             if (sprite) sprite.color = Color.WHITE;
         }
     }
@@ -431,7 +444,7 @@ export class CoinController extends Component {
     /** 清理预测高亮 */
     private _clearPredictedTarget(): void {
         if (this._predictedTarget) {
-            const sprite = this._predictedTarget.getComponent(Sprite);
+            const sprite = CoinController.getCoinSprite(this._predictedTarget);
             if (sprite) sprite.color = Color.WHITE;
             this._predictedTarget = null;
         }
