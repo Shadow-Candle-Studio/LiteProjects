@@ -1,7 +1,10 @@
-import { _decorator, Component, Node, Vec2, Vec3, Prefab, instantiate, Camera, Sprite, SpriteFrame, RenderTexture, UITransform, Animation } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3, Prefab, instantiate, Camera, Sprite, SpriteFrame, RenderTexture, UITransform, Animation, Color, tween, RigidBody2D, ERigidBody2DType } from 'cc';
 import { GameLogic } from './GameLogic';
+import { CoinController } from './CoinController';
 import { EffectGoHelper } from './EffectGoHelper';
 import { HitLight2 } from './HitLight2';
+import { ArmHit } from './Effects/ArmHit';
+import { Tornado } from './Effects/Tornado';
 const { ccclass, property } = _decorator;
 
 /**
@@ -93,6 +96,32 @@ export class HitEffectManager extends Component {
 
     @property({ tooltip: "子画面显示时长（秒）" })
     public subViewDuration: number = 2.0;
+
+    // ── 被打飞特效（击中后，被撞硬币 B 旋转手臂将发射硬币 A 打飞出界） ──
+    @property({ tooltip: "击中后由被撞硬币旋转手臂将发射硬币打飞出场外" })
+    public enableKnockOut: boolean = true;
+
+    @property({ type: Prefab, tooltip: "手臂旋转特效预制体（effect_arm_hit）" })
+    public armHitPrefab: Prefab | null = null;
+
+    @property({ tooltip: "手臂转动一圈的时长（秒）" })
+    public armHitDuration: number = 0.8;
+
+    @property({ tooltip: "被打击飞硬币飞出场外的时长（秒）" })
+    public knockFlyDuration: number = 0.5;
+
+    // ── 龙卷风特效（硬币被击打消失时，桌面中央播放） ──
+    @property({ tooltip: "硬币被击打消失时在桌面中央播放龙卷风特效" })
+    public enableTornado: boolean = true;
+
+    @property({ type: Prefab, tooltip: "龙卷风特效预制体（Tornado）" })
+    public tornadoPrefab: Prefab | null = null;
+
+    @property({ tooltip: "龙卷风持续时长（秒）" })
+    public tornadoDuration: number = 3;
+
+    @property({ tooltip: "龙卷风整体缩放倍数" })
+    public tornadoScale: number = 1.2;
 
     // ══════════════════════════════════════════
     //  运行时状态
@@ -279,6 +308,93 @@ export class HitEffectManager extends Component {
         this.isTrackingHitCoin = false;
         this.trackTargetNode = null;
         this._activeShotCoin = null;
+    }
+
+    /**
+     * 被打飞特效：由被撞硬币 B 加载手臂特效旋转一圈，将发射硬币 A 打飞出界。
+     * @param shotCoin  发射硬币（A，被打飞）
+     * @param hitCoin   被撞硬币（B，加载手臂特效）
+     * @param onDone    特效结束后回调（用于后续结算）
+     */
+    public playKnockOut(shotCoin: Node, hitCoin: Node, onDone: () => void): void {
+        // 硬币被击打消失时，在桌面中央播放龙卷风特效（不依赖打飞开关）
+        this._spawnTornado();
+
+        if (this.enableKnockOut && this.armHitPrefab) {
+            const armNode = instantiate(this.armHitPrefab);
+            hitCoin.addChild(armNode);
+            armNode.setPosition(0, 0, 0); // 手臂绕 B 中心旋转
+
+            const arm = armNode.getComponent(ArmHit);
+            if (arm) {
+                arm.duration = this.armHitDuration;
+                arm.play(shotCoin, onDone, this.knockFlyDuration);
+            } else {
+                this._fadeOutCoin(shotCoin, onDone);
+            }
+        } else {
+            // 无手臂特效（临时屏蔽时）：让发射硬币在龙卷风期间逐渐透明后删除
+            this._fadeOutCoin(shotCoin, onDone);
+        }
+    }
+
+    /** 让目标硬币关闭物理后逐渐透明，最后删除并触发结算回调 */
+    private _fadeOutCoin(target: Node, onDone: () => void): void {
+        // 关闭物理（只保留视觉，位置保持不变）
+        const rb = target.getComponent(RigidBody2D);
+        if (rb) rb.type = ERigidBody2DType.Static;
+
+        // 标记为"正在被打飞"，避免被 checkCoinFalls 误判为掉进缺口
+        const ctrl = target.getComponent(CoinController);
+        if (ctrl) ctrl.isKnockingOut = true;
+
+        const dur = Math.max(0.05, this.knockFlyDuration);
+        const sprite = CoinController.getCoinSprite(target);
+        if (sprite) {
+            tween(sprite)
+                .to(dur, { color: new Color(255, 255, 255, 0) }, { easing: 'quadOut' })
+                .call(() => {
+                    target.removeFromParent();
+                    target.destroy();
+                    onDone();
+                })
+                .start();
+        } else {
+            target.removeFromParent();
+            target.destroy();
+            onDone();
+        }
+    }
+
+    /**
+     * 在指定位置播放龙卷风特效（一次性，持续 tornadoDuration 秒后自动销毁）。
+     * @param pos   世界坐标；缺省时使用桌面中央（CoinGroup 原点）。
+     * @param scale 整体缩放倍数；缺省时使用组件上的 tornadoScale。
+     * Tornado.release() 会按传入的 duration 自动播放、淡出并销毁自身。
+     */
+    private _spawnTornado(pos?: Vec3, scale?: number): void {
+        if (!this.enableTornado || !this.tornadoPrefab) return;
+
+        const gl = this.node.parent?.getComponent(GameLogic)
+                   ?? this.getComponent(GameLogic);
+        if (!gl) return;
+
+        const node = instantiate(this.tornadoPrefab);
+        gl.addChildToWorld(node);
+
+        const center = pos ?? (gl.coinGroup ? gl.coinGroup.position : new Vec3(0, 0, 0));
+
+        const tornado = node.getComponent(Tornado);
+        if (tornado) {
+            tornado.release(new Vec3(center.x, center.y, 0), scale ?? this.tornadoScale, this.tornadoDuration);
+        } else {
+            node.setPosition(center);
+        }
+    }
+
+    /** 测试钩子：在指定世界坐标以指定缩放播放龙卷风（点击桌面空白处时由 GameLogic 调用） */
+    public playTestTornado(pos: Vec3, scale?: number): void {
+        this._spawnTornado(pos, scale);
     }
 
     /**

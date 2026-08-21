@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec2, Vec3, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D, Camera } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D, Camera, input, Input, EventMouse, EventTouch } from 'cc';
 import { CoinController } from './CoinController';
 import { HitEffectManager } from './HitEffectManager';
 import { Leaderboard } from './Leaderboard';
@@ -129,12 +129,16 @@ export class GameLogic extends Component {
         if (PhysicsSystem2D.instance) {
             PhysicsSystem2D.instance.on(Contact2DType.BEGIN_CONTACT, this._onBeginContact, this);
         }
+
+        // 测试钩子：点击桌面空白处播放龙卷风
+        input.on(Input.EventType.MOUSE_DOWN, this._onTestClick, this);
     }
 
     protected onDestroy(): void {
         if (PhysicsSystem2D.instance) {
             PhysicsSystem2D.instance.off(Contact2DType.BEGIN_CONTACT, this._onBeginContact, this);
         }
+        input.off(Input.EventType.MOUSE_DOWN, this._onTestClick, this);
     }
 
     /** PhysicsSystem2D 全局碰撞回调：活跃弹射硬币撞到其他硬币时计数 */
@@ -190,6 +194,45 @@ export class GameLogic extends Component {
     /** 向世界根节点添加子节点（公开桥接，用于特效） */
     public addChildToWorld(node: Node): void {
         this.node.parent?.addChild(node);
+    }
+
+    // ── 测试辅助：点击桌面空白处播放龙卷风 ──
+
+    /** 点击空白处（不在任何硬币上）时，在该处播放龙卷风，方便测试 */
+    private _onTestClick(event: EventMouse | EventTouch): void {
+        if (!this.hitEffectManager) return;
+
+        const wp = this._screenToTablePos(event.getLocation());
+        if (!wp) return;
+
+        // 点击到硬币上（会触发拖拽），不触发测试龙卷风
+        if (this._hitTestCoin(wp)) return;
+
+        //this.hitEffectManager.playTestTornado(Vec3.ZERO, 5);
+    }
+
+    /** 屏幕坐标 → 桌面平面（z=0）上的世界坐标 */
+    private _screenToTablePos(loc: Vec2): Vec3 | null {
+        const camNode = this._mainCameraNode;
+        const cam = this._mainCameraComp;
+        if (!camNode || !cam) return null;
+        // screenToWorld 的 z 参数为沿相机前方向的距离；相机在 z=1000，桌面在 z=0
+        const wp = cam.screenToWorld(new Vec3(loc.x, loc.y, camNode.position.z));
+        return new Vec3(wp.x, wp.y, 0);
+    }
+
+    /** 点击位置是否落在某枚硬币上 */
+    private _hitTestCoin(worldPos: Vec3): boolean {
+        if (!this.coinGroup) return false;
+        const r = this.coinRadius;
+        for (const coin of this.coinGroup.children) {
+            const dx = coin.position.x - worldPos.x;
+            const dy = coin.position.y - worldPos.y;
+            if (dx * dx + dy * dy <= r * r) {
+                return true;
+            }
+        }
+        return false;
     }
 
     update(deltaTime: number) {
@@ -376,6 +419,10 @@ export class GameLogic extends Component {
             const coin = this.coinGroup.children[i];
             const pos = coin.position;
 
+            // 正在被打飞出界的硬币不判为掉落（由打飞特效自行处理）
+            const ctrl = coin.getComponent(CoinController);
+            if (ctrl && ctrl.isKnockingOut) continue;
+
             // 硬币中点离开桌面范围 → 掉落
             if (Math.abs(pos.x) > hw || Math.abs(pos.y) > hh) {
                 this.onCoinFall(coin);
@@ -429,26 +476,37 @@ export class GameLogic extends Component {
                 this.score++;
                 this.onScoreUpdate?.(this.score);
 
-                // 拿走刚弹出的硬币（先从父节点移除，children 立即更新）
-                if (this._activeShotCoin) {
-                    this._activeShotCoin.removeFromParent();
-                    this._activeShotCoin.destroy();
+                // 打飞特效（B 硬币旋转手臂将 A 打飞出界）结束后再结算
+                const afterKnockOut = () => {
                     this._activeShotCoin = null;
-                }
 
-                // 3. 胜利条件：桌面只剩最后一枚硬币（排除 DragLine 等非硬币节点）
-                let coinCount = 0;
-                for (const child of this.coinGroup.children) {
-                    if (child.getComponent(CoinController)) coinCount++;
-                }
-                if (coinCount <= 1) {
-                    this._handleGameWin();
-                    return;
-                }
+                    // 胜利条件：桌面只剩最后一枚硬币（排除 DragLine 等非硬币节点）
+                    let coinCount = 0;
+                    for (const child of this.coinGroup.children) {
+                        if (child.getComponent(CoinController)) coinCount++;
+                    }
+                    if (coinCount <= 1) {
+                        this._handleGameWin();
+                        return;
+                    }
 
-                // 锁定被撞硬币为下一发起手子弹
-                this._lockedCoin = this._lastHitCoin;
-                this._continueWithLockedCoin();
+                    // 锁定被撞硬币为下一发起手子弹
+                    this._lockedCoin = this._lastHitCoin;
+                    this._continueWithLockedCoin();
+                };
+
+                const shotCoin = this._activeShotCoin;
+                const hitCoin = this._lastHitCoin;
+                if (shotCoin && hitCoin && this.hitEffectManager) {
+                    this.hitEffectManager.playKnockOut(shotCoin, hitCoin, afterKnockOut);
+                } else {
+                    // 无打飞特效时：立即移除发射硬币再结算
+                    if (shotCoin) {
+                        shotCoin.removeFromParent();
+                        shotCoin.destroy();
+                    }
+                    afterKnockOut();
+                }
                 return;
             }
 

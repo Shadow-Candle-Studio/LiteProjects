@@ -35,6 +35,8 @@ export class CoinController extends Component {
     private _indicatorTime: number = 0;
     /** 其他硬币拖拽时，本硬币高亮为绿色（表示可被打击） */
     private _targetableActive: boolean = false;
+    /** 本硬币正在被打飞出场外（掉落检测应跳过，避免误判为掉进缺口） */
+    public isKnockingOut: boolean = false;
 
     /** 拖拽箭头 Sprite 节点与组件 */
     private _dragArrowNode: Node | null = null;
