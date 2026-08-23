@@ -131,7 +131,7 @@ export class GameLogic extends Component {
         }
 
         // 测试钩子：点击桌面空白处播放龙卷风
-        input.on(Input.EventType.MOUSE_DOWN, this._onTestClick, this);
+        //input.on(Input.EventType.MOUSE_DOWN, this._onTestClick, this);
     }
 
     protected onDestroy(): void {
@@ -208,7 +208,7 @@ export class GameLogic extends Component {
         // 点击到硬币上（会触发拖拽），不触发测试龙卷风
         if (this._hitTestCoin(wp)) return;
 
-        //this.hitEffectManager.playTestTornado(Vec3.ZERO, 5);
+        this.hitEffectManager.playTestTornado(Vec3.ZERO, 5);
     }
 
     /** 屏幕坐标 → 桌面平面（z=0）上的世界坐标 */

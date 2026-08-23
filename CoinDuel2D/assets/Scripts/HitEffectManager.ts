@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec2, Vec3, Prefab, instantiate, Camera, Sprite, SpriteFrame, RenderTexture, UITransform, Animation, Color, tween, RigidBody2D, ERigidBody2DType } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3, Prefab, instantiate, Camera, Sprite, SpriteFrame, RenderTexture, UITransform, Animation, Color, tween, RigidBody2D, ERigidBody2DType, ParticleSystem2D } from 'cc';
 import { GameLogic } from './GameLogic';
 import { CoinController } from './CoinController';
 import { EffectGoHelper } from './EffectGoHelper';
@@ -317,8 +317,10 @@ export class HitEffectManager extends Component {
      * @param onDone    特效结束后回调（用于后续结算）
      */
     public playKnockOut(shotCoin: Node, hitCoin: Node, onDone: () => void): void {
-        // 硬币被击打消失时，在桌面中央播放龙卷风特效（不依赖打飞开关）
-        this._spawnTornado();
+        // 硬币被击打消失时，在桌面中央播放龙卷风特效（不依赖打飞开关）。
+        // 龙卷风粒子 texture 使用当前消失硬币（发射硬币 A）配置文件中的默认贴图。
+        const coinFrame = shotCoin.getComponent(CoinController)?.defaultFrame ?? null;
+        this._spawnTornado(undefined, undefined, coinFrame);
 
         if (this.enableKnockOut && this.armHitPrefab) {
             const armNode = instantiate(this.armHitPrefab);
@@ -368,11 +370,12 @@ export class HitEffectManager extends Component {
 
     /**
      * 在指定位置播放龙卷风特效（一次性，持续 tornadoDuration 秒后自动销毁）。
-     * @param pos   世界坐标；缺省时使用桌面中央（CoinGroup 原点）。
-     * @param scale 整体缩放倍数；缺省时使用组件上的 tornadoScale。
+     * @param pos         世界坐标；缺省时使用桌面中央（CoinGroup 原点）。
+     * @param scale       整体缩放倍数；缺省时使用组件上的 tornadoScale。
+     * @param spriteFrame 粒子 texture；缺省时使用 Tornado 预制体自带的贴图。
      * Tornado.release() 会按传入的 duration 自动播放、淡出并销毁自身。
      */
-    private _spawnTornado(pos?: Vec3, scale?: number): void {
+    private _spawnTornado(pos?: Vec3, scale?: number, spriteFrame?: SpriteFrame | null): void {
         if (!this.enableTornado || !this.tornadoPrefab) return;
 
         const gl = this.node.parent?.getComponent(GameLogic)
@@ -381,6 +384,19 @@ export class HitEffectManager extends Component {
 
         const node = instantiate(this.tornadoPrefab);
         gl.addChildToWorld(node);
+
+        // billboard 着色器采样的是材质的 mainTexture，而不是粒子系统 spriteFrame 的纹理，
+        // 所以换贴图必须改材质。这里对每个粒子系统取材质实例（继承共享材质、不影响共享资产，
+        // 也不会影响 particle_hit / hit_light_2 等共用同一材质的特效），单独设置主纹理为当前硬币贴图。
+        if (spriteFrame) {
+            const texture = spriteFrame.texture;
+            if (texture) {
+                for (const ps of node.getComponentsInChildren(ParticleSystem2D)) {
+                    const mat = ps.getMaterialInstance(0);
+                    if (mat) mat.setProperty('mainTexture', texture);
+                }
+            }
+        }
 
         const center = pos ?? (gl.coinGroup ? gl.coinGroup.position : new Vec3(0, 0, 0));
 

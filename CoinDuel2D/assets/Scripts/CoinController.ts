@@ -99,6 +99,11 @@ export class CoinController extends Component {
         return this._hittedSfxClip;
     }
 
+    /** 获取 config.json 中配置的默认贴图（texture 字段） */
+    public get defaultFrame(): SpriteFrame | null {
+        return this._defaultFrame;
+    }
+
     /**
      * 设置硬币各状态的贴图与音效（资源由 GameScene 预先加载好传入）。
      * 传入 null / 缺省字段表示不改变对应资源。
