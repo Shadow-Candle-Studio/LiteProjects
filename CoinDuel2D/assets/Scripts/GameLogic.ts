@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec2, Vec3, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D, Camera, input, Input, EventMouse, EventTouch, Prefab, instantiate, tween } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3, Color, Sprite, SpriteFrame, Texture2D, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D, Camera, input, Input, EventMouse, EventTouch, Prefab, instantiate, tween } from 'cc';
 import { Bomb } from './Effects/Bomb';
 import { CoinController } from './CoinController';
 import { HitEffectManager } from './HitEffectManager';
@@ -52,6 +52,9 @@ export class GameLogic extends Component {
     @property({ tooltip: "炸弹爆炸推力大小（越大推开越远）" })
     public bombPushForce: number = 500;
 
+    @property({ tooltip: "瞄准线最大长度（像素）" })
+    public aimLineLength: number = 1000;
+
     @property({ tooltip: "泥潭内硬币滑动阻尼（越大减速越明显）" })
     public mudDamping: number = 8;
 
@@ -80,6 +83,12 @@ export class GameLogic extends Component {
     /** 场上所有泥潭区域节点（硬币中心进入后提高摩擦阻尼） */
     private _muds: Node[] = [];
 
+    /** 瞄准线圆点对象池 */
+    private _aimDots: Node[] = [];
+    private _aimDotIdx: number = 0;
+    /** 圆点共用的白色 spriteFrame（启动时创建） */
+    private _dotFrame: SpriteFrame | null = null;
+
     /** 场上泥潭区域列表 */
     public get muds(): Node[] {
         return this._muds;
@@ -103,6 +112,108 @@ export class GameLogic extends Component {
     /** 设置拖拽距离（由 CoinController 每帧更新），委托给 HitEffectManager */
     public setDragDistance(dist: number): void {
         this.hitEffectManager?.setDragDistance(dist);
+    }
+
+    /** 获取或创建瞄准线圆点 */
+    private _getAimDot(): Node {
+        if (this._aimDotIdx < this._aimDots.length) {
+            const dot = this._aimDots[this._aimDotIdx++];
+            dot.active = true;
+            return dot;
+        }
+        const dot = new Node('AimDot');
+        dot.layer = 1;
+        this.coinGroup.addChild(dot);
+        const ut = dot.addComponent(UITransform);
+        ut.setContentSize(6, 6);
+        ut.setAnchorPoint(0.5, 0.5);
+        const sp = dot.addComponent(Sprite);
+        sp.sizeMode = Sprite.SizeMode.CUSTOM;
+        sp.color = new Color(255, 255, 100, 220);
+        if (this._dotFrame) sp.spriteFrame = this._dotFrame;
+        this._aimDots.push(dot);
+        this._aimDotIdx++;
+        return dot;
+    }
+
+    /** 绘制带墙壁反射的瞄准线（用圆点阵列代替 Graphics） */
+    public drawAimLine(fromX: number, fromY: number, dirX: number, dirY: number): void {
+        this._aimDotIdx = 0;
+
+        const len = Math.sqrt(dirX * dirX + dirY * dirY);
+        if (len < 0.001) { this._hideAimDots(); return; }
+        let dx = dirX / len;
+        let dy = dirY / len;
+
+        const halfW = this.tableWidth / 2 - this.wallThickness;
+        const halfH = this.tableHeight / 2 - this.wallThickness;
+
+        // 1. 收集所有反射线段的端点
+        const pts: { x: number; y: number }[] = [{ x: fromX, y: fromY }];
+        let x = fromX, y = fromY;
+        let remaining = this.aimLineLength;
+
+        for (let i = 0; i < 10 && remaining > 0; i++) {
+            let tMin = remaining;
+            let hitWall = -1;
+            if (dx > 0) { const t = (halfW - x) / dx; if (t > 0.01 && t < tMin) { tMin = t; hitWall = 0; } }
+            if (dx < 0) { const t = (-halfW - x) / dx; if (t > 0.01 && t < tMin) { tMin = t; hitWall = 1; } }
+            if (dy > 0) { const t = (halfH - y) / dy; if (t > 0.01 && t < tMin) { tMin = t; hitWall = 2; } }
+            if (dy < 0) { const t = (-halfH - y) / dy; if (t > 0.01 && t < tMin) { tMin = t; hitWall = 3; } }
+            x += dx * tMin;
+            y += dy * tMin;
+            remaining -= tMin;
+            pts.push({ x, y });
+            if (hitWall < 0 || remaining <= 0) break;
+            if (hitWall === 0 || hitWall === 1) dx = -dx; else dy = -dy;
+        }
+
+        // 2. 沿路径每 12px 放一个圆点
+        const step = 12;
+        let acc = 0;
+        let seg = 0;
+        let sx = pts[0].x, sy = pts[0].y;
+        let segLen = pts.length > 1 ? Math.hypot(pts[1].x - sx, pts[1].y - sy) : 0;
+        let segIdx = 0;
+
+        while (acc < this.aimLineLength && segIdx < pts.length - 1) {
+            if (seg + step <= segLen) {
+                seg += step;
+                acc += step;
+            } else {
+                // 进入下一段
+                segIdx++;
+                if (segIdx >= pts.length - 1) break;
+                sx = pts[segIdx].x;
+                sy = pts[segIdx].y;
+                segLen = Math.hypot(pts[segIdx + 1].x - sx, pts[segIdx + 1].y - sy);
+                seg = 0;
+                continue;
+            }
+            const t = seg / segLen;
+            const px = sx + (pts[segIdx + 1].x - sx) * t;
+            const py = sy + (pts[segIdx + 1].y - sy) * t;
+            const dot = this._getAimDot();
+            dot.setPosition(px, py, 0);
+            // 距离越远越透明
+            const alpha = Math.round(220 * (1 - acc / this.aimLineLength));
+            dot.getComponent(Sprite)!.color = new Color(255, 255, 100, alpha);
+        }
+
+        this._hideAimDots();
+    }
+
+    /** 隐藏多余的圆点 */
+    private _hideAimDots(): void {
+        for (let i = this._aimDotIdx; i < this._aimDots.length; i++) {
+            this._aimDots[i].active = false;
+        }
+    }
+
+    /** 清除瞄准线 */
+    public clearAimLine(): void {
+        this._aimDotIdx = 0;
+        this._hideAimDots();
     }
 
     /** 设置游戏物理速度倍率（只改 fixedTimeStep，不重置累积器） */
@@ -142,6 +253,16 @@ export class GameLogic extends Component {
             gNode.layer = 1; // WORLD
             this.coinGroup.addChild(gNode);
             this.dragGraphics = gNode.addComponent(Graphics);
+        }
+
+        // 创建瞄准线圆点共用的白色 spriteFrame
+        if (!this._dotFrame) {
+            const tex = new Texture2D();
+            tex.reset({ width: 1, height: 1, format: Texture2D.PixelFormat.RGBA8888 });
+            const colors = new Uint8Array([255, 255, 255, 255]);
+            tex.uploadData(colors);
+            this._dotFrame = new SpriteFrame();
+            this._dotFrame.texture = tex;
         }
 
         // 获取 MainCamera 并保存原始位置和默认 orthoHeight

@@ -519,6 +519,8 @@ export class CoinController extends Component {
         const rawDy = mousePos.y - this._dragStartPos.y;
         this._clampedDragVec = this._calcClampedDrag(rawDx, rawDy);
         this._updateDragArrow(this._clampedDragVec.x, this._clampedDragVec.y);
+        // 瞄准线：发射方向与拖拽方向相反
+        this._gameLogic?.drawAimLine(this.node.position.x, this.node.position.y, -rawDx, -rawDy);
     }
 
     /** 绘制拖拽引导线（经墙面限位后更新箭头） */
@@ -528,6 +530,8 @@ export class CoinController extends Component {
         const rawDy = cur.y - this._dragStartPos.y;
         this._clampedDragVec = this._calcClampedDrag(rawDx, rawDy);
         this._updateDragArrow(this._clampedDragVec.x, this._clampedDragVec.y);
+        // 瞄准线：发射方向与拖拽方向相反
+        this._gameLogic?.drawAimLine(this.node.position.x, this.node.position.y, -rawDx, -rawDy);
     }
 
     private _onPointerUp(_event: EventTouch): void {
@@ -540,6 +544,7 @@ export class CoinController extends Component {
         this._clearPredictedTarget();
         this._hideDragArrow();
         this._clearTargetableAll();
+        this._gameLogic?.clearAimLine();
         SoundManager.instance.stopDragDirectionLoop();
         SoundManager.instance.playDragRelease();
 

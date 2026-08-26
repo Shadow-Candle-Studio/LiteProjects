@@ -588,6 +588,7 @@
     },
     "bombPushRadius": 256,
     "bombPushForce": 500000,
+    "aimLineLength": 1000,
     "mudDamping": 20,
     "dragGraphics": null,
     "_id": "0fVpRzIKBE6IM9sSAOOHZx"
