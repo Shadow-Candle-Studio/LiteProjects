@@ -317,10 +317,10 @@ export class HitEffectManager extends Component {
      * @param onDone    特效结束后回调（用于后续结算）
      */
     public playKnockOut(shotCoin: Node, hitCoin: Node, onDone: () => void): void {
-        // 硬币被击打消失时，在桌面中央播放龙卷风特效（不依赖打飞开关）。
+        // 硬币被击打消失时，在消失硬币（发射硬币 A）所在位置播放龙卷风特效（不依赖打飞开关）。
         // 龙卷风粒子 texture 使用当前消失硬币（发射硬币 A）配置文件中的默认贴图。
         const coinFrame = shotCoin.getComponent(CoinController)?.defaultFrame ?? null;
-        this._spawnTornado(undefined, undefined, coinFrame);
+        this._spawnTornado(shotCoin.position, undefined, coinFrame);
 
         if (this.enableKnockOut && this.armHitPrefab) {
             const armNode = instantiate(this.armHitPrefab);

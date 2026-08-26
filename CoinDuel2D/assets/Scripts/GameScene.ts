@@ -1,4 +1,4 @@
-import { _decorator, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip, Color } from 'cc';
+import { _decorator, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip, Color, Button, director } from 'cc';
 import { CoinController } from './CoinController';
 import { GameLogic } from './GameLogic';
 import { RoundManager } from './RoundManager';
@@ -32,7 +32,24 @@ export class GameScene extends Component {
     start() {
         // Q 键开关 DebugPanel（提前注册，即使面板初始 inactive 也能生效）
         input.on(Input.EventType.KEY_DOWN, this._onKeyDown, this);
-        this._debugPanel = this.node.parent?.getChildByName('UIManager')?.getChildByName('DebugPanel') ?? null;
+
+        // UI 在场景根级 UICanvas 下（不在 World 内），用场景根查找
+        const uiRoot = director.getScene()?.getChildByName('UICanvas');
+        const uiManager = uiRoot?.getChildByName('UIManager');
+        if (uiManager) {
+            this._debugPanel = uiManager.getChildByName('DebugPanel');
+
+            // 道具调试按钮：点击后从屏幕外飞入障碍物/陷阱，随机落点
+            const items = uiManager.getChildByName('Items');
+            if (items) {
+                const btnBlocker = items.getChildByName('ButtonBlocker');
+                if (btnBlocker) btnBlocker.on(Button.EventType.CLICK, () => this.gameLogic?.spawnBlocker(), this);
+                const btnMud = items.getChildByName('ButtonMud');
+                if (btnMud) btnMud.on(Button.EventType.CLICK, () => this.gameLogic?.spawnMud(), this);
+                const btnBomb = items.getChildByName('ButtonBomb');
+                if (btnBomb) btnBomb.on(Button.EventType.CLICK, () => this.gameLogic?.spawnBomb(), this);
+            }
+        }
 
         // 在 Table 节点上挂载桌面渲染控制器
         const tableNode = this.node.parent?.getChildByName('Table');
@@ -91,8 +108,9 @@ export class GameScene extends Component {
 
     // 开始新的一局
     private startNewRound(){
-        // 删除现存硬币
+        // 删除现存硬币与场上道具（障碍物/陷阱）
         this.clearCoins();
+        this.gameLogic.clearProps();
 
         // 关卡递增缺口宽度
         const inc = this.tableController.gapWidthIncrement;

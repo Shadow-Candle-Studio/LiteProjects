@@ -1,4 +1,5 @@
-import { _decorator, Component, Node, Vec2, Vec3, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D, Camera, input, Input, EventMouse, EventTouch } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D, Camera, input, Input, EventMouse, EventTouch, Prefab, instantiate, tween } from 'cc';
+import { Bomb } from './Effects/Bomb';
 import { CoinController } from './CoinController';
 import { HitEffectManager } from './HitEffectManager';
 import { Leaderboard } from './Leaderboard';
@@ -36,6 +37,24 @@ export class GameLogic extends Component {
     @property({ type: HitEffectManager, tooltip: "击中特效管理器（控制拖拽拉近/发射追踪/暂停/震动/粒子/碰撞追踪/恢复）" })
     public hitEffectManager: HitEffectManager | null = null;
 
+    @property({ type: Prefab, tooltip: "障碍物 prefab（静态圆盘，硬币碰到会反弹）" })
+    public blockerPrefab: Prefab | null = null;
+
+    @property({ type: Prefab, tooltip: "陷阱 prefab（泥潭区域，硬币中心进入后改变摩擦力）" })
+    public mudPrefab: Prefab | null = null;
+
+    @property({ type: Prefab, tooltip: "炸弹 prefab（抛物线飞入，播放爆炸动画后自动销毁）" })
+    public bombPrefab: Prefab | null = null;
+
+    @property({ tooltip: "炸弹爆炸推力半径（硬币中心在此范围内会被推开）" })
+    public bombPushRadius: number = 200;
+
+    @property({ tooltip: "炸弹爆炸推力大小（越大推开越远）" })
+    public bombPushForce: number = 500;
+
+    @property({ tooltip: "泥潭内硬币滑动阻尼（越大减速越明显）" })
+    public mudDamping: number = 8;
+
     // ── 围墙与缺口数据（每局由 GameScene 从 TableController 同步） ──
     /** 围墙厚度 */
     public wallThickness: number = 8;
@@ -54,6 +73,17 @@ export class GameLogic extends Component {
     private _lockedCoin: Node | null = null;
     private _lastHitCoin: Node | null = null;
     private _gameStartTime: number = 0;
+
+    /** 场上所有道具节点（障碍物 + 陷阱），关卡开始时统一清理 */
+    private _props: Node[] = [];
+
+    /** 场上所有泥潭区域节点（硬币中心进入后提高摩擦阻尼） */
+    private _muds: Node[] = [];
+
+    /** 场上泥潭区域列表 */
+    public get muds(): Node[] {
+        return this._muds;
+    }
 
     // ── 摄像机追踪 ──
     private _mainCameraNode: Node | null = null;
@@ -130,6 +160,9 @@ export class GameLogic extends Component {
             PhysicsSystem2D.instance.on(Contact2DType.BEGIN_CONTACT, this._onBeginContact, this);
         }
 
+        // 收集场景中已放置的道具节点（如 Table/Mud），使其同样生效
+        this._collectExistingProps();
+
         // 测试钩子：点击桌面空白处播放龙卷风
         //input.on(Input.EventType.MOUSE_DOWN, this._onTestClick, this);
     }
@@ -196,6 +229,170 @@ export class GameLogic extends Component {
         this.node.parent?.addChild(node);
     }
 
+    // ── 道具：障碍物（Blocker）与陷阱（Mud） ──
+
+    /** 生成一个障碍物：从屏幕外随机一侧飞入，随机落在场地某处 */
+    public spawnBlocker(): void {
+        if (!this.blockerPrefab) {
+            console.warn('[GameLogic] blockerPrefab 未配置');
+            return;
+        }
+        this._flyInProp(instantiate(this.blockerPrefab), false);
+    }
+
+    /** 生成一个陷阱：从屏幕外随机一侧飞入，随机落在场地某处 */
+    public spawnMud(): void {
+        if (!this.mudPrefab) {
+            console.warn('[GameLogic] mudPrefab 未配置');
+            return;
+        }
+        this._flyInProp(instantiate(this.mudPrefab), true);
+    }
+
+    /** 点击炸弹按钮：从桌面右侧抛物线飞入，动画结束后自动销毁 */
+    public spawnBomb(): void {
+        if (!this.bombPrefab) {
+            console.warn('[GameLogic] bombPrefab 未配置');
+            return;
+        }
+        const node = instantiate(this.bombPrefab);
+        this.addChildToWorld(node);
+        // 注入推力参数
+        const bomb = node.getComponent(Bomb);
+        if (bomb) {
+            bomb.pushRadius = this.bombPushRadius;
+            bomb.pushForce = this.bombPushForce;
+            bomb.coinGroup = this.coinGroup;
+        }
+        this._flyBomb(node);
+    }
+
+    /** 收集场景中已放置的道具节点（如 Table/Mud 占位），使其同样生效 */
+    private _collectExistingProps(): void {
+        const world = this.node.parent;
+        if (!world) return;
+        const stack: Node[] = [world];
+        while (stack.length > 0) {
+            const n = stack.pop()!;
+            if (n !== world && n.isValid && (n.name === 'Mud' || n.name === 'Blocker')) {
+                if (!this._props.includes(n)) {
+                    this._props.push(n);
+                    if (n.name === 'Mud') this._muds.push(n);
+                }
+            }
+            for (const c of n.children) stack.push(c);
+        }
+    }
+
+    /** 关卡开始时清理场上所有道具（障碍物与陷阱），并重置追踪列表 */
+    public clearProps(): void {
+        // 兜底收集（避免与 GameLogic.start 的执行顺序无关地漏掉场景预放的道具）
+        this._collectExistingProps();
+        for (const p of this._props) {
+            if (p && p.isValid) p.destroy();
+        }
+        this._props.length = 0;
+        this._muds.length = 0;
+    }
+
+    /** 道具飞入动画：从屏幕左右两侧以抛物线轨迹飞入，落地后恢复大小 */
+    private _flyInProp(node: Node, isMud: boolean): void {
+        this.addChildToWorld(node);
+        this._props.push(node);
+
+        // 随机着陆位置（可玩区域边缘留出物体半径的边距）
+        const halfW = this.tableWidth / 2 - this.wallThickness;
+        const halfH = this.tableHeight / 2 - this.wallThickness;
+        const margin = 70;
+        const landX = (Math.random() * 2 - 1) * Math.max(0, halfW - margin);
+        const landY = (Math.random() * 2 - 1) * Math.max(0, halfH - margin);
+
+        // 起始位置在屏幕外，只从屏幕左侧或右侧飞入（同一高度）
+        const off = 400;
+        const fromRight = Math.random() < 0.5;
+        const startX = fromRight ? halfW + off : -halfW - off;
+        const startY = landY;
+
+        // 飞行期间缩小（0.3），落地后恢复 1；同时禁用碰撞，落地后再启用
+        node.setPosition(startX, startY, 0);
+        node.setScale(0.3, 0.3, 1);
+        const collider = node.getComponent(Collider2D);
+        if (collider) collider.enabled = false;
+
+        // 抛物线轨迹：x 线性推进，y 沿二次抛物线先抬升后落下
+        const arcH = 250;
+        tween(node)
+            .to(0.6, { scale: new Vec3(1, 1, 1) }, {
+                easing: 'quadOut',
+                onUpdate: (target: Node, ratio: number) => {
+                    const x = startX + (landX - startX) * ratio;
+                    const y = startY + (landY - startY) * ratio + 4 * arcH * ratio * (1 - ratio);
+                    target.setPosition(x, y, 0);
+                },
+            })
+            .call(() => {
+                if (collider) collider.enabled = true;
+                if (isMud) this._muds.push(node);
+            })
+            .start();
+    }
+
+    /** 炸弹飞入动画：从桌面右侧以抛物线轨迹飞入，动画播放完由 Bomb 组件自动销毁 */
+    private _flyBomb(node: Node): void {
+        const halfW = this.tableWidth / 2 - this.wallThickness;
+        const halfH = this.tableHeight / 2 - this.wallThickness;
+        const landX = (Math.random() * 2 - 1) * Math.max(0, halfW - 70);
+        const landY = (Math.random() * 2 - 1) * Math.max(0, halfH - 70);
+
+        // 从右侧飞入
+        const startX = halfW + 400;
+        const startY = landY;
+
+        node.setPosition(startX, startY, 0);
+        node.setScale(0.3, 0.3, 1);
+
+        const arcH = 300;
+        const bomb = node.getComponent(Bomb);
+        tween(node)
+            .to(0.6, { scale: new Vec3(1, 1, 1) }, {
+                easing: 'quadOut',
+                onUpdate: (target: Node, ratio: number) => {
+                    const x = startX + (landX - startX) * ratio;
+                    const y = startY + (landY - startY) * ratio + 4 * arcH * ratio * (1 - ratio);
+                    target.setPosition(x, y, 0);
+                },
+            })
+            .call(() => {
+                if (bomb) bomb.play();
+            })
+            .start();
+    }
+
+    /** 泥潭摩擦：硬币中心在泥潭区域内时提高线性阻尼，离开后恢复 */
+    private _applyMudFriction(): void {
+        if (this._muds.length === 0) return;
+        for (const coin of this.coinGroup.children) {
+            const rb = coin.getComponent(RigidBody2D);
+            if (!rb) continue;
+            const pos = coin.worldPosition;
+            let inMud = false;
+            for (const mud of this._muds) {
+                if (!mud.isValid) continue;
+                const ut = mud.getComponent(UITransform);
+                const radius = (ut ? ut.width / 2 : 64) * mud.worldScale.x;
+                const mpos = mud.worldPosition;
+                const dx = pos.x - mpos.x;
+                const dy = pos.y - mpos.y;
+                if (dx * dx + dy * dy <= radius * radius) {
+                    inMud = true;
+                    break;
+                }
+            }
+            const target = inMud ? this.mudDamping : this.coinDamping;
+            if (rb.linearDamping !== target) rb.linearDamping = target;
+        }
+    }
+
     // ── 测试辅助：点击桌面空白处播放龙卷风 ──
 
     /** 点击空白处（不在任何硬币上）时，在该处播放龙卷风，方便测试 */
@@ -241,6 +438,9 @@ export class GameLogic extends Component {
 
         // 2. 桌面边界反弹（含缺口侧边）
         this._applyWallBounce();
+
+        // 2.5 泥潭摩擦：硬币中心在泥潭区域内时提高阻尼
+        this._applyMudFriction();
 
         // 3. 慢动作超时保护：3秒后自动恢复
         if (this._isSlowMotion && Date.now() - this._slowMotionStartTime >= this._slowMotionMaxDuration) {
