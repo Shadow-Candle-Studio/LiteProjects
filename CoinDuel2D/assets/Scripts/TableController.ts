@@ -145,15 +145,18 @@ export class TableController extends Component {
             // 位置为段中心
             segNode.setPosition(seg.x + seg.w / 2, seg.y + seg.h / 2, 0);
 
-            const sprite = segNode.addComponent(Sprite);
-            sprite.sizeMode = Sprite.SizeMode.CUSTOM;
-            sprite.type = Sprite.Type.TILED;
-            if (this._wallSpriteFrame) {
-                sprite.spriteFrame = this._wallSpriteFrame;
+            if (!segNode.getComponent(Sprite)) {
+                const sprite = segNode.addComponent(Sprite);
+                sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+                sprite.type = Sprite.Type.TILED;
+                if (this._wallSpriteFrame) {
+                    sprite.spriteFrame = this._wallSpriteFrame;
+                }
             }
 
             // 根据方向调整纹理朝向（纹理默认朝右）
-            const ut = segNode.addComponent(UITransform);
+            let ut = segNode.getComponent(UITransform);
+            if (!ut) ut = segNode.addComponent(UITransform);
             switch (seg.side) {
                 case 1: // 右墙：纹理朝右（默认），不变
                     ut.setContentSize(seg.w, seg.h);

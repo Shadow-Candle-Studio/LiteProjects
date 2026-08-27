@@ -14,6 +14,8 @@ export class UIManager extends Component {
     public labelScore:Label = null;
     @property(Label)
     public labelLevel:Label = null;
+    @property(Node)
+    public clickNode:Node = null;
 
     public onRetry:()=>void;
 

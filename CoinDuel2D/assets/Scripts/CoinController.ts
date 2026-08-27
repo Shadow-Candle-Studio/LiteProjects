@@ -275,6 +275,8 @@ export class CoinController extends Component {
         this._lastDragDist = 0;
         this._dragSoundDir = null;
         this._isDragging = true;
+        // 重置空闲计时器
+        this._gameLogic?.resetIdleTimer();
         // 拖拽瞄准中 → 拖拽贴图
         this.showAim();
         event.getLocation(this._dragStartPos);
