@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Prerequisites
 *.d
 
@@ -45,6 +44,8 @@
 **/.idea/**
 **/autosave/**
 
+**/.DS_Store
+
 PlayGround/.ignore
 PlayGround/PlayGround.sln
 AroundMe/.ignore
@@ -80,24 +81,24 @@ AroundMe/Work_Files/character/CN_BIRD/CN_BIRD_work.mb
 AroundMe/Work_Files/character/CN_BIRD/CN_BIRD_work.mb
 *.code-workspace
 
-=======
->>>>>>> origin/master
 
 #///////////////////////////
 # Cocos Creator 3D Project
 #///////////////////////////
-<<<<<<< HEAD
 CoinDuel2D/library/
 CoinDuel2D/temp/
 CoinDuel2D/local/
 CoinDuel2D/build/
 CoinDuel2D/profiles/
 CoinDuel2D/native
+#///////////////////////////
+# LevelEditor
+#///////////////////////////
+**/*.pyc
 #//////////////////////////
 # NPM
 #//////////////////////////
 CoinDuel2D/node_modules/
-=======
 library/
 temp/
 local/
@@ -108,24 +109,18 @@ native
 # NPM
 #//////////////////////////
 node_modules/
->>>>>>> origin/master
 
 #//////////////////////////
 # VSCode
 #//////////////////////////
-<<<<<<< HEAD
 CoinDuel2D/.vscode/
-=======
 .vscode/
->>>>>>> origin/master
 
 #//////////////////////////
 # WebStorm
 #//////////////////////////
-<<<<<<< HEAD
 CoinDuel2D/.idea/
-=======
 .idea/
->>>>>>> origin/master
 CoinDuel2D/settings/v2/packages/cocos-service.json
 CoinDuel2D/settings/v2/packages/information.json
+CoinDuel2D/.DS_Store

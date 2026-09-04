@@ -1,0 +1,42 @@
+{
+    "id": 2,
+    "width": 800,
+    "height": 600,
+    "wall": {
+        "thickness": 64
+    },
+    "coins": [
+        {
+            "class": 1,
+            "x": -232,
+            "y": 153
+        },
+        {
+            "class": 1,
+            "x": 188,
+            "y": 144
+        },
+        {
+            "class": 1,
+            "x": 109,
+            "y": -70
+        }
+    ],
+    "blocks": [
+        {
+            "x": -8,
+            "y": 8,
+            "shape": "circle",
+            "radius": 64
+        }
+    ],
+    "muds": [
+        {
+            "x": 205,
+            "y": -132,
+            "shape": "circle",
+            "radius": 32,
+            "friction": 0.5
+        }
+    ]
+}

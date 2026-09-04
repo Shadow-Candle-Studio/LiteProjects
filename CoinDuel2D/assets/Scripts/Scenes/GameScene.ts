@@ -1,10 +1,13 @@
-import { _decorator, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip, Color, Button, director } from 'cc';
-import { CoinController } from './CoinController';
-import { GameLogic } from './GameLogic';
-import { RoundManager } from './RoundManager';
-import { UIManager } from './UIManager';
-import { TableController } from './TableController';
-import { SoundManager } from './SoundManager';
+import { _decorator, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip, Color, Button, director, JsonAsset } from 'cc';
+import { RoundManager } from '../RoundManager';
+import { GameLogic } from '../GameLogic';
+import { UIManager } from '../UIManager';
+import { TableController } from '../TableController';
+import { CoinController } from '../CoinController';
+import { SoundManager } from '../SoundManager';
+import { LevelManager } from '../LevelManager';
+import { LevelData } from '../LevelData';
+
 const { ccclass, property } = _decorator;
 
 @ccclass('GameScene')
@@ -28,6 +31,11 @@ export class GameScene extends Component {
     private _coinsConfig: any = null;
 
     private level:number = 1;
+
+    /** 当前关卡索引（配置模式），-1 表示随机模式 */
+    private _levelIndex: number = -1;
+    /** levels.json 中的关卡文件列表 */
+    private _levelFiles: string[] = [];
 
     start() {
         // Q 键开关 DebugPanel（提前注册，即使面板初始 inactive 也能生效）
@@ -79,15 +87,32 @@ export class GameScene extends Component {
         // 启动时读取全局 config.json 配置
         this._loadCoinsConfig();
 
-        this.startNewRound();
+        // 检查是否有从关卡选择传入的配置
+        const levelData = LevelManager.getCurrent();
+        if (levelData) {
+            this._levelFiles = LevelManager.getLevelFiles();
+            this._levelIndex = LevelManager.getLevelIndex();
+            LevelManager.clear();
+            this._initFromLevel(levelData);
+        } else {
+            LevelManager.clear();
+            this.startNewRound();
+        }
 
         this.uiManager.onRetry = ()=>{
-            this.level = 1;
-            this.uiManager.setLevel(this.level);
             this.uiManager.showGameOver(false);
+            this.uiManager.showVictory(false);
             this.gameLogic.score = 0;
             this.uiManager.setScore(0);
-            this.startNewRound();
+            if (this._levelIndex >= 0) {
+                // 关卡模式：回到关卡选择
+                LevelManager.clear();
+                director.loadScene('levels');
+            } else {
+                this.level = 1;
+                this.uiManager.setLevel(this.level);
+                this.startNewRound();
+            }
         };
 
         this.gameLogic.onGameOver = () => {
@@ -99,10 +124,15 @@ export class GameScene extends Component {
         };
 
         this.gameLogic.onGameWin = () => {
-            this.level ++;
-            this.uiManager.setLevel(this.level);
-            // 随机进入下一关（保留分数，重置硬币布局）
-            this.startNewRound();
+            if (this._levelIndex >= 0) {
+                // 关卡配置模式：尝试加载下一关
+                this._loadNextLevel();
+            } else {
+                // 随机模式
+                this.level ++;
+                this.uiManager.setLevel(this.level);
+                this.startNewRound();
+            }
         };
     }
 
@@ -157,8 +187,87 @@ export class GameScene extends Component {
         }
     }
 
+    /** 按关卡 JSON 配置初始化桌面、硬币、障碍物、陷阱 */
+    private _initFromLevel(data: LevelData): void {
+        this.clearCoins();
+        this.gameLogic.clearProps();
+
+        // 桌面尺寸
+        this.tableController.tableWidth = data.width;
+        this.tableController.tableHeight = data.height;
+        this.gameLogic.tableWidth = data.width;
+        this.gameLogic.tableHeight = data.height;
+
+        // 围墙厚度
+        const wallThickness = data.wall.thickness;
+        this.tableController.wallThickness = wallThickness;
+        this.gameLogic.wallThickness = wallThickness;
+        this.tableController.gapWidth = 0;
+        this.gameLogic.gaps = [];
+        this.gameLogic.gapWidth = 0;
+
+        this.tableController.drawTable();
+
+        // 硬币
+        const radius = this.gameLogic.coinRadius;
+        for (const coinData of data.coins) {
+            const coin = instantiate(this.coinPrefab);
+            this.gameLogic.coinGroup.addChild(coin);
+            coin.setPosition(coinData.x, coinData.y, 0);
+            coin.setScale(1, 1, 1);
+            const ut = coin.getComponent(UITransform);
+            if (ut) ut.setContentSize(radius * 2, radius * 2);
+            const cc = coin.getComponent(CircleCollider2D);
+            if (cc) cc.radius = radius;
+            const ctrl = coin.addComponent(CoinController);
+            ctrl.setGameLogic(this.gameLogic);
+        }
+
+        // 障碍物
+        for (const blockData of data.blocks) {
+            this.gameLogic.spawnBlockerAt(blockData.x, blockData.y);
+        }
+
+        // 陷阱
+        for (const mudData of data.muds) {
+            this.gameLogic.spawnMudAt(mudData.x, mudData.y);
+        }
+
+        this.gameLogic.waitingPlayerOperation();
+
+        // 更新 UI 关卡显示
+        this.uiManager.setLevel(this._levelIndex + 1);
+        this.uiManager.setScore(0);
+        this.gameLogic.score = 0;
+
+        if (this._coinsConfig) {
+            this._applyCoinConfig(this.coinId);
+        }
+    }
+
     private clearCoins(){
         this.gameLogic.coinGroup.removeAllChildren();
+    }
+
+    /** 加载下一关，或显示最终胜利 */
+    private _loadNextLevel(): void {
+        this._levelIndex++;
+        if (this._levelIndex < this._levelFiles.length) {
+            const levelFile = this._levelFiles[this._levelIndex];
+            const path = 'levels/' + levelFile.replace('.json', '');
+            resources.load(path, JsonAsset, (err, asset) => {
+                if (err) {
+                    console.error(`Failed to load next level ${path}:`, err);
+                    return;
+                }
+                const levelData = asset.json as LevelData;
+                this._initFromLevel(levelData);
+            });
+        } else {
+            // 最后一关通关，显示最终胜利
+            this.gameLogic.enabled = false;
+            this.uiManager.showVictory(true);
+        }
     }
 
     onDestroy() {

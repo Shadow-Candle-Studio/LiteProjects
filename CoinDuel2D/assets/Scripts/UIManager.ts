@@ -1,4 +1,4 @@
-import { _decorator, Button, Component, EventHandler, Label, Node } from 'cc';
+import { _decorator, Button, Component, EventHandler, Label, Node, director } from 'cc';
 import { Leaderboard } from './Leaderboard';
 const { ccclass, property } = _decorator;
 
@@ -16,11 +16,18 @@ export class UIManager extends Component {
     public labelLevel:Label = null;
     @property(Node)
     public clickNode:Node = null;
+    @property(Button)
+    public buttonBack:Button = null;
 
     public onRetry:()=>void;
 
     start() {
         this.buttonRetry.node.on(Node.EventType.TOUCH_START, ()=>{this.onRetry();});
+        if (this.buttonBack) {
+            this.buttonBack.node.on(Button.EventType.CLICK, () => {
+                director.loadScene('levels');
+            }, this);
+        }
     }
 
     public showGameOver(show:boolean){
@@ -59,6 +66,15 @@ export class UIManager extends Component {
 
     public setLevel(level:number){
         this.labelLevel.string = "LEVEL:" + level.toString();
+    }
+
+    /** 显示最终胜利面板 */
+    public showVictory(show: boolean): void {
+        this.gameOverPanel.active = show;
+        if (show) {
+            const label = this.gameOverPanel.getComponentInChildren(Label);
+            if (label) label.string = '最终胜利！';
+        }
     }
 }
 

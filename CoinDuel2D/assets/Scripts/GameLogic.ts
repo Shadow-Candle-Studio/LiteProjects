@@ -401,6 +401,25 @@ export class GameLogic extends Component {
         this._flyBomb(node);
     }
 
+    /** 在指定位置放置障碍物（关卡配置用，无飞入动画） */
+    public spawnBlockerAt(x: number, y: number): void {
+        if (!this.blockerPrefab) return;
+        const node = instantiate(this.blockerPrefab);
+        this.addChildToWorld(node);
+        node.setPosition(x, y, 0);
+        this._props.push(node);
+    }
+
+    /** 在指定位置放置陷阱（关卡配置用，无飞入动画） */
+    public spawnMudAt(x: number, y: number): void {
+        if (!this.mudPrefab) return;
+        const node = instantiate(this.mudPrefab);
+        this.addChildToWorld(node);
+        node.setPosition(x, y, 0);
+        this._props.push(node);
+        this._muds.push(node);
+    }
+
     /** 收集场景中已放置的道具节点（如 Table/Mud 占位），使其同样生效 */
     private _collectExistingProps(): void {
         const world = this.node.parent;
