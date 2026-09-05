@@ -165,3 +165,19 @@ python main.py
 ## 资源文件
 
 桌面背景图片存放在 `res/table_1.png`，编辑器会自动加载作为桌面背景。
+
+## 如何将关卡导入游戏
+
+将制作好的关卡文件保存在CoinDuel2D/assets/resources/levels目录下，将关卡文件名添加进CoinDuel2D/assets/resources/levels.json中。
+
+例如:
+```json
+{
+    "levels":[
+        "1.json",
+        "2.json"
+    ]
+}
+```
+
+再次启动游戏，就能在游戏关卡选择列表里看到新加入的关卡。
