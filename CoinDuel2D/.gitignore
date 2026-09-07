@@ -24,3 +24,6 @@ node_modules/
 .idea/
 
 extensions/
+
+settings/mcp-server.json
+settings/tool-manager.json
