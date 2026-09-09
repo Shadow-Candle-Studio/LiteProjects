@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec2, Vec3, Color, Sprite, SpriteFrame, Texture2D, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D, Camera, input, Input, EventMouse, EventTouch, Prefab, instantiate, tween } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3, Color, Sprite, SpriteFrame, Texture2D, RigidBody2D, PhysicsSystem2D, Contact2DType, Collider2D, Graphics, UITransform, CircleCollider2D, Camera, input, Input, EventMouse, EventTouch, Prefab, instantiate, tween, Tween } from 'cc';
 import { Bomb } from './Effects/Bomb';
 import { CoinController } from './CoinController';
 import { HitEffectManager } from './HitEffectManager';
@@ -53,8 +53,8 @@ export class GameLogic extends Component {
     @property({ tooltip: "炸弹爆炸推力大小（越大推开越远）" })
     public bombPushForce: number = 500;
 
-    @property({ tooltip: "瞄准线最大长度（像素）" })
-    public aimLineLength: number = 1000;
+    @property({ tooltip: "瞄准线长度系数（拖动距离 × 系数 = 瞄准线长度）" })
+    public aimLineFactor: number = 6;
 
     @property({ tooltip: "泥潭内硬币滑动阻尼（越大减速越明显）" })
     public mudDamping: number = 8;
@@ -70,7 +70,20 @@ export class GameLogic extends Component {
     // @property({ type: Graphics, tooltip: "拖拽引导线绘制组件" })
     // public dragGraphics: Graphics = null!;
 
-    private currentPhase: GamePhase = GamePhase.WAITING_PLAYER;
+    private _currentPhase: GamePhase = GamePhase.WAITING_PLAYER;
+
+    private static readonly _tagClickNode = 1;
+
+    /** 当前游戏阶段，切换时自动清空空闲计时器并隐藏点击提示 */
+    private set currentPhase(value: GamePhase) {
+        this._currentPhase = value;
+        this._idleTimer = 0;
+        this._hideClickNode();
+    }
+
+    private get currentPhase(): GamePhase {
+        return this._currentPhase;
+    }
     private coinHitCount: number = 0;
     private coinFallCount: number = 0;
     private _activeShotCoin: Node | null = null;
@@ -119,6 +132,12 @@ export class GameLogic extends Component {
     /** 空闲计时器（秒） */
     private _idleTimer: number = 0;
 
+    /** clickNode 是否正在显示（避免每帧重复调用） */
+    private _isClickNodeShowing: boolean = false;
+
+    /** 是否有硬币正在被拖拽（由 CoinController 设置），拖拽期间暂停空闲计时 */
+    public isDragging: boolean = false;
+
     /** 慢动作最长持续毫秒数 */
     private readonly _slowMotionMaxDuration: number = 3000;
 
@@ -158,13 +177,16 @@ export class GameLogic extends Component {
         let dx = dirX / len;
         let dy = dirY / len;
 
+        // 瞄准线长度 = 拖动距离 × 系数
+        const aimLength = len * this.aimLineFactor;
+
         const halfW = this.tableWidth / 2 - this.wallThickness;
         const halfH = this.tableHeight / 2 - this.wallThickness;
 
         // 1. 收集所有反射线段的端点
         const pts: { x: number; y: number }[] = [{ x: fromX, y: fromY }];
         let x = fromX, y = fromY;
-        let remaining = this.aimLineLength;
+        let remaining = aimLength;
 
         for (let i = 0; i < 10 && remaining > 0; i++) {
             let tMin = remaining;
@@ -189,7 +211,7 @@ export class GameLogic extends Component {
         let segLen = pts.length > 1 ? Math.hypot(pts[1].x - sx, pts[1].y - sy) : 0;
         let segIdx = 0;
 
-        while (acc < this.aimLineLength && segIdx < pts.length - 1) {
+        while (acc < aimLength && segIdx < pts.length - 1) {
             if (seg + step <= segLen) {
                 seg += step;
                 acc += step;
@@ -209,7 +231,7 @@ export class GameLogic extends Component {
             const dot = this._getAimDot();
             dot.setPosition(px, py, 0);
             // 距离越远越透明
-            const alpha = Math.round(220 * (1 - acc / this.aimLineLength));
+            const alpha = Math.round(220 * (1 - acc / aimLength));
             dot.getComponent(Sprite)!.color = new Color(255, 255, 100, alpha);
         }
 
@@ -604,7 +626,7 @@ export class GameLogic extends Component {
         this._updateCamera(deltaTime);
 
         // 5. 空闲提示：玩家长时间无操作时显示 clickNode
-        if (this.currentPhase === GamePhase.WAITING_PLAYER) {
+        if (this.currentPhase === GamePhase.WAITING_PLAYER && !this.isDragging && !this._isClickNodeShowing) {
             this._idleTimer += deltaTime;
             if (this._idleTimer >= this.idleShowDelay) {
                 this._showClickNode();
@@ -992,22 +1014,79 @@ export class GameLogic extends Component {
         return target.position;
     }
 
-    /** 显示 clickNode 并定位到目标硬币 */
+    /** 选择第一个硬币作为源，找离它最近的目标硬币，返回拖拽方向提示 */
+    private _getGestureHint(): { source: Node; direction: Vec3 } | null {
+        const coins = this.coinGroup.children;
+        if (coins.length < 2) return null;
+
+        // 优先使用指定的发射硬币，否则使用第一个硬币
+        const source = (this._lockedCoin && this._lockedCoin.isValid) ? this._lockedCoin : coins[0];
+        if (!source || !source.isValid) return null;
+
+        // 找到离源硬币最近的目标硬币
+        let closestTarget: Node | null = null;
+        let minDist = Infinity;
+        for (const coin of coins) {
+            if (!coin || !coin.isValid || coin === source) continue;
+            const dist = Vec3.distance(source.position, coin.position);
+            if (dist < minDist) {
+                minDist = dist;
+                closestTarget = coin;
+            }
+        }
+
+        if (!closestTarget) return null;
+
+        // 计算从源指向远离目标的方向（用户应拖拽的方向）
+        const dir = new Vec3();
+        Vec3.subtract(dir, source.position, closestTarget.position);
+        dir.normalize();
+
+        return { source, direction: dir };
+    }
+
+    /** 显示 clickNode 手势提示：选择硬币，朝目标反方向滑动 */
     private _showClickNode(): void {
         if (!this.uiManager.clickNode || !this.uiManager.clickNode.isValid) return;
 
-        const pos = this._getClickTargetPos();
-        if (!pos) { this.uiManager.clickNode.active = false; return; }
+        const hint = this._getGestureHint();
+        if (!hint) { this.uiManager.clickNode.active = false; return; }
 
-        this.uiManager.clickNode.setPosition(pos.x, pos.y, 0);
+        const { source, direction } = hint;
+        const startPos = new Vec3(source.position.x, source.position.y, 0);
+        const endPos = new Vec3(
+            startPos.x + direction.x * 80,
+            startPos.y + direction.y * 80,
+            0
+        );
+
+        // 设置起始位置并激活
+        this.uiManager.clickNode.setPosition(startPos);
         this.uiManager.clickNode.active = true;
+        this._isClickNodeShowing = true;
+
+        // 创建循环滑动手势动画
+        //tween(this.uiManager.clickNode).stop();
+        Tween.stopAllByTag(GameLogic._tagClickNode);
+        tween(this.uiManager.clickNode)
+            .tag(GameLogic._tagClickNode)
+            .call(() => {
+                this.uiManager.clickNode.setPosition(startPos);
+            })
+            .to(0.5, { position: endPos }, { easing: 'linear' })
+            .delay(0.5)
+            .union()           // 合并为一个序列
+            .repeatForever()   // 无限循环
+            .start();
     }
 
     /** 隐藏 clickNode */
     private _hideClickNode(): void {
         if (this.uiManager.clickNode && this.uiManager.clickNode.isValid) {
+            Tween.stopAllByTag(GameLogic._tagClickNode);
             this.uiManager.clickNode.active = false;
         }
+        this._isClickNodeShowing = false;
     }
 
     /** 启用/禁用所有硬币的交互 */

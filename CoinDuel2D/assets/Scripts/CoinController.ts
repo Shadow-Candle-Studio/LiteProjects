@@ -5,6 +5,7 @@ const { ccclass } = _decorator;
 
 @ccclass('CoinController')
 export class CoinController extends Component {
+    public static showArrow: boolean = false;
     private static _anyDragging: boolean = false;
     private static _lastWorldPos: Vec2 = new Vec2();
     /** 从 config.json 读取的 source_color */
@@ -277,6 +278,7 @@ export class CoinController extends Component {
         this._isDragging = true;
         // 重置空闲计时器
         this._gameLogic?.resetIdleTimer();
+        if (this._gameLogic) this._gameLogic.isDragging = true;
         // 拖拽瞄准中 → 拖拽贴图
         this.showAim();
         event.getLocation(this._dragStartPos);
@@ -492,6 +494,7 @@ export class CoinController extends Component {
 
     /** 更新拖拽箭头（Sprite 方式：根据拖拽方向旋转 + 根据距离拉长） */
     private _updateDragArrow(dx: number, dy: number): void {
+        if (!CoinController.showArrow) { this._hideDragArrow(); return; }
         const arrow = this._getDragArrow();
         if (!arrow) return;
 
@@ -539,6 +542,7 @@ export class CoinController extends Component {
     private _onPointerUp(_event: EventTouch): void {
         if (!this._isDragging) return;
         this._isDragging = false;
+        if (this._gameLogic) this._gameLogic.isDragging = false;
         this._unregisterGlobalEvents();
 
         // 复位拖拽距离和预测
