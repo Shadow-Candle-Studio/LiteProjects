@@ -7,6 +7,8 @@ import { CoinController } from '../CoinController';
 import { SoundManager } from '../SoundManager';
 import { LevelManager } from '../LevelManager';
 import { LevelData } from '../LevelData';
+import { ConfigManager } from '../ConfigManager';
+import { HitEffectManager } from '../HitEffectManager';
 
 const { ccclass, property } = _decorator;
 
@@ -87,17 +89,24 @@ export class GameScene extends Component {
         // 启动时读取全局 config.json 配置
         this._loadCoinsConfig();
 
-        // 检查是否有从关卡选择传入的配置
-        const levelData = LevelManager.getCurrent();
-        if (levelData) {
-            this._levelFiles = LevelManager.getLevelFiles();
-            this._levelIndex = LevelManager.getLevelIndex();
-            LevelManager.clear();
-            this._initFromLevel(levelData);
-        } else {
-            LevelManager.clear();
-            this.startNewRound();
-        }
+        // 加载游戏参数配置
+        ConfigManager.load((err) => {
+            if (!err) {
+                this._applyGameConfig();
+            }
+
+            // 检查是否有从关卡选择传入的配置
+            const levelData = LevelManager.getCurrent();
+            if (levelData) {
+                this._levelFiles = LevelManager.getLevelFiles();
+                this._levelIndex = LevelManager.getLevelIndex();
+                LevelManager.clear();
+                this._initFromLevel(levelData);
+            } else {
+                LevelManager.clear();
+                this.startNewRound();
+            }
+        });
 
         this.uiManager.onRetry = ()=>{
             this.uiManager.showGameOver(false);
@@ -301,9 +310,9 @@ export class GameScene extends Component {
                 parseInt(hex.slice(3, 5), 16),
                 parseInt(hex.slice(5, 7), 16), 255,
             );
-            const srcHex = this._coinsConfig.source_color as string | undefined;
+            const srcHex = this._coinsConfig.sourceColor as string | undefined;
             if (srcHex?.length >= 7) CoinController.sourceColor = parseHex(srcHex);
-            const tgtHex = this._coinsConfig.target_color as string | undefined;
+            const tgtHex = this._coinsConfig.targetColor as string | undefined;
             if (tgtHex?.length >= 7) CoinController.targetColor = parseHex(tgtHex);
 
             // 加载拖拽音效到 SoundManager
@@ -314,15 +323,15 @@ export class GameScene extends Component {
                     if (!base) return;
                     resources.load(base, AudioClip, (sfxErr: any, clip: AudioClip) => {
                         if (!sfxErr && clip) {
-                            if (field === 'drag_increase_sfx') sm.dragIncrease = clip;
-                            else if (field === 'drag_decrease_sfx') sm.dragDecrease = clip;
-                            else if (field === 'drag_release_sfx') sm.dragRelease = clip;
+                            if (field === 'dragIncreaseSfx') sm.dragIncrease = clip;
+                            else if (field === 'dragDecreaseSfx') sm.dragDecrease = clip;
+                            else if (field === 'dragReleaseSfx') sm.dragRelease = clip;
                         }
                     });
                 };
-                loadSfx('drag_increase_sfx');
-                loadSfx('drag_decrease_sfx');
-                loadSfx('drag_release_sfx');
+                loadSfx('dragIncreaseSfx');
+                loadSfx('dragDecreaseSfx');
+                loadSfx('dragReleaseSfx');
             }
 
             // 全局配置加载完成，按开局 coinId 应用硬币外观
@@ -349,12 +358,12 @@ export class GameScene extends Component {
 
         const config = coinsData[key] as {
             texture?: string;
-            idle_texture?: string;
-            aim_texture?: string;
-            shot_texture?: string;
-            hitted_texture?: string;
-            shot_sfx?: string;
-            hitted_sfx?: string;
+            idleTexture?: string;
+            aimTexture?: string;
+            shotTexture?: string;
+            hittedTexture?: string;
+            shotSfx?: string;
+            hittedSfx?: string;
         } | undefined;
         if (!config) {
             console.log(`[GameScene] config.json 中未找到 key "${key}" 的配置，不做处理`);
@@ -425,15 +434,70 @@ export class GameScene extends Component {
         };
 
         loadFrame('texture', f => { defaultFrame = f; });
-        loadFrame('idle_texture', f => { idleFrame = f; });
-        loadFrame('aim_texture', f => { aimFrame = f; });
-        loadFrame('shot_texture', f => { shotFrame = f; });
-        loadFrame('hitted_texture', f => { hittedFrame = f; });
-        loadClip('shot_sfx', c => { shotClip = c; });
-        loadClip('hitted_sfx', c => { hittedClip = c; });
+        loadFrame('idleTexture', f => { idleFrame = f; });
+        loadFrame('aimTexture', f => { aimFrame = f; });
+        loadFrame('shotTexture', f => { shotFrame = f; });
+        loadFrame('hittedTexture', f => { hittedFrame = f; });
+        loadClip('shotSfx', c => { shotClip = c; });
+        loadClip('hittedSfx', c => { hittedClip = c; });
 
         // 无任何可加载资源时也会应用一次（保持当前贴图，仅记录类型 key）
         applyToCoins();
+    }
+
+    /** 从 ConfigManager 读取配置并应用到各组件 */
+    private _applyGameConfig(): void {
+        const gameConfig = ConfigManager.getGameLogicConfig();
+        if (gameConfig && this.gameLogic) {
+            this.gameLogic.coinRadius = gameConfig.coinRadius;
+            this.gameLogic.speedThreshold = gameConfig.speedThreshold;
+            this.gameLogic.velocityFactor = gameConfig.velocityFactor;
+            this.gameLogic.coinDamping = gameConfig.coinDamping;
+            this.gameLogic.mudDamping = gameConfig.mudDamping;
+            this.gameLogic.bombPushRadius = gameConfig.bombPushRadius;
+            this.gameLogic.bombPushForce = gameConfig.bombPushForce;
+            this.gameLogic.aimLineFactor = gameConfig.aimLineFactor;
+            this.gameLogic.idleShowDelay = gameConfig.idleShowDelay;
+        }
+
+        const tableConfig = ConfigManager.getTableControllerConfig();
+        if (tableConfig && this.tableController) {
+            this.tableController.wallThickness = tableConfig.wallThickness;
+            this.tableController.gapWidth = tableConfig.gapWidth;
+            this.tableController.gapWidthIncrement = tableConfig.gapWidthIncrement;
+            this._baseGapWidth = tableConfig.gapWidth;
+            this.gameLogic.wallThickness = tableConfig.wallThickness;
+        }
+
+        const hitConfig = ConfigManager.getHitEffectManagerConfig();
+        const hitEffectManager = this.gameLogic?.hitEffectManager;
+        if (hitConfig && hitEffectManager) {
+            // Boolean 开关
+            hitEffectManager.enableDragZoom = hitConfig.enableDragZoom;
+            hitEffectManager.enableDragPrediction = hitConfig.enableDragPrediction;
+            hitEffectManager.enableLaunchEffect = hitConfig.enableLaunchEffect;
+            hitEffectManager.enableSlowMotion = hitConfig.enableSlowMotion;
+            hitEffectManager.enableLaunchTracking = hitConfig.enableLaunchTracking;
+            hitEffectManager.enableHitPause = hitConfig.enableHitPause;
+            hitEffectManager.enableHitShake = hitConfig.enableHitShake;
+            hitEffectManager.enableHitParticle = hitConfig.enableHitParticle;
+            hitEffectManager.enableHitSubCamera = hitConfig.enableHitSubCamera;
+            hitEffectManager.enableHitTracking = hitConfig.enableHitTracking;
+            hitEffectManager.enableKnockOut = hitConfig.enableKnockOut;
+            hitEffectManager.enableTornado = hitConfig.enableTornado;
+            // 数值参数
+            hitEffectManager.cameraZoomInDuration = hitConfig.cameraZoomInDuration;
+            hitEffectManager.cameraZoomOutDuration = hitConfig.cameraZoomOutDuration;
+            hitEffectManager.launchAnimSpeed = hitConfig.launchAnimSpeed;
+            hitEffectManager.hitPauseDuration = hitConfig.hitPauseDuration;
+            hitEffectManager.cameraTrackDuration = hitConfig.cameraTrackDuration;
+            hitEffectManager.subCameraOrthoHeight = hitConfig.subCameraOrthoHeight;
+            hitEffectManager.subViewWidth = hitConfig.subViewWidth;
+            hitEffectManager.subViewHeight = hitConfig.subViewHeight;
+            hitEffectManager.subViewDuration = hitConfig.subViewDuration;
+        }
+
+        console.log('[GameScene] 游戏配置已应用');
     }
 }
 
