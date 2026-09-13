@@ -193,7 +193,7 @@
     "_priority": 0,
     "_fov": 45,
     "_fovAxis": 0,
-    "_orthoHeight": 372.9032258064516,
+    "_orthoHeight": 431.5657620041754,
     "_near": 0,
     "_far": 2000,
     "_color": {
@@ -797,7 +797,7 @@
       "__expectedType__": "cc.Prefab"
     },
     "tornadoDuration": 1,
-    "tornadoScale": 5,
+    "tornadoScale": 3.5,
     "_id": "8cGm5/2ONA66kv9j4LhmF3"
   },
   {
@@ -1041,7 +1041,7 @@
     "_priority": 1,
     "_fov": 45,
     "_fovAxis": 0,
-    "_orthoHeight": 372.9032258064516,
+    "_orthoHeight": 431.5657620041754,
     "_near": 0,
     "_far": 2000,
     "_color": {
