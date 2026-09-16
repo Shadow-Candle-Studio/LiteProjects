@@ -9,6 +9,7 @@ import { LevelManager } from '../LevelManager';
 import { LevelData } from '../LevelData';
 import { ConfigManager } from '../ConfigManager';
 import { HitEffectManager } from '../HitEffectManager';
+import { Leaderboard } from '../Leaderboard';
 
 const { ccclass, property } = _decorator;
 
@@ -124,8 +125,59 @@ export class GameScene extends Component {
             }
         };
 
+        // 绑定 Win 面板回调
+        if (this.uiManager.uiWin) {
+            // 下一关
+            this.uiManager.uiWin.onBtnNextClick = () => {
+                this.uiManager.uiWin.close();
+                if (this._levelIndex >= 0) {
+                    // 关卡模式：加载下一关
+                    this._loadNextLevel();
+                } else {
+                    // 随机模式：开始新的一轮
+                    this.level++;
+                    this.uiManager.setLevel(this.level);
+                    this.startNewRound();
+                }
+            };
+            // 返回首页
+            this.uiManager.uiWin.onBtnHomeClick = () => {
+                this.uiManager.uiWin.close();
+                LevelManager.clear();
+                director.loadScene('levels');
+            };
+        }
+
+        // 绑定 Fail 面板回调
+        if (this.uiManager.uiFail) {
+            // 返回关卡选择
+            this.uiManager.uiFail.onBtnHomeClick = () => {
+                this.uiManager.uiFail.close();
+                LevelManager.clear();
+                director.loadScene('levels');
+            };
+            // 显示排行榜
+            this.uiManager.uiFail.onBtnRankClick = () => {
+                if (this.uiManager.uiRank) {
+                    const entries = Leaderboard.getEntries();
+                    this.uiManager.uiRank.show(entries);
+                }
+            };
+        }
+
+        // 绑定 Rank 面板回调
+        if (this.uiManager.uiRank) {
+            this.uiManager.uiRank.onCloseClick = () => {
+                // 关闭后回到 Fail 面板（Fail 面板仍然显示）
+            };
+        }
+
         this.gameLogic.onGameOver = () => {
-            this.uiManager.showGameOver(true);
+            const uiFail = this.uiManager.uiFail;
+            const currentLevel = this._levelIndex >= 0 ? this._levelIndex + 1 : this.level;
+            if (uiFail) {
+                uiFail.show(currentLevel, this.gameLogic.score, 0);
+            }
         };
 
         this.gameLogic.onScoreUpdate = (score: number) => {
@@ -133,14 +185,13 @@ export class GameScene extends Component {
         };
 
         this.gameLogic.onGameWin = () => {
-            if (this._levelIndex >= 0) {
-                // 关卡配置模式：尝试加载下一关
-                this._loadNextLevel();
-            } else {
-                // 随机模式
-                this.level ++;
-                this.uiManager.setLevel(this.level);
-                this.startNewRound();
+            const uiWin = this.uiManager.uiWin;
+            const currentLevel = this._levelIndex >= 0 ? this._levelIndex + 1 : this.level;
+            if (uiWin) {
+                uiWin.show(currentLevel, this.gameLogic.score, 0);
+                // 最后一关时禁用下一关按钮
+                const isLastLevel = this._levelIndex >= 0 && this._levelIndex >= this._levelFiles.length - 1;
+                uiWin.setNextEnabled(!isLastLevel);
             }
         };
     }

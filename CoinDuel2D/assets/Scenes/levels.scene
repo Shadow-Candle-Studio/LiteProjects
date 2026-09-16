@@ -1181,8 +1181,8 @@
     "__prefab": null,
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 103,
-      "height": 97
+      "width": 96,
+      "height": 96
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -1217,7 +1217,7 @@
     },
     "_type": 0,
     "_fillType": 0,
-    "_sizeMode": 2,
+    "_sizeMode": 0,
     "_fillCenter": {
       "__type__": "cc.Vec2",
       "x": 0,
@@ -1242,7 +1242,7 @@
     "__prefab": null,
     "clickEvents": [],
     "_interactable": true,
-    "_transition": 2,
+    "_transition": 3,
     "_normalColor": {
       "__type__": "cc.Color",
       "r": 214,
@@ -1306,9 +1306,9 @@
     "__prefab": null,
     "_alignFlags": 9,
     "_target": null,
-    "_left": 33.365999999999985,
+    "_left": 36.865999999999985,
     "_right": 0,
-    "_top": 33.93300000000005,
+    "_top": 34.43300000000005,
     "_bottom": 0,
     "_horizontalCenter": 0,
     "_verticalCenter": 0,

@@ -1,5 +1,8 @@
 import { _decorator, Button, Component, EventHandler, Label, Node, director } from 'cc';
 import { Leaderboard } from './Leaderboard';
+import { UIWin } from './UI/UIWin';
+import { UIFail } from './UI/UIFail';
+import { UIRank } from './UI/UIRank';
 const { ccclass, property } = _decorator;
 
 @ccclass('UIManager')
@@ -18,6 +21,13 @@ export class UIManager extends Component {
     public clickNode:Node = null;
     @property(Button)
     public buttonBack:Button = null;
+
+    @property(UIWin)
+    public uiWin:UIWin = null;
+    @property(UIFail)
+    public uiFail:UIFail = null;
+    @property(UIRank)
+    public uiRank:UIRank = null;
 
     public onRetry:()=>void;
 
@@ -61,11 +71,11 @@ export class UIManager extends Component {
     }
 
     public setScore(score:number){
-        this.labelScore.string = "SCORE:" + score.toString();
+        this.labelScore.string = score.toString();
     }
 
     public setLevel(level:number){
-        this.labelLevel.string = "LEVEL:" + level.toString();
+        this.labelLevel.string = level.toString();
     }
 
     /** 显示最终胜利面板 */
@@ -77,5 +87,3 @@ export class UIManager extends Component {
         }
     }
 }
-
-
