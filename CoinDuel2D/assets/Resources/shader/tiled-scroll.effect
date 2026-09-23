@@ -1,0 +1,68 @@
+// Tiled + UV Scroll Effect (Simple 模式 Sprite)
+// 着色器内实现平铺 + 滚动
+
+CCEffect %{
+  techniques:
+  - name: default
+    passes:
+    - vert: sprite-vs:vert
+      frag: tiled-scroll-fs:frag
+      depthStencilState:
+        depthTest: false
+        depthWrite: false
+      blendState:
+        targets:
+        - blend: true
+          blendSrc: src_alpha
+          blendDst: one_minus_src_alpha
+          blendDstAlpha: one_minus_src_alpha
+      rasterizerState:
+        cullMode: none
+}%
+
+CCProgram sprite-vs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+
+  in vec3 a_position;
+  in vec2 a_texCoord;
+  in vec4 a_color;
+
+  out vec4 color;
+  out vec2 uv0;
+
+  vec4 vert () {
+    vec4 pos = vec4(a_position, 1);
+    pos = cc_matViewProj * pos;
+    uv0 = a_texCoord;
+    color = a_color;
+    return pos;
+  }
+}%
+
+CCProgram tiled-scroll-fs %{
+  precision highp float;
+  #include <builtin/uniforms/cc-global>
+  #include <builtin/internal/embedded-alpha>
+  #include <builtin/internal/alpha-test>
+
+  in vec4 color;
+  in vec2 uv0;
+
+  #pragma builtin(local)
+  layout(set = 2, binding = 12) uniform sampler2D cc_spriteTexture;
+
+  // ========== 参数配置 ==========
+  const vec2 TILE_COUNT   = vec2(1, 1);  // 平铺次数：水平, 垂直
+  const vec2 SCROLL_SPEED = vec2(0.1, -0.1);  // 滚动速度：x=水平, y=垂直
+  // ==============================
+
+  vec4 frag () {
+    // UV * 平铺次数 实现重复，fract 取小数部分保证无缝循环滚动
+    vec2 tiledUV = fract(uv0 * TILE_COUNT + cc_time.x * SCROLL_SPEED);
+    vec4 o = CCSampleWithAlphaSeparated(cc_spriteTexture, tiledUV);
+    o *= color;
+    ALPHA_TEST(o);
+    return o;
+  }
+}%

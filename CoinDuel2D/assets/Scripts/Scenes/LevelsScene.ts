@@ -7,6 +7,8 @@ const { ccclass, property } = _decorator;
 export class LevelsScene extends Component {
     @property(Prefab)
     levelButtonPrefab: Prefab = null!;
+    @property(Button)
+    backButton: Button = null!;
 
     @property(Node)
     levelsContainer: Node = null!;
@@ -24,6 +26,12 @@ export class LevelsScene extends Component {
             LevelManager.setLevelList(this._levelFiles, index);
             LevelManager.setCurrent(levelData);
             director.loadScene('game');
+        });
+    }
+
+    onLoad(){
+        this.backButton.node.on(Button.EventType.CLICK, () => {
+            director.loadScene('main');
         });
     }
 

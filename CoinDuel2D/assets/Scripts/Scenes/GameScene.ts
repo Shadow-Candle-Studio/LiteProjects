@@ -99,11 +99,13 @@ export class GameScene extends Component {
             // 检查是否有从关卡选择传入的配置
             const levelData = LevelManager.getCurrent();
             if (levelData) {
+                // 闯关模式
                 this._levelFiles = LevelManager.getLevelFiles();
                 this._levelIndex = LevelManager.getLevelIndex();
                 LevelManager.clear();
                 this._initFromLevel(levelData);
             } else {
+                // 天梯模式
                 LevelManager.clear();
                 this.startNewRound();
             }

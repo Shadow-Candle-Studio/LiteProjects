@@ -32,3 +32,9 @@ export interface LevelData {
     blocks: LevelBlockData[];
     muds: LevelMudData[];
 }
+
+export enum LevelState {
+    Locked = 'locked',
+    Unlocked = 'unlocked',
+    Passed = 'passed',
+}
