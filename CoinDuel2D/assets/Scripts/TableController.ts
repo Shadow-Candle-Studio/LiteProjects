@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Sprite, SpriteFrame, resources, UITransform } from 'cc';
+import { _decorator, Component, Node, Sprite, SpriteFrame, resources, UITransform, Prefab, instantiate } from 'cc';
 const { ccclass, property } = _decorator;
 
 /** 单个缺口的定义 */
@@ -13,6 +13,11 @@ export class TableController extends Component {
     public tableWidth: number = 1280;
 
     public tableHeight: number = 720;
+
+    @property(Prefab)
+    public wallPrefab: Prefab | null = null;
+    @property(Prefab)
+    public cornerPrefab: Prefab | null = null;
 
     @property({ tooltip: "围墙厚度（像素）" })
     public wallThickness: number = 8;
@@ -131,48 +136,59 @@ export class TableController extends Component {
         this._rebuildWalls();
     }
 
-    /** 根据当前缺口配置重建所有围墙段的 Sprite 节点 */
+    /** 根据当前缺口配置重建所有围墙段（实例化 wallPrefab / cornerPrefab，不旋转，仅调整 contentSize） */
     private _rebuildWalls(): void {
         if (!this._wallNode) return;
         this._wallNode.removeAllChildren();
 
-        for (const seg of this._calcWallSegments()) {
-            if (seg.w <= 0 || seg.h <= 0) continue;
+        const segments = this._calcWallSegments();
+        let lastChildIdx = 0;
 
-            const segNode = new Node('WallSegment');
-            segNode.layer = 1;
-            this._wallNode.addChild(segNode);
-            // 位置为段中心
-            segNode.setPosition(seg.x + seg.w / 2, seg.y + seg.h / 2, 0);
+        // 围墙段：实例化 wallPrefab，按段方向调整 contentSize
+        if (this.wallPrefab) {
+            for (const seg of segments) {
+                if (seg.w <= 0 || seg.h <= 0) continue;
 
-            if (!segNode.getComponent(Sprite)) {
-                const sprite = segNode.addComponent(Sprite);
-                sprite.sizeMode = Sprite.SizeMode.CUSTOM;
-                sprite.type = Sprite.Type.TILED;
-                if (this._wallSpriteFrame) {
-                    sprite.spriteFrame = this._wallSpriteFrame;
+                const segNode = instantiate(this.wallPrefab);
+                segNode.layer = 1;
+                this._wallNode.addChild(segNode);
+                segNode.setPosition(seg.x + seg.w / 2, seg.y + seg.h / 2, 0);
+
+                const ut = segNode.getComponent(UITransform) || segNode.addComponent(UITransform);
+                if (seg.side === 0 || seg.side === 2) {
+                    // 上/下墙：水平段，宽度为段长，高度为墙厚
+                    ut.setContentSize(seg.w, this.wallThickness);
+                } else {
+                    // 左/右墙：垂直段，宽度为墙厚，高度为段长
+                    ut.setContentSize(this.wallThickness, seg.h);
                 }
+                lastChildIdx++;
             }
+        }
 
-            // 根据方向调整纹理朝向（纹理默认朝右）
-            let ut = segNode.getComponent(UITransform);
-            if (!ut) ut = segNode.addComponent(UITransform);
-            switch (seg.side) {
-                case 1: // 右墙：纹理朝右（默认），不变
-                    ut.setContentSize(seg.w, seg.h);
-                    break;
-                case 3: // 左墙：水平翻转，让纹理朝左（朝向桌面中心）
-                    segNode.setScale(-1, 1, 1);
-                    ut.setContentSize(seg.w, seg.h);
-                    break;
-                case 0: // 上墙：旋转 -90°，使朝右的纹理朝下（朝向桌面中心）
-                    ut.setContentSize(seg.h, seg.w);  // 宽高互换
-                    segNode.setRotationFromEuler(0, 0, -90);
-                    break;
-                case 2: // 下墙：旋转 90°，使朝右的纹理朝上（朝向桌面中心）
-                    ut.setContentSize(seg.h, seg.w);  // 宽高互换
-                    segNode.setRotationFromEuler(0, 0, 90);
-                    break;
+        // 四角：实例化 cornerPrefab，放在桌面四角，尺寸为墙厚×墙厚
+        if (this.cornerPrefab) {
+            const hw = this.tableWidth / 2;
+            const hh = this.tableHeight / 2;
+            const wt = this.wallThickness;
+            const halfWt = wt / 2;
+            // 四角位置（桌面外边缘对齐墙内侧）
+            const cornerPositions = [
+                { x:  hw - halfWt, y:  hh - halfWt },  // 右上
+                { x: -hw + halfWt, y:  hh - halfWt },  // 左上
+                { x:  hw - halfWt, y: -hh + halfWt },  // 右下
+                { x: -hw + halfWt, y: -hh + halfWt },  // 左下
+            ];
+            for (const pos of cornerPositions) {
+                const cornerNode = instantiate(this.cornerPrefab);
+                cornerNode.layer = 1;
+                this._wallNode.addChild(cornerNode);
+                cornerNode.setPosition(pos.x, pos.y, 0);
+
+                const ut = cornerNode.getComponent(UITransform) || cornerNode.addComponent(UITransform);
+                ut.setContentSize(wt, wt);
+                // 渲染在围墙段之上
+                cornerNode.setSiblingIndex(lastChildIdx++);
             }
         }
     }

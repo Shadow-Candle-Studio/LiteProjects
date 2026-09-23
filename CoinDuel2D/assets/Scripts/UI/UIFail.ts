@@ -13,20 +13,30 @@ export class UIFail extends Component {
     public btnHome:Node = null;
     @property(Node)
     public btnRank:Node = null;
+    @property(Node)
+    public btnRetry:Node = null;
 
     public onBtnHomeClick:()=>void = null;
     public onBtnRankClick:()=>void = null;
+    public onBtnRetryClick:()=>void = null;
 
     onLoad() {
         // 绑定按钮点击事件
         if (this.btnHome) {
             this.btnHome.on(Button.EventType.CLICK, () => {
+                this.close();
                 if (this.onBtnHomeClick) this.onBtnHomeClick();
             }, this);
         }
         if (this.btnRank) {
             this.btnRank.on(Button.EventType.CLICK, () => {
                 if (this.onBtnRankClick) this.onBtnRankClick();
+            }, this);
+        }
+        if (this.btnRetry) {
+            this.btnRetry.on(Button.EventType.CLICK, () => {
+                this.close();
+                if (this.onBtnRetryClick) this.onBtnRetryClick();
             }, this);
         }
     }

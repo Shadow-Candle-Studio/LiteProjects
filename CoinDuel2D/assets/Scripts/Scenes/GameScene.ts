@@ -102,7 +102,6 @@ export class GameScene extends Component {
                 // 闯关模式
                 this._levelFiles = LevelManager.getLevelFiles();
                 this._levelIndex = LevelManager.getLevelIndex();
-                LevelManager.clear();
                 this._initFromLevel(levelData);
             } else {
                 // 天梯模式
@@ -111,21 +110,21 @@ export class GameScene extends Component {
             }
         });
 
-        this.uiManager.onRetry = ()=>{
-            this.uiManager.showGameOver(false);
-            this.uiManager.showVictory(false);
-            this.gameLogic.score = 0;
-            this.uiManager.setScore(0);
-            if (this._levelIndex >= 0) {
-                // 关卡模式：回到关卡选择
-                LevelManager.clear();
-                director.loadScene('levels');
-            } else {
-                this.level = 1;
-                this.uiManager.setLevel(this.level);
-                this.startNewRound();
-            }
-        };
+        // this.uiManager.onRetry = ()=>{
+        //     this.uiManager.showGameOver(false);
+        //     this.uiManager.showVictory(false);
+        //     this.gameLogic.score = 0;
+        //     this.uiManager.setScore(0);
+        //     if (this._levelIndex >= 0) {
+        //         // 关卡模式：回到关卡选择
+        //         LevelManager.clear();
+        //         director.loadScene('levels');
+        //     } else {
+        //         this.level = 1;
+        //         this.uiManager.setLevel(this.level);
+        //         this.startNewRound();
+        //     }
+        // };
 
         // 绑定 Win 面板回调
         if (this.uiManager.uiWin) {
@@ -163,6 +162,16 @@ export class GameScene extends Component {
                 if (this.uiManager.uiRank) {
                     const entries = Leaderboard.getEntries();
                     this.uiManager.uiRank.show(entries);
+                }
+            };
+            // 重试
+            this.uiManager.uiFail.onBtnRetryClick = ()=>{
+                // 如果是天梯模式，直接退回第一关
+                if (LevelManager.getCurrent() === null) {
+                    this.startNewRound();
+                }else{
+                    // 如果是关卡模式，重新加载当前关卡
+                    this._initFromLevel(LevelManager.getCurrent());
                 }
             };
         }
