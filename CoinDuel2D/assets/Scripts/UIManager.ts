@@ -3,6 +3,7 @@ import { Leaderboard } from './Leaderboard';
 import { UIWin } from './UI/UIWin';
 import { UIFail } from './UI/UIFail';
 import { UIRank } from './UI/UIRank';
+import { UIConfirm } from './UI/UIConfirm';
 const { ccclass, property } = _decorator;
 
 @ccclass('UIManager')
@@ -29,13 +30,17 @@ export class UIManager extends Component {
     @property(UIRank)
     public uiRank:UIRank = null;
 
+    @property(UIConfirm)
+    public uiConfirm:UIConfirm = null;
+
     public onRetry:()=>void;
+    public onBack:()=>void;
 
     start() {
         this.buttonRetry.node.on(Node.EventType.TOUCH_START, ()=>{this.onRetry();});
         if (this.buttonBack) {
             this.buttonBack.node.on(Button.EventType.CLICK, () => {
-                director.loadScene('levels');
+                if (this.onBack)this.onBack();
             }, this);
         }
     }

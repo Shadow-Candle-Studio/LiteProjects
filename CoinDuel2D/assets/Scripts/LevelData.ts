@@ -34,7 +34,7 @@ export interface LevelData {
 }
 
 export enum LevelState {
-    Locked = 'locked',
-    Unlocked = 'unlocked',
-    Passed = 'passed',
+    Locked = 1,
+    Unlocked = 2,
+    Passed = 3,
 }

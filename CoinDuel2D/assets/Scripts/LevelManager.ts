@@ -1,4 +1,4 @@
-import { LevelData } from './LevelData';
+import { LevelData, LevelState } from './LevelData';
 
 /**
  * 跨场景传递关卡数据的静态管理器
@@ -9,6 +9,8 @@ export class LevelManager {
     private static _levelFiles: string[] = [];
     /** 当前关卡在 _levelFiles 中的索引 */
     private static _levelIndex: number = -1;
+    /** 每关状态（开发阶段不存档，重进游戏自动重置） */
+    private static _levelStates: LevelState[] = [];
 
     static setCurrent(data: LevelData): void {
         LevelManager._current = data;
@@ -18,10 +20,16 @@ export class LevelManager {
         return LevelManager._current;
     }
 
-    /** 设置关卡文件列表和当前索引（由 LevelsScene 调用） */
+    /** 设置关卡文件列表和当前索引（由 LevelsScene 调用），同时初始化关卡状态 */
     static setLevelList(files: string[], index: number): void {
         LevelManager._levelFiles = files;
         LevelManager._levelIndex = index;
+        // 首次初始化：全部 Locked，第一个自动 Unlocked
+        if (LevelManager._levelStates.length !== files.length) {
+            LevelManager._levelStates = files.map((_, i) =>
+                i === 0 ? LevelState.Unlocked : LevelState.Locked
+            );
+        }
     }
 
     static getLevelFiles(): string[] {
@@ -30,6 +38,29 @@ export class LevelManager {
 
     static getLevelIndex(): number {
         return LevelManager._levelIndex;
+    }
+
+    /** 获取每关状态数组 */
+    static getLevelStates(): LevelState[] {
+        return LevelManager._levelStates;
+    }
+
+    /** 获取指定关卡的状态 */
+    static getLevelState(index: number): LevelState {
+        return LevelManager._levelStates[index] ?? LevelState.Locked;
+    }
+
+    /** 标记指定关卡为 Passed，并自动解锁下一关 */
+    static markLevelPassed(index: number): void {
+        if (index >= 0 && index < LevelManager._levelStates.length) {
+            LevelManager._levelStates[index] = LevelState.Passed;
+            // 自动解锁下一关
+            const next = index + 1;
+            if (next < LevelManager._levelStates.length
+                && LevelManager._levelStates[next] === LevelState.Locked) {
+                LevelManager._levelStates[next] = LevelState.Unlocked;
+            }
+        }
     }
 
     /** 是否还有下一关 */

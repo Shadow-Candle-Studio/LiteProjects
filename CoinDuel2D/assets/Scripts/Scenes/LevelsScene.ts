@@ -1,6 +1,7 @@
 import { _decorator, Component, Node, resources, JsonAsset, instantiate, Prefab, Label, Button, director } from 'cc';
 import { LevelManager } from '../LevelManager';
-import { LevelData } from '../LevelData';
+import { LevelData, LevelState } from '../LevelData';
+import { UILevelItem } from '../UI/UILevelItem';
 const { ccclass, property } = _decorator;
 
 @ccclass('LevelsScene')
@@ -16,6 +17,10 @@ export class LevelsScene extends Component {
     private _levelFiles: string[] = [];
 
     private _loadLevelAndGo(levelFile: string, index: number): void {
+        // 只有 Unlocked 状态的关卡才能进入
+        const state = LevelManager.getLevelState(index);
+        if (state === LevelState.Locked) return;
+
         const path = 'levels/' + levelFile.replace('.json', '');
         resources.load(path, JsonAsset, (err, asset) => {
             if (err) {
@@ -39,6 +44,18 @@ export class LevelsScene extends Component {
         this.loadLevels();
     }
 
+    /** 刷新所有关卡项的显示状态 */
+    private _refreshLevelStates(): void {
+        const states = LevelManager.getLevelStates();
+        for (let i = 0; i < this.levelsContainer.children.length; i++) {
+            const child = this.levelsContainer.children[i];
+            const item = child.getComponent(UILevelItem);
+            if (item) {
+                item.setLevel(i + 1, states[i] ?? LevelState.Locked);
+            }
+        }
+    }
+
     loadLevels() {
         resources.load('levels', JsonAsset, (err, asset) => {
             if (err) {
@@ -47,29 +64,46 @@ export class LevelsScene extends Component {
             }
             const data = asset.json as { levels: string[] };
             this._levelFiles = data.levels;
+
+            // 初始化关卡状态（第一个自动解锁）
+            LevelManager.setLevelList(this._levelFiles, 0);
+
             for (let i = 0; i < data.levels.length; i++) {
                 const levelFile = data.levels[i];
                 const btn = instantiate(this.levelButtonPrefab);
                 btn.name = levelFile;
                 this.levelsContainer.addChild(btn);
 
-                // 设置 Label 为关卡编号
-                const labelNode = btn.getChildByName('Label');
-                if (labelNode) {
-                    const label = labelNode.getComponent(Label);
-                    if (label) {
-                        label.string = `${i + 1}`;
+                const idx = i;
+
+                // 使用 UILevelItem 设置关卡编号和状态
+                const item = btn.getComponent(UILevelItem);
+                if (item) {
+                    const state = LevelManager.getLevelState(idx);
+                    item.setLevel(idx + 1, state);
+                } else {
+                    // 兼容：没有 UILevelItem 时回退到 Label 设置
+                    const labelNode = btn.getChildByName('Label');
+                    if (labelNode) {
+                        const label = labelNode.getComponent(Label);
+                        if (label) label.string = `${i + 1}`;
                     }
                 }
 
                 const button = btn.getComponent(Button);
                 if (button) {
-                    const idx = i;
                     btn.on(Button.EventType.CLICK, () => {
                         this._loadLevelAndGo(levelFile, idx);
                     }, this);
                 }
             }
         });
+    }
+
+    /** 从 GameScene 返回时刷新关卡状态 */
+    onEnable() {
+        if (this.levelsContainer.children.length > 0) {
+            this._refreshLevelStates();
+        }
     }
 }

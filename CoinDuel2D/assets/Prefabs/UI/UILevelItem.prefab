@@ -1,7 +1,7 @@
 [
   {
     "__type__": "cc.Prefab",
-    "_name": "UILevelCell",
+    "_name": "UILevelItem",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_native": "",
@@ -13,7 +13,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "UILevelCell",
+    "_name": "UILevelItem",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": null,
@@ -329,9 +329,9 @@
     "_dstBlendFactor": 4,
     "_color": {
       "__type__": "cc.Color",
-      "r": 255,
-      "g": 255,
-      "b": 255,
+      "r": 177,
+      "g": 177,
+      "b": 177,
       "a": 255
     },
     "_spriteFrame": {
@@ -465,9 +465,9 @@
     "_dstBlendFactor": 4,
     "_color": {
       "__type__": "cc.Color",
-      "r": 255,
-      "g": 255,
-      "b": 255,
+      "r": 131,
+      "g": 214,
+      "b": 91,
       "a": 255
     },
     "_spriteFrame": {
@@ -658,7 +658,9 @@
     "nodeLock": {
       "__id__": 8
     },
-    "nodePassed": null,
+    "nodePassed": {
+      "__id__": 14
+    },
     "colorLocked": {
       "__type__": "cc.Color",
       "r": 129,

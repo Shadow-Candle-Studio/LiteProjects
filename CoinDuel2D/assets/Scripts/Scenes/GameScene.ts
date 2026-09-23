@@ -174,6 +174,15 @@ export class GameScene extends Component {
             };
         }
 
+        this.uiManager.onBack = () => {
+            this.uiManager.uiConfirm.open("确定要退出游戏吗？", (yes)=>{
+                if (yes){
+                    LevelManager.clear();
+                    director.loadScene('levels');
+                }
+            });
+        };
+
         this.gameLogic.onGameOver = () => {
             const uiFail = this.uiManager.uiFail;
             const currentLevel = this._levelIndex >= 0 ? this._levelIndex + 1 : this.level;
@@ -187,6 +196,10 @@ export class GameScene extends Component {
         };
 
         this.gameLogic.onGameWin = () => {
+            // 关卡模式：标记当前关卡 Passed，自动解锁下一关
+            if (this._levelIndex >= 0) {
+                LevelManager.markLevelPassed(this._levelIndex);
+            }
             const uiWin = this.uiManager.uiWin;
             const currentLevel = this._levelIndex >= 0 ? this._levelIndex + 1 : this.level;
             if (uiWin) {

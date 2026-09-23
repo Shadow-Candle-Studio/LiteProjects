@@ -1,4 +1,4 @@
-import { _decorator, Color, Component, Label, Node } from 'cc';
+import { _decorator, Button, Color, Component, Label, Node, Sprite } from 'cc';
 import { LevelState } from '../LevelData';
 const { ccclass, property } = _decorator;
 
@@ -24,11 +24,21 @@ export class UILevelItem extends Component {
         if (this.labelLevel) {
             this.labelLevel.string = level.toString();
         }
-        if (this.nodeLock) {
-            this.nodeLock.active = state === LevelState.Locked;
-        }
-        if (this.nodePassed) {
-            this.nodePassed.active = state === LevelState.Passed;
+        if (state == LevelState.Locked) {
+            this.nodeLock.active = true;
+            this.nodePassed.active = false;
+            this.getComponent(Sprite).color = this.colorLocked;
+            this.getComponent(Button).interactable = false;
+        }else if (state == LevelState.Unlocked) {
+            this.nodeLock.active = false;
+            this.nodePassed.active = false;
+            this.getComponent(Sprite).color = this.colorUnlocked;
+            this.getComponent(Button).interactable = true;
+        }else if (state == LevelState.Passed) {
+            this.nodeLock.active = false;
+            this.nodePassed.active = true;
+            this.getComponent(Sprite).color = this.colorPassed;
+            this.getComponent(Button).interactable = true;
         }
     }
 }
