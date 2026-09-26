@@ -50,7 +50,8 @@ export class TableController extends Component {
         const tableTransform = tableNode.addComponent(UITransform);
         tableTransform.setContentSize(this.tableWidth, this.tableHeight);
         this._tableSprite = tableNode.addComponent(Sprite);
-        this._tableSprite.type = Sprite.Type.SIMPLE;
+        this._tableSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        this._tableSprite.type = Sprite.Type.TILED;
 
         // 加载桌面纹理
         resources.load('textures/table_1/spriteFrame', SpriteFrame, (err, sf) => {

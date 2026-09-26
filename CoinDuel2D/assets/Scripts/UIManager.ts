@@ -30,6 +30,13 @@ export class UIManager extends Component {
     @property(UIRank)
     public uiRank:UIRank = null;
 
+    @property(Node)
+    public uiItemsPanel:Node = null;
+    @property(Node)
+    public uiLevelPanel:Node = null;
+    @property(Node)
+    public uiScorePanel:Node = null;
+
     @property(UIConfirm)
     public uiConfirm:UIConfirm = null;
 
@@ -43,36 +50,6 @@ export class UIManager extends Component {
                 if (this.onBack)this.onBack();
             }, this);
         }
-    }
-
-    public showGameOver(show:boolean){
-        this.gameOverPanel.active = show;
-        let rank = Leaderboard.getEntries();
-        let rankstr = "";
-        for (let i = 0; i < rank.length; i++) {
-            const item = rank[i];
-            const date = new Date(item.time);
-            const dateStr = `${date.getFullYear()}-${this._pad(date.getMonth()+1)}-${this._pad(date.getDate())}`;
-            const min = Math.floor(item.duration / 60);
-            const sec = item.duration % 60;
-            const timeStr = `${this._pad(min)}:${this._pad(sec)}`;
-            const scoreStr = this._padNum(item.score, 4);
-            const num = this._padNum(i + 1, 2);
-            rankstr += `#${num}  ${scoreStr}分  ${timeStr}  ${dateStr}\n`;
-        }
-        this.labelRank.string = rankstr;
-    }
-
-    /** 数字补零（至少 2 位） */
-    private _pad(n: number): string {
-        return n < 10 ? '0' + n : '' + n;
-    }
-
-    /** 数字左对齐固定宽度 */
-    private _padNum(n: number, width: number): string {
-        let s = '' + n;
-        while (s.length < width) s = ' ' + s;
-        return s;
     }
 
     public setScore(score:number){

@@ -335,7 +335,7 @@ export class CoinController extends Component {
         // 先绘制箭头（计算墙面限位后的拖拽向量）
         this._drawDragLine(event);
         // 距离增加/减少音效
-        this._checkDragDistSound();
+        //this._checkDragDistSound();
         // 使用限位后的拖拽距离
         const dx = this._clampedDragVec.x;
         const dy = this._clampedDragVec.y;

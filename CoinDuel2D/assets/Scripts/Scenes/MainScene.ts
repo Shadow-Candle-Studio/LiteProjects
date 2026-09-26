@@ -1,5 +1,6 @@
 import { _decorator, Button, Component, director, Node } from 'cc';
 import { LevelManager } from '../LevelManager';
+import { SoundManager } from '../SoundManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('MainScene')
@@ -22,6 +23,7 @@ export class MainScene extends Component {
         this.btnPVP.node.on(Button.EventType.CLICK, () => {
             director.loadScene('pvp');
         }, this);
+        SoundManager.instance.stopBGM();
     }
 
 

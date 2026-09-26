@@ -327,7 +327,7 @@ export class GameLogic extends Component {
         if (PhysicsSystem2D.instance) {
             PhysicsSystem2D.instance.off(Contact2DType.BEGIN_CONTACT, this._onBeginContact, this);
         }
-        input.off(Input.EventType.MOUSE_DOWN, this._onTestClick, this);
+        //input.off(Input.EventType.MOUSE_DOWN, this._onTestClick, this);
     }
 
     /** PhysicsSystem2D 全局碰撞回调：活跃弹射硬币撞到其他硬币时计数 */
@@ -512,12 +512,11 @@ export class GameLogic extends Component {
             .start();
     }
 
-    /** 炸弹飞入动画：从桌面右侧以抛物线轨迹飞入，动画播放完由 Bomb 组件自动销毁 */
+    /** 炸弹飞入动画：从桌面右侧以抛物线轨迹飞入桌面正中央，动画播放完由 Bomb 组件自动销毁 */
     private _flyBomb(node: Node): void {
         const halfW = this.tableWidth / 2 - this.wallThickness;
-        const halfH = this.tableHeight / 2 - this.wallThickness;
-        const landX = (Math.random() * 2 - 1) * Math.max(0, halfW - 70);
-        const landY = (Math.random() * 2 - 1) * Math.max(0, halfH - 70);
+        const landX = 0;
+        const landY = 0;
 
         // 从右侧飞入
         const startX = halfW + 400;
@@ -905,6 +904,7 @@ export class GameLogic extends Component {
         this._restoreSpeed();
         this.hitEffectManager?.stopTracking();
         this._pendingLockedCoin = null;
+        SoundManager.instance.stopDragDirectionLoop();
         SoundManager.instance.playGameOver();
         const duration = Math.floor((Date.now() - this._gameStartTime) / 1000);
         if (this.score > 0) {
@@ -920,6 +920,7 @@ export class GameLogic extends Component {
         this._restoreSpeed();
         this.hitEffectManager?.stopTracking();
         this._pendingLockedCoin = null;
+        SoundManager.instance.stopDragDirectionLoop();
         this._setCoinsInteraction(false);
         this.onGameWin?.();
     }

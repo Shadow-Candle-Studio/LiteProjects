@@ -2,6 +2,7 @@ import { _decorator, Component, Node, resources, JsonAsset, instantiate, Prefab,
 import { LevelManager } from '../LevelManager';
 import { LevelData, LevelState } from '../LevelData';
 import { UILevelItem } from '../UI/UILevelItem';
+import { SoundManager } from '../SoundManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('LevelsScene')
@@ -42,6 +43,7 @@ export class LevelsScene extends Component {
 
     start() {
         this.loadLevels();
+        SoundManager.instance.stopBGM();
     }
 
     /** 刷新所有关卡项的显示状态 */

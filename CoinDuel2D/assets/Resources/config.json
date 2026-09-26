@@ -21,7 +21,7 @@
         "velocityFactor": 1,
         "coinDamping": 4.5,
         "mudDamping": 20,
-        "bombPushRadius": 256,
+        "bombPushRadius": 512,
         "bombPushForce": 500000,
         "aimLineFactor": 7,
         "idleShowDelay": 5

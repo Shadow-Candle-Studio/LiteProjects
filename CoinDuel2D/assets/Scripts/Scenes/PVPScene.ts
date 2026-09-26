@@ -1,5 +1,6 @@
 import { _decorator, Button, Component, director, Node } from 'cc';
 import { UIMessageBox } from '../UI/UIMessageBox';
+import { SoundManager } from '../SoundManager';
 const { ccclass, property } = _decorator;
 
 @ccclass('PVPScene')
@@ -29,6 +30,7 @@ export class PVPScene extends Component {
         this.messageBox.open("暂不支持对战模式", () => {
             director.loadScene('main');
         });
+        SoundManager.instance.stopBGM();
     }
 }
 

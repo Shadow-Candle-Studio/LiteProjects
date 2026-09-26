@@ -65,7 +65,6 @@ export class GameScene extends Component {
 
         this.level = 1;
         this.uiManager.setLevel(this.level);
-        this.uiManager.showGameOver(false);
         this.gameLogic.score = 0;
         this.uiManager.setScore(0);
 
@@ -180,7 +179,18 @@ export class GameScene extends Component {
             });
         };
 
+        // this.gameLogic.onGameStart = () => {
+        //     this.uiManager.uiItemsPanel.active = true;
+        //     this.uiManager.uiLevelPanel.active = true;
+        //     this.uiManager.uiScorePanel.active = true;
+        // }
+
         this.gameLogic.onGameOver = (duration: number) => {
+            this.uiManager.uiItemsPanel.active = false;
+            this.uiManager.uiLevelPanel.active = false;
+            this.uiManager.uiScorePanel.active = false;
+            this.uiManager.buttonBack.node.active = false;
+
             const uiFail = this.uiManager.uiFail;
             const currentLevel = this._levelIndex >= 0 ? this._levelIndex + 1 : this.level;
             if (uiFail) {
@@ -208,6 +218,13 @@ export class GameScene extends Component {
         };
 
         SoundManager.instance.playBGM(1);
+    }
+
+    private onGameStart(){
+        this.uiManager.uiItemsPanel.active = true;
+        this.uiManager.uiLevelPanel.active = true;
+        this.uiManager.uiScorePanel.active = true;
+        this.uiManager.buttonBack.node.active = true;
     }
 
     // 开始新的一局
@@ -259,6 +276,7 @@ export class GameScene extends Component {
         if (this._coinsConfig) {
             this._applyCoinConfig(this.coinId);
         }
+        this.onGameStart();
     }
 
     /** 按关卡 JSON 配置初始化桌面、硬币、障碍物、陷阱 */
@@ -317,6 +335,7 @@ export class GameScene extends Component {
         if (this._coinsConfig) {
             this._applyCoinConfig(this.coinId);
         }
+        this.onGameStart();
     }
 
     private clearCoins(){
