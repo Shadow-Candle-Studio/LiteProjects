@@ -270,7 +270,7 @@ export class GameLogic extends Component {
     }
 
     public score: number = 0;
-    public onGameOver: (() => void) | null = null;
+    public onGameOver: ((duration: number) => void) | null = null;
     public onScoreUpdate: ((score: number) => void) | null = null;
     public onGameWin: (() => void) | null = null;
 
@@ -911,7 +911,7 @@ export class GameLogic extends Component {
             Leaderboard.addEntry(this.score, duration);
         }
         this._setCoinsInteraction(false);
-        this.onGameOver?.();
+        this.onGameOver?.(duration);
     }
 
     /** 游戏胜利（桌面仅剩 1 枚硬币） */

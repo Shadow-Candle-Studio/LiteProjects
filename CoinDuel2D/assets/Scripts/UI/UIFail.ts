@@ -44,7 +44,13 @@ export class UIFail extends Component {
     public show(level:number, score:number, time:number){
         if (this.level) this.level.string = level.toString();
         if (this.score) this.score.string = score.toString();
-        if (this.time) this.time.string = time.toString();
+        if (this.time) {
+            const h = Math.floor(time / 3600);
+            const m = Math.floor((time % 3600) / 60);
+            const s = time % 60;
+            const pad = (n: number) => n < 10 ? '0' + n : '' + n;
+            this.time.string = `${pad(h)}:${pad(m)}:${pad(s)}`;
+        }
         this.node.active = true;
     }
 

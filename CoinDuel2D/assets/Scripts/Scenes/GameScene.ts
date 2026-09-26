@@ -15,6 +15,8 @@ const { ccclass, property } = _decorator;
 
 @ccclass('GameScene')
 export class GameScene extends Component {
+    @property(TableController)
+    public tableController:TableController = null;
     @property(RoundManager)
     public roundManager:RoundManager = null;
     @property(GameLogic)
@@ -26,7 +28,6 @@ export class GameScene extends Component {
     @property({ tooltip: "开局使用的硬币 id（config.json 中 coins 的 key，默认为 1）" })
     public coinId: string = "1";
 
-    private tableController: TableController = null!;
     private _debugPanel: Node | null = null;
     /** 缺口宽度基数（从 TableController 面板值快照） */
     private _baseGapWidth: number = 80;
@@ -60,19 +61,6 @@ export class GameScene extends Component {
                 const btnBomb = items.getChildByName('ButtonBomb');
                 if (btnBomb) btnBomb.on(Button.EventType.CLICK, () => this.gameLogic?.spawnBomb(), this);
             }
-        }
-
-        // 在 Table 节点上挂载桌面渲染控制器
-        const tableNode = this.node.parent?.getChildByName('Table');
-        if (tableNode) {
-            this.tableController = tableNode.getComponent(TableController)!
-                               || tableNode.addComponent(TableController);
-        } else {
-            console.warn('未找到 Table 节点，动态创建');
-            const newNode = new Node('Table');
-            newNode.layer = 1; // WORLD
-            this.node.parent?.addChild(newNode);
-            this.tableController = newNode.addComponent(TableController);
         }
 
         this.level = 1;
@@ -192,11 +180,11 @@ export class GameScene extends Component {
             });
         };
 
-        this.gameLogic.onGameOver = () => {
+        this.gameLogic.onGameOver = (duration: number) => {
             const uiFail = this.uiManager.uiFail;
             const currentLevel = this._levelIndex >= 0 ? this._levelIndex + 1 : this.level;
             if (uiFail) {
-                uiFail.show(currentLevel, this.gameLogic.score, 0);
+                uiFail.show(currentLevel, this.gameLogic.score, duration);
             }
         };
 
@@ -218,6 +206,8 @@ export class GameScene extends Component {
                 uiWin.setNextEnabled(!isLastLevel);
             }
         };
+
+        SoundManager.instance.playBGM(1);
     }
 
     // 开始新的一局
