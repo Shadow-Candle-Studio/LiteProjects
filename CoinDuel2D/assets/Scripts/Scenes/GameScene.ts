@@ -202,7 +202,7 @@ export class GameScene extends Component {
             this.uiManager.setScore(score);
         };
 
-        this.gameLogic.onGameWin = () => {
+        this.gameLogic.onGameWin = (duration: number) => {
             // 关卡模式：标记当前关卡 Passed，自动解锁下一关
             if (this._levelIndex >= 0) {
                 LevelManager.markLevelPassed(this._levelIndex);
@@ -210,7 +210,7 @@ export class GameScene extends Component {
             const uiWin = this.uiManager.uiWin;
             const currentLevel = this._levelIndex >= 0 ? this._levelIndex + 1 : this.level;
             if (uiWin) {
-                uiWin.show(currentLevel, this.gameLogic.score, 0);
+                uiWin.show(currentLevel, this.gameLogic.score, duration);
                 // 最后一关时禁用下一关按钮
                 const isLastLevel = this._levelIndex >= 0 && this._levelIndex >= this._levelFiles.length - 1;
                 uiWin.setNextEnabled(!isLastLevel);
@@ -300,29 +300,25 @@ export class GameScene extends Component {
 
         this.tableController.drawTable();
 
-        // 硬币
+        // 条目：按 type 字段区分硬币/障碍物/陷阱
         const radius = this.gameLogic.coinRadius;
-        for (const coinData of data.coins) {
-            const coin = instantiate(this.coinPrefab);
-            this.gameLogic.coinGroup.addChild(coin);
-            coin.setPosition(coinData.x, coinData.y, 0);
-            coin.setScale(1, 1, 1);
-            const ut = coin.getComponent(UITransform);
-            if (ut) ut.setContentSize(radius * 2, radius * 2);
-            const cc = coin.getComponent(CircleCollider2D);
-            if (cc) cc.radius = radius;
-            const ctrl = coin.addComponent(CoinController);
-            ctrl.setGameLogic(this.gameLogic);
-        }
-
-        // 障碍物
-        for (const blockData of data.blocks) {
-            this.gameLogic.spawnBlockerAt(blockData.x, blockData.y);
-        }
-
-        // 陷阱
-        for (const mudData of data.muds) {
-            this.gameLogic.spawnMudAt(mudData.x, mudData.y);
+        for (const item of data.coins) {
+            if (item.type === 'block') {
+                this.gameLogic.spawnBlockerAt(item.x, item.y, item.radius);
+            } else if (item.type === 'mud') {
+                this.gameLogic.spawnMudAt(item.x, item.y, item.radius);
+            } else {
+                const coin = instantiate(this.coinPrefab);
+                this.gameLogic.coinGroup.addChild(coin);
+                coin.setPosition(item.x, item.y, 0);
+                coin.setScale(1, 1, 1);
+                const ut = coin.getComponent(UITransform);
+                if (ut) ut.setContentSize(radius * 2, radius * 2);
+                const cc = coin.getComponent(CircleCollider2D);
+                if (cc) cc.radius = radius;
+                const ctrl = coin.addComponent(CoinController);
+                ctrl.setGameLogic(this.gameLogic);
+            }
         }
 
         this.gameLogic.waitingPlayerOperation();

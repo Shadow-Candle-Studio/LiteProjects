@@ -48,40 +48,35 @@ class ObjectTree(QTreeWidget):
         wall_item.setData(0, Qt.UserRole, level_data.wall)
         wall_item.setExpanded(True)
 
-        # Coins 分组
-        coins_item = QTreeWidgetItem(table_item, [f"Coins ({len(level_data.coins)})"])
-        coins_item.setData(0, Qt.UserRole, None)
-        coins_item.setExpanded(True)
+        # 条目分组（items 已按类型合并存储，此处按类型分组显示）
+        coins_group = QTreeWidgetItem(table_item, [f"Coins ({len(level_data.coins)})"])
+        coins_group.setData(0, Qt.UserRole, None)
+        coins_group.setExpanded(True)
 
-        for i, coin in enumerate(level_data.coins):
-            item = QTreeWidgetItem(coins_item, [f"Coin #{i+1} ({int(coin.x)}, {int(coin.y)})"])
-            item.setData(0, Qt.UserRole, coin)
-            self._item_to_data[id(item)] = coin
-            self._data_to_item[id(coin)] = item
+        blocks_group = QTreeWidgetItem(table_item, [f"Blocks ({len(level_data.blocks)})"])
+        blocks_group.setData(0, Qt.UserRole, None)
+        blocks_group.setExpanded(True)
 
-        # Blocks 分组
-        blocks_item = QTreeWidgetItem(table_item, [f"Blocks ({len(level_data.blocks)})"])
-        blocks_item.setData(0, Qt.UserRole, None)
-        blocks_item.setExpanded(True)
+        muds_group = QTreeWidgetItem(table_item, [f"Muds ({len(level_data.muds)})"])
+        muds_group.setData(0, Qt.UserRole, None)
+        muds_group.setExpanded(True)
 
-        for i, block in enumerate(level_data.blocks):
-            info = f"({int(block.x)}, {int(block.y)}) r={int(block.radius)}"
-            item = QTreeWidgetItem(blocks_item, [f"Block #{i+1} {info}"])
-            item.setData(0, Qt.UserRole, block)
-            self._item_to_data[id(item)] = block
-            self._data_to_item[id(block)] = item
-
-        # Muds 分组
-        muds_item = QTreeWidgetItem(table_item, [f"Muds ({len(level_data.muds)})"])
-        muds_item.setData(0, Qt.UserRole, None)
-        muds_item.setExpanded(True)
-
-        for i, mud in enumerate(level_data.muds):
-            info = f"({int(mud.x)}, {int(mud.y)}) r={int(mud.radius)} f={mud.friction}"
-            item = QTreeWidgetItem(muds_item, [f"Mud #{i+1} {info}"])
-            item.setData(0, Qt.UserRole, mud)
-            self._item_to_data[id(item)] = mud
-            self._data_to_item[id(mud)] = item
+        coin_num = block_num = mud_num = 0
+        for obj in level_data.items:
+            if isinstance(obj, BlockData):
+                block_num += 1
+                info = f"({int(obj.x)}, {int(obj.y)}) r={int(obj.radius)}"
+                item = QTreeWidgetItem(blocks_group, [f"Block #{block_num} {info}"])
+            elif isinstance(obj, MudData):
+                mud_num += 1
+                info = f"({int(obj.x)}, {int(obj.y)}) r={int(obj.radius)} f={obj.friction}"
+                item = QTreeWidgetItem(muds_group, [f"Mud #{mud_num} {info}"])
+            else:
+                coin_num += 1
+                item = QTreeWidgetItem(coins_group, [f"Coin #{coin_num} ({int(obj.x)}, {int(obj.y)})"])
+            item.setData(0, Qt.UserRole, obj)
+            self._item_to_data[id(item)] = obj
+            self._data_to_item[id(obj)] = item
 
         self.resizeColumnToContents(0)
 

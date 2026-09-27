@@ -272,7 +272,7 @@ export class GameLogic extends Component {
     public score: number = 0;
     public onGameOver: ((duration: number) => void) | null = null;
     public onScoreUpdate: ((score: number) => void) | null = null;
-    public onGameWin: (() => void) | null = null;
+    public onGameWin: ((duration: number) => void) | null = null;
 
     /** 当前活跃的弹射硬币（用于碰撞检测） */
     public get activeShotCoin(): Node | null {
@@ -419,25 +419,36 @@ export class GameLogic extends Component {
             bomb.pushRadius = this.bombPushRadius;
             bomb.pushForce = this.bombPushForce;
             bomb.coinGroup = this.coinGroup;
+            bomb.props = this._props;
         }
         this._flyBomb(node);
     }
 
-    /** 在指定位置放置障碍物（关卡配置用，无飞入动画） */
-    public spawnBlockerAt(x: number, y: number): void {
+    /** 在指定位置放置障碍物（关卡配置用，无飞入动画），radius 缺省时使用 prefab 默认尺寸 */
+    public spawnBlockerAt(x: number, y: number, radius?: number): void {
         if (!this.blockerPrefab) return;
         const node = instantiate(this.blockerPrefab);
         this.addChildToWorld(node);
         node.setPosition(x, y, 0);
+        if (radius && radius > 0) {
+            const ut = node.getComponent(UITransform);
+            if (ut) ut.setContentSize(radius * 2, radius * 2);
+            const cc = node.getComponent(CircleCollider2D);
+            if (cc) cc.radius = radius;
+        }
         this._props.push(node);
     }
 
-    /** 在指定位置放置陷阱（关卡配置用，无飞入动画） */
-    public spawnMudAt(x: number, y: number): void {
+    /** 在指定位置放置陷阱（关卡配置用，无飞入动画），radius 缺省时使用 prefab 默认尺寸 */
+    public spawnMudAt(x: number, y: number, radius?: number): void {
         if (!this.mudPrefab) return;
         const node = instantiate(this.mudPrefab);
         this.addChildToWorld(node);
         node.setPosition(x, y, 0);
+        if (radius && radius > 0) {
+            const ut = node.getComponent(UITransform);
+            if (ut) ut.setContentSize(radius * 2, radius * 2);
+        }
         this._props.push(node);
         this._muds.push(node);
     }
@@ -922,7 +933,8 @@ export class GameLogic extends Component {
         this._pendingLockedCoin = null;
         SoundManager.instance.stopDragDirectionLoop();
         this._setCoinsInteraction(false);
-        this.onGameWin?.();
+        const duration = Math.floor((Date.now() - this._gameStartTime) / 1000);
+        this.onGameWin?.(duration);
     }
 
     /** 命中 1 枚硬币后的连击延续流程（延迟到摄像机还原后才启用操作） */

@@ -1,6 +1,11 @@
 """
 CoinDuel2D 关卡数据模型
 负责关卡数据的加载、保存和管理
+
+JSON 格式：coins/blocks/muds 合并为单个 coins 数组，通过 type 字段区分：
+    {"type": "coin", "class": 1, "x": 0, "y": 0}
+    {"type": "block", "x": 0, "y": 0, "shape": "circle", "radius": 30, "path": [...]}
+    {"type": "mud", "x": 0, "y": 0, "shape": "circle", "radius": 30, "friction": 0.5}
 """
 import json
 from dataclasses import dataclass, field
@@ -26,9 +31,10 @@ class CoinData:
     cls: int  # 对应 JSON 中的 "class"
     x: float
     y: float
+    type: str = field(default="coin", init=False)
 
     def to_dict(self) -> dict:
-        return {"class": self.cls, "x": int(self.x), "y": int(self.y)}
+        return {"type": "coin", "class": self.cls, "x": int(self.x), "y": int(self.y)}
 
     @staticmethod
     def from_dict(data: dict) -> 'CoinData':
@@ -43,9 +49,10 @@ class BlockData:
     shape: str = "circle"
     radius: float = 30.0
     path: Optional[List[dict]] = None
+    type: str = field(default="block", init=False)
 
     def to_dict(self) -> dict:
-        result = {"x": int(self.x), "y": int(self.y), "shape": self.shape, "radius": int(self.radius)}
+        result = {"type": "block", "x": int(self.x), "y": int(self.y), "shape": self.shape, "radius": int(self.radius)}
         if self.path:
             result["path"] = self.path
         return result
@@ -69,10 +76,11 @@ class MudData:
     shape: str = "circle"
     radius: float = 30.0
     friction: float = 0.5
+    type: str = field(default="mud", init=False)
 
     def to_dict(self) -> dict:
         return {
-            "x": int(self.x), "y": int(self.y),
+            "type": "mud", "x": int(self.x), "y": int(self.y),
             "shape": self.shape, "radius": int(self.radius),
             "friction": self.friction
         }
@@ -80,11 +88,22 @@ class MudData:
     @staticmethod
     def from_dict(data: dict) -> 'MudData':
         return MudData(
-            x=data["x"], y=data["y"],
+            x=data["x"],
+            y=data["y"],
             shape=data.get("shape", "circle"),
             radius=data.get("radius", 30.0),
             friction=data.get("friction", 0.5)
         )
+
+
+def item_from_dict(data: dict) -> object:
+    """根据 type 字段分发构造对应的条目对象"""
+    t = data.get("type", "coin")
+    if t == "block":
+        return BlockData.from_dict(data)
+    if t == "mud":
+        return MudData.from_dict(data)
+    return CoinData.from_dict(data)
 
 
 class LevelData:
@@ -95,10 +114,21 @@ class LevelData:
         self.width = width
         self.height = height
         self.wall: WallData = WallData()
-        self.coins: List[CoinData] = []
-        self.blocks: List[BlockData] = []
-        self.muds: List[MudData] = []
+        # 所有条目（硬币/障碍物/陷阱），按顺序存放
+        self.items: List[object] = []
         self._file_path: Optional[str] = None
+
+    @property
+    def coins(self) -> List[CoinData]:
+        return [o for o in self.items if isinstance(o, CoinData)]
+
+    @property
+    def blocks(self) -> List[BlockData]:
+        return [o for o in self.items if isinstance(o, BlockData)]
+
+    @property
+    def muds(self) -> List[MudData]:
+        return [o for o in self.items if isinstance(o, MudData)]
 
     @property
     def file_path(self) -> Optional[str]:
@@ -125,14 +155,9 @@ class LevelData:
         wall_data = data.get("wall", {})
         level.wall = WallData.from_dict(wall_data)
 
-        for coin_data in data.get("coins", []):
-            level.coins.append(CoinData.from_dict(coin_data))
-
-        for block_data in data.get("blocks", []):
-            level.blocks.append(BlockData.from_dict(block_data))
-
-        for mud_data in data.get("muds", []):
-            level.muds.append(MudData.from_dict(mud_data))
+        # 条目（coins/blocks/muds 合并数组，按 type 字段区分）
+        for item_data in data.get("coins", []):
+            level.items.append(item_from_dict(item_data))
 
         return level
 
@@ -147,9 +172,8 @@ class LevelData:
             "width": self.width,
             "height": self.height,
             "wall": self.wall.to_dict(),
-            "coins": [coin.to_dict() for coin in self.coins],
-            "blocks": [block.to_dict() for block in self.blocks],
-            "muds": [mud.to_dict() for mud in self.muds]
+            # 所有条目合并到 coins 数组，每项带 type 字段
+            "coins": [item.to_dict() for item in self.items]
         }
 
         with open(save_path, 'w', encoding='utf-8') as f:
@@ -159,29 +183,23 @@ class LevelData:
 
     def add_coin(self, coin: CoinData) -> None:
         """添加硬币"""
-        self.coins.append(coin)
+        self.items.append(coin)
 
     def add_block(self, block: BlockData) -> None:
         """添加障碍物"""
-        self.blocks.append(block)
+        self.items.append(block)
 
     def add_mud(self, mud: MudData) -> None:
         """添加陷阱"""
-        self.muds.append(mud)
+        self.items.append(mud)
 
     def remove_object(self, obj: object) -> bool:
         """删除对象，返回是否成功"""
-        if isinstance(obj, CoinData) and obj in self.coins:
-            self.coins.remove(obj)
-            return True
-        elif isinstance(obj, BlockData) and obj in self.blocks:
-            self.blocks.remove(obj)
-            return True
-        elif isinstance(obj, MudData) and obj in self.muds:
-            self.muds.remove(obj)
+        if obj in self.items:
+            self.items.remove(obj)
             return True
         return False
 
     def get_all_objects(self) -> List[object]:
         """获取所有对象"""
-        return self.coins + self.blocks + self.muds
+        return list(self.items)

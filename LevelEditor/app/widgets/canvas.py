@@ -149,17 +149,14 @@ class Canvas(QGraphicsView):
         # 绘制墙（边框）
         self._draw_wall(level_data)
 
-        # 绘制硬币
-        for coin in level_data.coins:
-            self._add_coin_item(coin, w, h)
-
-        # 绘制障碍物
-        for block in level_data.blocks:
-            self._add_block_item(block, w, h)
-
-        # 绘制陷阱
-        for mud in level_data.muds:
-            self._add_mud_item(mud, w, h)
+        # 绘制条目（硬币/障碍物/陷阱，按数据顺序）
+        for item in level_data.items:
+            if isinstance(item, BlockData):
+                self._add_block_item(item, w, h)
+            elif isinstance(item, MudData):
+                self._add_mud_item(item, w, h)
+            else:
+                self._add_coin_item(item, w, h)
 
         # 设置场景范围（不缩放，保持原始尺寸）
         self.setSceneRect(-20, -20, w + 40, h + 40)

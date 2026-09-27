@@ -38,6 +38,21 @@
             "shape": "circle",
             "radius": 32,
             "friction": 0.5
+        },
+        {
+            "type": "block",
+            "x": -209,
+            "y": -112,
+            "shape": "circle",
+            "radius": 32
+        },
+        {
+            "type": "mud",
+            "x": 2,
+            "y": 181,
+            "shape": "circle",
+            "radius": 32,
+            "friction": 0.5
         }
     ]
 }

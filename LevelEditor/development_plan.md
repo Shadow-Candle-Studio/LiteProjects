@@ -12,20 +12,21 @@
     "width": 800,
     "height": 600,
     "coins": [
-        { "class": 1, "x": 100, "y": 200 }
-    ],
-    "blocks": [
-        { "x": 100, "y": 100, "shape": "circle", "radius": 50 },
-        { "x": 400, "y": 300, "shape": "circle", "radius": 30,
-          "path": [{"x":400,"y":300}, {"x":500,"y":300}] }
-    ],
-    "muds": [
-        { "x": 100, "y": 100, "shape": "circle", "radius": 50, "friction": 0.5 }
+        { "type": "coin", "class": 1, "x": 100, "y": 200 },
+        { "type": "block", "x": 100, "y": 100, "shape": "circle", "radius": 50 },
+        { "type": "block", "x": 400, "y": 300, "shape": "circle", "radius": 30,
+          "path": [{"x":400,"y":300}, {"x":500,"y":300}] },
+        { "type": "mud", "x": 100, "y": 100, "shape": "circle", "radius": 50, "friction": 0.5 }
     ]
 }
 ```
 
-顶层字段：`id`（关卡ID）、`width`/`height`（桌面尺寸）、`coins`（硬币数组）、`blocks`（障碍物数组）、`muds`（陷阱数组）。
+顶层字段：`id`（关卡ID）、`width`/`height`（桌面尺寸）、`coins`（条目数组）。
+
+所有条目（硬币/障碍物/陷阱）统一存放在 `coins` 数组中，通过 `type` 字段区分：
+- `"coin"`：硬币，额外字段 `class`
+- `"block"`：障碍物，额外字段 `shape`、`radius`、`path`（可选）
+- `"mud"`：陷阱，额外字段 `shape`、`radius`、`friction`
 
 ## 三、文件结构设计
 
@@ -60,11 +61,12 @@ LevelEditor/
 **任务清单**：
 
 1. **数据模型** (`app/models/level_data.py`)
-   - 定义 `LevelData` 类，包含字段：`id`, `width`, `height`, `coins`, `blocks`, `muds`
-   - 定义 `CoinData` 类，字段：`class`, `x`, `y`
-   - 定义 `BlockData` 类，字段：`x`, `y`, `shape`, `radius`, `path`（可选）
-   - 定义 `MudData` 类，字段：`x`, `y`, `shape`, `radius`, `friction`
-   - 实现 `from_json(path)` 加载方法和 `to_json(path)` 保存方法
+   - 定义 `LevelData` 类，包含字段：`id`, `width`, `height`, `items`（条目统一列表）
+   - `coins` / `blocks` / `muds` 为按类型过滤的属性，供 UI 分组显示
+   - 定义 `CoinData` 类，字段：`type="coin"`, `class`, `x`, `y`
+   - 定义 `BlockData` 类，字段：`type="block"`, `x`, `y`, `shape`, `radius`, `path`（可选）
+   - 定义 `MudData` 类，字段：`type="mud"`, `x`, `y`, `shape`, `radius`, `friction`
+   - 实现 `from_json(path)` 加载方法（`item_from_dict` 按 `type` 分发）和 `to_json(path)` 保存方法（所有条目写入 `coins` 数组）
    - 实现各对象的 `add` / `remove` / `get_all` 操作
 
 2. **主窗口骨架** (`app/main_window.py`, `main.py`)
@@ -191,18 +193,21 @@ LevelEditor/
 
 ```python
 class CoinData:
-    cls: int          # 对应 JSON 中的 "class"
+    type: str = "coin"   # JSON 中的类型标识
+    cls: int             # 对应 JSON 中的 "class"
     x: float
     y: float
 
 class BlockData:
+    type: str = "block"
     x: float
     y: float
-    shape: str        # "circle"
+    shape: str           # "circle"
     radius: float
     path: list[dict] | None  # 可选的运动路径
 
 class MudData:
+    type: str = "mud"
     x: float
     y: float
     shape: str
@@ -213,9 +218,14 @@ class LevelData:
     id: int
     width: int
     height: int
-    coins: list[CoinData]
-    blocks: list[BlockData]
-    muds: list[MudData]
+    items: list[CoinData | BlockData | MudData]  # 所有条目，按顺序存放
+
+    @property
+    def coins(self) -> list[CoinData]    # 按类型过滤
+    @property
+    def blocks(self) -> list[BlockData]  # 按类型过滤
+    @property
+    def muds(self) -> list[MudData]      # 按类型过滤
 
     @staticmethod
     def from_json(path: str) -> 'LevelData'
@@ -289,6 +299,6 @@ class PropertyPanel(QWidget):
 
 1. **信号槽机制**：各面板通过 Qt Signal/Slot 解耦通信，MainWindow 作为中介协调各面板的联动。
 2. **QGraphicsView/QGraphicsScene**：渲染区使用 Qt 的 Graphics View 框架，天然支持对象选择、拖拽和右键菜单。
-3. **JSON 兼容性**：数据模型的序列化/反序列化必须与现有 `level1.json` 格式完全兼容，特别注意 JSON 中的 `"class"` 字段与 Python 关键字冲突，模型中用 `cls` 替代。
+3. **JSON 兼容性**：数据模型的序列化/反序列化必须与游戏侧 `LevelData.ts` 的格式完全兼容。所有条目合并存放在 `coins` 数组中，通过 `type` 字段（`coin`/`block`/`mud`）区分；特别注意 JSON 中的 `"class"` 字段与 Python 关键字冲突，模型中用 `cls` 替代。
 4. **即时生效**：属性面板的每个编辑控件绑定 `valueChanged` 信号，修改后立即写入数据模型并触发渲染区重绘。
 5. **坐标系**：JSON 中的坐标系原点需要与渲染区的坐标系对齐。考虑到游戏使用 Cocos Creator（Y 轴向上），而 Qt 的 Y 轴向下，渲染时可能需要做 Y 轴翻转（`y_render = height - y_json`），具体需在阶段三实现时验证。

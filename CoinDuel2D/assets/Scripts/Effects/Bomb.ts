@@ -9,6 +9,8 @@ export class Bomb extends Component {
     public pushForce: number = 500;
     /** 硬币父节点（用于遍历） */
     public coinGroup: Node | null = null;
+    /** 场上道具列表（爆炸时销毁范围内的障碍物） */
+    public props: Node[] | null = null;
 
     private _played = false;
 
@@ -36,30 +38,47 @@ export class Bomb extends Component {
         }).start();
     }
 
-    /** 爆炸时对范围内硬币施加径向推力 */
+    /** 爆炸时对范围内硬币施加径向推力，并销毁范围内的障碍物 */
     private _applyExplosion(): void {
-        if (!this.coinGroup) return;
         const bombPos = this.node.worldPosition;
         const r2 = this.pushRadius * this.pushRadius;
 
-        for (const coin of this.coinGroup.children) {
-            const rb = coin.getComponent(RigidBody2D);
-            if (!rb) continue;
-            const coinPos = coin.worldPosition;
-            const dx = coinPos.x - bombPos.x;
-            const dy = coinPos.y - bombPos.y;
-            const dist2 = dx * dx + dy * dy;
-            if (dist2 > r2 || dist2 < 0.001) continue;
+        // 对范围内硬币施加推力
+        if (this.coinGroup) {
+            for (const coin of this.coinGroup.children) {
+                const rb = coin.getComponent(RigidBody2D);
+                if (!rb) continue;
+                const coinPos = coin.worldPosition;
+                const dx = coinPos.x - bombPos.x;
+                const dy = coinPos.y - bombPos.y;
+                const dist2 = dx * dx + dy * dy;
+                if (dist2 > r2 || dist2 < 0.001) continue;
 
-            // 距离越近推力越大（线性衰减）
-            const dist = Math.sqrt(dist2);
-            const strength = 1 - dist / this.pushRadius;
-            const nx = dx / dist;
-            const ny = dy / dist;
-            rb.applyLinearImpulseToCenter(
-                new Vec2(nx * this.pushForce * strength, ny * this.pushForce * strength),
-                true,
-            );
+                // 距离越近推力越大（线性衰减）
+                const dist = Math.sqrt(dist2);
+                const strength = 1 - dist / this.pushRadius;
+                const nx = dx / dist;
+                const ny = dy / dist;
+                rb.applyLinearImpulseToCenter(
+                    new Vec2(nx * this.pushForce * strength, ny * this.pushForce * strength),
+                    true,
+                );
+            }
+        }
+
+        // 销毁范围内的障碍物（Blocker），陷阱（Mud）不受影响
+        if (this.props) {
+            for (let i = this.props.length - 1; i >= 0; i--) {
+                const prop = this.props[i];
+                if (!prop || !prop.isValid) continue;
+                if (prop.name !== 'Blocker') continue;
+                const propPos = prop.worldPosition;
+                const dx = propPos.x - bombPos.x;
+                const dy = propPos.y - bombPos.y;
+                if (dx * dx + dy * dy > r2) continue;
+                prop.destroy();
+                this.props.splice(i, 1);
+            }
         }
     }
 }

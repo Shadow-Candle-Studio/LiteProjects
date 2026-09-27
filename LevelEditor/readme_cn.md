@@ -61,7 +61,7 @@ python main.py
 
 ## JSON 文件格式
 
-关卡以 JSON 格式存储，示例：
+关卡以 JSON 格式存储。所有条目（硬币/障碍物/陷阱）统一存放在 `coins` 数组中，通过 `type` 字段区分。示例：
 
 ```json
 {
@@ -73,19 +73,20 @@ python main.py
     },
     "coins": [
         {
+            "type": "coin",
             "class": 1,
             "x": 100,
             "y": 200
-        }
-    ],
-    "blocks": [
+        },
         {
+            "type": "block",
             "x": 100,
             "y": 100,
             "shape": "circle",
             "radius": 50
         },
         {
+            "type": "block",
             "x": 400,
             "y": 300,
             "shape": "circle",
@@ -94,10 +95,9 @@ python main.py
                 {"x": 400, "y": 300},
                 {"x": 500, "y": 300}
             ]
-        }
-    ],
-    "muds": [
+        },
         {
+            "type": "mud",
             "x": 100,
             "y": 100,
             "shape": "circle",
@@ -117,36 +117,35 @@ python main.py
 | width | int | 桌面宽度（像素） |
 | height | int | 桌面高度（像素） |
 | wall | object | 墙配置 |
-| coins | array | 硬币数组 |
-| blocks | array | 障碍物数组 |
-| muds | array | 陷阱数组 |
+| coins | array | 条目数组（硬币/障碍物/陷阱，按 type 区分） |
 
 #### wall（墙）
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | thickness | int | 墙厚度（像素） |
 
-#### coin（硬币）
+#### coins 条目通用字段
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| class | int | 硬币类型 |
+| type | string | 条目类型：`coin` / `block` / `mud` |
 | x | int | X 坐标 |
 | y | int | Y 坐标 |
 
-#### block（障碍物）
+#### type = coin（硬币）特有字段
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| x | int | X 坐标 |
-| y | int | Y 坐标 |
+| class | int | 硬币类型 |
+
+#### type = block（障碍物）特有字段
+| 字段 | 类型 | 说明 |
+|------|------|------|
 | shape | string | 形状（circle） |
 | radius | int | 半径 |
 | path | array | 运动路径（可选） |
 
-#### mud（陷阱）
+#### type = mud（陷阱）特有字段
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| x | int | X 坐标 |
-| y | int | Y 坐标 |
 | shape | string | 形状（circle） |
 | radius | int | 半径 |
 | friction | float | 摩擦系数 |

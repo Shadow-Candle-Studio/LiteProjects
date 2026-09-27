@@ -1,5 +1,6 @@
 /** 关卡配置数据接口（对应 LevelEditor 导出的 JSON 格式） */
 export interface LevelCoinData {
+    type: 'coin';
     /** 硬币类型（对应 config.json 中 coins 的 key） */
     class: number;
     x: number;
@@ -7,6 +8,7 @@ export interface LevelCoinData {
 }
 
 export interface LevelBlockData {
+    type: 'block';
     x: number;
     y: number;
     shape: string;
@@ -16,6 +18,7 @@ export interface LevelBlockData {
 }
 
 export interface LevelMudData {
+    type: 'mud';
     x: number;
     y: number;
     shape: string;
@@ -23,14 +26,16 @@ export interface LevelMudData {
     friction: number;
 }
 
+/** 关卡条目：通过 type 字段区分硬币/障碍物/陷阱 */
+export type LevelItemData = LevelCoinData | LevelBlockData | LevelMudData;
+
 export interface LevelData {
     id: number;
     width: number;
     height: number;
     wall: { thickness: number };
-    coins: LevelCoinData[];
-    blocks: LevelBlockData[];
-    muds: LevelMudData[];
+    /** 所有条目（硬币/障碍物/陷阱），按 type 字段区分 */
+    coins: LevelItemData[];
 }
 
 export enum LevelState {

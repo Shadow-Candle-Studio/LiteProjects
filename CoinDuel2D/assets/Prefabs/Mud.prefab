@@ -105,12 +105,12 @@
     "_color": {
       "__type__": "cc.Color",
       "r": 255,
-      "g": 7,
-      "b": 7,
-      "a": 64
+      "g": 216,
+      "b": 216,
+      "a": 155
     },
     "_spriteFrame": {
-      "__uuid__": "f732c31e-73f9-40e1-a000-98abf92f5e9f@f9941",
+      "__uuid__": "d4f7c5e2-3819-4d2c-9c4d-e8c05c6a990e@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -141,6 +141,7 @@
       "__id__": 0
     },
     "fileId": "e6EuN8OPZDsIfByZT6Q3RN",
+    "instance": null,
     "targetOverrides": null
   }
 ]

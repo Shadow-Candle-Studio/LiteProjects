@@ -1,54 +1,54 @@
 {
-    "id":1,
-    "width":800,
-    "height":600,
-    "wall":{
-        "thickness":10
+    "id": 1,
+    "width": 800,
+    "height": 600,
+    "wall": {
+        "thickness": 10
     },
-    "coins":[
+    "coins": [
         {
-            "class":1,
-            "x":100,
-            "y":200
-
+            "type": "coin",
+            "class": 1,
+            "x": 100,
+            "y": 200
         },
         {
-            "class":1,
-            "x":300,
-            "y":400
-        }
-    ],
-    "blocks":[
-        {
-            "x":100,
-            "y":100,
-            "shape":"circle",
-            "radius":50
+            "type": "coin",
+            "class": 1,
+            "x": 300,
+            "y": 400
         },
         {
-            "x":400,
-            "y":300,
-            "shape":"circle",
-            "radius":30,
-            "path":[
+            "type": "block",
+            "x": 100,
+            "y": 100,
+            "shape": "circle",
+            "radius": 50
+        },
+        {
+            "type": "block",
+            "x": 400,
+            "y": 300,
+            "shape": "circle",
+            "radius": 30,
+            "path": [
                 {
-                    "x":400,
-                    "y":300
+                    "x": 400,
+                    "y": 300
                 },
                 {
-                    "x":500,
-                    "y":300
+                    "x": 500,
+                    "y": 300
                 }
             ]
-        }
-    ],
-    "muds":[
+        },
         {
-            "x":100,
-            "y":100,
-            "shape":"circle",
-            "radius":50,
-            "friction":0.5
+            "type": "mud",
+            "x": 100,
+            "y": 100,
+            "shape": "circle",
+            "radius": 50,
+            "friction": 0.5
         }
     ]
 }

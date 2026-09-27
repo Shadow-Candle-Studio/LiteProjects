@@ -7,21 +7,22 @@
     },
     "coins": [
         {
+            "type": "coin",
             "class": 1,
             "x": -264,
             "y": 176
         },
         {
+            "type": "coin",
             "class": 1,
             "x": 229,
             "y": 172
         },
         {
+            "type": "coin",
             "class": 1,
             "x": -11,
             "y": -140
         }
-    ],
-    "blocks": [],
-    "muds": []
+    ]
 }
