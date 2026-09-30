@@ -9,6 +9,7 @@ export interface GameLogicConfig {
     mudDamping: number;
     bombPushRadius: number;
     bombPushForce: number;
+    bombMudPushFactor: number;
     aimLineFactor: number;
     idleShowDelay: number;
 }

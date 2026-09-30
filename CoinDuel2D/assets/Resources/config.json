@@ -23,6 +23,7 @@
         "mudDamping": 20,
         "bombPushRadius": 512,
         "bombPushForce": 500000,
+        "bombMudPushFactor": 0.333,
         "aimLineFactor": 7,
         "idleShowDelay": 5
     },

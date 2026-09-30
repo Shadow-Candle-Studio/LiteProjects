@@ -1,4 +1,5 @@
-import { _decorator, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip, Color, Button, director, JsonAsset } from 'cc';
+import { _decorator, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip, Color, director, JsonAsset } from 'cc';
+import { BombCoinMarker } from '../BombCoinMarker';
 import { RoundManager } from '../RoundManager';
 import { GameLogic } from '../GameLogic';
 import { UIManager } from '../UIManager';
@@ -23,6 +24,14 @@ export class GameScene extends Component {
     public gameLogic:GameLogic = null;
     @property(Prefab)
     public coinPrefab:Prefab = null;
+    @property({ type: Prefab, tooltip: "炸弹硬币 prefab（被撞击静止后触发爆炸）" })
+    public bomberPrefab: Prefab = null;
+    @property({ type: Prefab, tooltip: "障碍物 prefab（静态圆盘，硬币碰到会反弹）" })
+    public blockerPrefab: Prefab = null;
+    @property({ type: Prefab, tooltip: "陷阱 prefab（泥潭区域，硬币中心进入后改变摩擦力）" })
+    public mudPrefab: Prefab = null;
+    @property({ type: Prefab, tooltip: "爆炸特效 prefab（播放爆炸动画后自动销毁）" })
+    public explosionPrefab: Prefab = null;
     @property(UIManager)
     public uiManager:UIManager = null;
     @property({ tooltip: "开局使用的硬币 id（config.json 中 coins 的 key，默认为 1）" })
@@ -51,16 +60,6 @@ export class GameScene extends Component {
         if (uiManager) {
             this._debugPanel = uiManager.getChildByName('DebugPanel');
 
-            // 道具调试按钮：点击后从屏幕外飞入障碍物/陷阱，随机落点
-            const items = uiManager.getChildByName('Items');
-            if (items) {
-                const btnBlocker = items.getChildByName('ButtonBlocker');
-                if (btnBlocker) btnBlocker.on(Button.EventType.CLICK, () => this.gameLogic?.spawnBlocker(), this);
-                const btnMud = items.getChildByName('ButtonMud');
-                if (btnMud) btnMud.on(Button.EventType.CLICK, () => this.gameLogic?.spawnMud(), this);
-                const btnBomb = items.getChildByName('ButtonBomb');
-                if (btnBomb) btnBomb.on(Button.EventType.CLICK, () => this.gameLogic?.spawnBomb(), this);
-            }
         }
 
         this.level = 1;
@@ -186,7 +185,6 @@ export class GameScene extends Component {
         // }
 
         this.gameLogic.onGameOver = (duration: number) => {
-            this.uiManager.uiItemsPanel.active = false;
             this.uiManager.uiLevelPanel.active = false;
             this.uiManager.uiScorePanel.active = false;
             this.uiManager.buttonBack.node.active = false;
@@ -221,7 +219,6 @@ export class GameScene extends Component {
     }
 
     private onGameStart(){
-        this.uiManager.uiItemsPanel.active = true;
         this.uiManager.uiLevelPanel.active = true;
         this.uiManager.uiScorePanel.active = true;
         this.uiManager.buttonBack.node.active = true;
@@ -232,6 +229,11 @@ export class GameScene extends Component {
         // 删除现存硬币与场上道具（障碍物/陷阱）
         this.clearCoins();
         this.gameLogic.clearProps();
+
+        // 注入 prefab 到 GameLogic
+        this.gameLogic.blockerPrefab = this.blockerPrefab;
+        this.gameLogic.mudPrefab = this.mudPrefab;
+        this.gameLogic.explosionPrefab = this.explosionPrefab;
 
         // 关卡递增缺口宽度
         const inc = this.tableController.gapWidthIncrement;
@@ -284,6 +286,11 @@ export class GameScene extends Component {
         this.clearCoins();
         this.gameLogic.clearProps();
 
+        // 注入 prefab 到 GameLogic
+        this.gameLogic.blockerPrefab = this.blockerPrefab;
+        this.gameLogic.mudPrefab = this.mudPrefab;
+        this.gameLogic.explosionPrefab = this.explosionPrefab;
+
         // 桌面尺寸
         this.tableController.tableWidth = data.width;
         this.tableController.tableHeight = data.height;
@@ -300,24 +307,16 @@ export class GameScene extends Component {
 
         this.tableController.drawTable();
 
-        // 条目：按 type 字段区分硬币/障碍物/陷阱
-        const radius = this.gameLogic.coinRadius;
+        // 条目：按 type 字段区分硬币/障碍物/陷阱/炸弹硬币
         for (const item of data.coins) {
             if (item.type === 'block') {
                 this.gameLogic.spawnBlockerAt(item.x, item.y, item.radius);
             } else if (item.type === 'mud') {
                 this.gameLogic.spawnMudAt(item.x, item.y, item.radius);
-            } else {
-                const coin = instantiate(this.coinPrefab);
-                this.gameLogic.coinGroup.addChild(coin);
-                coin.setPosition(item.x, item.y, 0);
-                coin.setScale(1, 1, 1);
-                const ut = coin.getComponent(UITransform);
-                if (ut) ut.setContentSize(radius * 2, radius * 2);
-                const cc = coin.getComponent(CircleCollider2D);
-                if (cc) cc.radius = radius;
-                const ctrl = coin.addComponent(CoinController);
-                ctrl.setGameLogic(this.gameLogic);
+            } else if (item.type === 'bomb') {
+                this.gameLogic.spawnBombCoinAt(this.bomberPrefab, item.x, item.y, item.radius);
+            } else if (item.type === 'coin') {
+                this.gameLogic.spawnCoinAt(this.coinPrefab, item.x, item.y);
             }
         }
 
@@ -467,6 +466,8 @@ export class GameScene extends Component {
             loaded++;
             if (loaded < total) return;
             for (const coin of this.gameLogic.coinGroup.children) {
+                // 跳过炸弹硬币（保留 prefab 自带贴图）
+                if (coin.getComponent(BombCoinMarker)) continue;
                 const ctrl = coin.getComponent(CoinController);
                 if (ctrl) {
                     ctrl.setAppearance({
@@ -536,6 +537,7 @@ export class GameScene extends Component {
             this.gameLogic.mudDamping = gameConfig.mudDamping;
             this.gameLogic.bombPushRadius = gameConfig.bombPushRadius;
             this.gameLogic.bombPushForce = gameConfig.bombPushForce;
+            this.gameLogic.bombMudPushFactor = gameConfig.bombMudPushFactor;
             this.gameLogic.aimLineFactor = gameConfig.aimLineFactor;
             this.gameLogic.idleShowDelay = gameConfig.idleShowDelay;
         }

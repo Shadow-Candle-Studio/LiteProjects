@@ -2,10 +2,11 @@
 CoinDuel2D 关卡数据模型
 负责关卡数据的加载、保存和管理
 
-JSON 格式：coins/blocks/muds 合并为单个 coins 数组，通过 type 字段区分：
+JSON 格式：coins/blocks/muds/bombs 合并为单个 coins 数组，通过 type 字段区分：
     {"type": "coin", "class": 1, "x": 0, "y": 0}
     {"type": "block", "x": 0, "y": 0, "shape": "circle", "radius": 30, "path": [...]}
     {"type": "mud", "x": 0, "y": 0, "shape": "circle", "radius": 30, "friction": 0.5}
+    {"type": "bomb", "class": 1, "x": 0, "y": 0, "radius": 32}
 """
 import json
 from dataclasses import dataclass, field
@@ -96,6 +97,23 @@ class MudData:
         )
 
 
+@dataclass
+class BombData:
+    """炸弹硬币数据（被撞击静止后触发爆炸）"""
+    cls: int  # 对应 JSON 中的 "class"（外观类型）
+    x: float
+    y: float
+    radius: float = 32.0
+    type: str = field(default="bomb", init=False)
+
+    def to_dict(self) -> dict:
+        return {"type": "bomb", "class": self.cls, "x": int(self.x), "y": int(self.y), "radius": int(self.radius)}
+
+    @staticmethod
+    def from_dict(data: dict) -> 'BombData':
+        return BombData(cls=data["class"], x=data["x"], y=data["y"], radius=data.get("radius", 32.0))
+
+
 def item_from_dict(data: dict) -> object:
     """根据 type 字段分发构造对应的条目对象"""
     t = data.get("type", "coin")
@@ -103,6 +121,8 @@ def item_from_dict(data: dict) -> object:
         return BlockData.from_dict(data)
     if t == "mud":
         return MudData.from_dict(data)
+    if t == "bomb":
+        return BombData.from_dict(data)
     return CoinData.from_dict(data)
 
 
@@ -129,6 +149,10 @@ class LevelData:
     @property
     def muds(self) -> List[MudData]:
         return [o for o in self.items if isinstance(o, MudData)]
+
+    @property
+    def bombs(self) -> List[BombData]:
+        return [o for o in self.items if isinstance(o, BombData)]
 
     @property
     def file_path(self) -> Optional[str]:
@@ -192,6 +216,10 @@ class LevelData:
     def add_mud(self, mud: MudData) -> None:
         """添加陷阱"""
         self.items.append(mud)
+
+    def add_bomb(self, bomb: BombData) -> None:
+        """添加炸弹硬币"""
+        self.items.append(bomb)
 
     def remove_object(self, obj: object) -> bool:
         """删除对象，返回是否成功"""

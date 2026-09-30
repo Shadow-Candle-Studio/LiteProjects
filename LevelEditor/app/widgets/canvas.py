@@ -18,7 +18,7 @@ from PySide6.QtGui import (
     QAction, QCursor, QPixmap, QImage
 )
 
-from app.models.level_data import LevelData, CoinData, BlockData, MudData, WallData
+from app.models.level_data import LevelData, CoinData, BlockData, MudData, BombData, WallData
 import os
 
 
@@ -26,12 +26,14 @@ import os
 COIN_RADIUS = 32  # 硬币显示半径
 DEFAULT_BLOCK_RADIUS = 32  # 默认障碍物半径
 DEFAULT_MUD_RADIUS = 32  # 默认陷阱半径
+DEFAULT_BOMB_RADIUS = 32  # 默认炸弹硬币半径
 
 # 颜色
 COLOR_TABLE_BG = QColor(34, 139, 34)  # 绿色桌面背景
 COLOR_COIN = QColor(255, 215, 0)  # 金色硬币
 COLOR_BLOCK = QColor(180, 180, 180)  # 浅灰色障碍物（深色背景上更清晰）
 COLOR_MUD = QColor(180, 120, 60)  # 浅棕色陷阱（深色背景上更清晰）
+COLOR_BOMB = QColor(255, 80, 80)  # 红色炸弹硬币
 COLOR_SELECTED = QColor(0, 150, 255)  # 亮蓝色选中边框
 COLOR_BG = QColor(45, 45, 48)  # 深色背景
 
@@ -149,12 +151,14 @@ class Canvas(QGraphicsView):
         # 绘制墙（边框）
         self._draw_wall(level_data)
 
-        # 绘制条目（硬币/障碍物/陷阱，按数据顺序）
+        # 绘制条目（硬币/障碍物/陷阱/炸弹硬币，按数据顺序）
         for item in level_data.items:
             if isinstance(item, BlockData):
                 self._add_block_item(item, w, h)
             elif isinstance(item, MudData):
                 self._add_mud_item(item, w, h)
+            elif isinstance(item, BombData):
+                self._add_bomb_item(item, w, h)
             else:
                 self._add_coin_item(item, w, h)
 
@@ -207,6 +211,21 @@ class Canvas(QGraphicsView):
         item = CanvasItem(mud, qt_x, qt_y, radius, COLOR_MUD, self._on_item_moved)
         self._scene.addItem(item)
         self._items[id(mud)] = item
+
+    def _add_bomb_item(self, bomb: BombData, table_width: int, table_height: int):
+        """添加炸弹硬币到画布"""
+        radius = bomb.radius if bomb.radius > 0 else DEFAULT_BOMB_RADIUS
+        qt_x, qt_y = cocos_to_qt(bomb.x, bomb.y, table_width, table_height)
+        item = CanvasItem(bomb, qt_x, qt_y, radius, COLOR_BOMB, self._on_item_moved)
+        self._scene.addItem(item)
+        self._items[id(bomb)] = item
+
+        # 添加文字标签（显示 class 编号 + 炸弹图标）
+        text_item = self._scene.addText(f"💣{bomb.cls}")
+        text_item.setDefaultTextColor(Qt.white)
+        text_item.setFont(self._get_small_font())
+        text_item.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
+        text_item.setParentItem(item)
 
     def _on_item_moved(self, item: CanvasItem):
         """对象移动完成"""
@@ -303,6 +322,10 @@ class Canvas(QGraphicsView):
         add_mud.triggered.connect(lambda: self._add_object(MudData, scene_pos))
         menu.addAction(add_mud)
 
+        add_bomb = QAction("Add Bomb Coin", self)
+        add_bomb.triggered.connect(lambda: self._add_object(BombData, scene_pos))
+        menu.addAction(add_bomb)
+
         menu.addSeparator()
 
         # 删除选项（仅在选中对象时可用）
@@ -334,6 +357,9 @@ class Canvas(QGraphicsView):
         elif obj_type == MudData:
             obj = MudData(x=cocos_x, y=cocos_y, shape="circle", radius=DEFAULT_MUD_RADIUS, friction=0.5)
             self._level_data.add_mud(obj)
+        elif obj_type == BombData:
+            obj = BombData(cls=1, x=cocos_x, y=cocos_y, radius=DEFAULT_BOMB_RADIUS)
+            self._level_data.add_bomb(obj)
         else:
             return
 

@@ -31,8 +31,6 @@ export class UIManager extends Component {
     public uiRank:UIRank = null;
 
     @property(Node)
-    public uiItemsPanel:Node = null;
-    @property(Node)
     public uiLevelPanel:Node = null;
     @property(Node)
     public uiScorePanel:Node = null;

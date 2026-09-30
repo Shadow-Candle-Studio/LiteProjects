@@ -26,8 +26,17 @@ export interface LevelMudData {
     friction: number;
 }
 
-/** 关卡条目：通过 type 字段区分硬币/障碍物/陷阱 */
-export type LevelItemData = LevelCoinData | LevelBlockData | LevelMudData;
+export interface LevelBombData {
+    type: 'bomb';
+    /** 硬币外观类型（对应 config.json 中 coins 的 key） */
+    class: number;
+    x: number;
+    y: number;
+    radius: number;
+}
+
+/** 关卡条目：通过 type 字段区分硬币/障碍物/陷阱/炸弹硬币 */
+export type LevelItemData = LevelCoinData | LevelBlockData | LevelMudData | LevelBombData;
 
 export interface LevelData {
     id: number;

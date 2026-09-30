@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QIcon
 
-from app.models.level_data import LevelData, CoinData, BlockData, MudData, WallData
+from app.models.level_data import LevelData, CoinData, BlockData, MudData, BombData, WallData
 
 
 class ObjectTree(QTreeWidget):
@@ -61,7 +61,11 @@ class ObjectTree(QTreeWidget):
         muds_group.setData(0, Qt.UserRole, None)
         muds_group.setExpanded(True)
 
-        coin_num = block_num = mud_num = 0
+        bombs_group = QTreeWidgetItem(table_item, [f"Bombs ({len(level_data.bombs)})"])
+        bombs_group.setData(0, Qt.UserRole, None)
+        bombs_group.setExpanded(True)
+
+        coin_num = block_num = mud_num = bomb_num = 0
         for obj in level_data.items:
             if isinstance(obj, BlockData):
                 block_num += 1
@@ -71,6 +75,10 @@ class ObjectTree(QTreeWidget):
                 mud_num += 1
                 info = f"({int(obj.x)}, {int(obj.y)}) r={int(obj.radius)} f={obj.friction}"
                 item = QTreeWidgetItem(muds_group, [f"Mud #{mud_num} {info}"])
+            elif isinstance(obj, BombData):
+                bomb_num += 1
+                info = f"({int(obj.x)}, {int(obj.y)}) r={int(obj.radius)} cls={obj.cls}"
+                item = QTreeWidgetItem(bombs_group, [f"💣Bomb #{bomb_num} {info}"])
             else:
                 coin_num += 1
                 item = QTreeWidgetItem(coins_group, [f"Coin #{coin_num} ({int(obj.x)}, {int(obj.y)})"])

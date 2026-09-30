@@ -53,6 +53,13 @@
             "shape": "circle",
             "radius": 32,
             "friction": 0.5
+        },
+        {
+            "type": "bomb",
+            "class": 1,
+            "x": -129,
+            "y": -30,
+            "radius": 32
         }
     ]
 }
