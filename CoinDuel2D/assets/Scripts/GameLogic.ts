@@ -385,7 +385,11 @@ export class GameLogic extends Component {
             SoundManager.instance.playCollisionCoin();
         }
 
+        // 当发射硬币发生二次碰撞时，播放音效
         this.coinHitCount++;
+        if (this.coinHitCount == 2){
+            SoundManager.instance.playSecondaryCollision();
+        }
 
         this.onCoinHitByActiveShot(otherNode);
     }

@@ -61,4 +61,84 @@ export class RoundManager extends Component {
 
         return positions;
     }
+
+    /**
+     * 为天梯模式生成随机道具位置（障碍物/陷阱/炸弹硬币）
+     * - 与硬币、围墙、已放置道具保持不重叠
+     * - 放不下时跳过（不报错）
+     */
+    public generateRandomProps(
+        tableWidth: number,
+        tableHeight: number,
+        wallThickness: number,
+        coinRadius: number,
+        coinPositions: Vec3[],
+        level: number,
+    ): { type: 'blocker' | 'mud' | 'bomb'; x: number; y: number; radius: number }[] {
+        // 难度曲线：第 1 关 3 个，每关 +1
+        const itemCount = level + 2;
+        if (itemCount <= 0) return [];
+
+        // 种类解锁：blocker >= 1, mud >= 2, bomb >= 3
+        const pool: ('blocker' | 'mud' | 'bomb')[] = [];
+        if (level >= 1) pool.push('blocker');
+        if (level >= 2) pool.push('mud');
+        if (level >= 3) pool.push('bomb');
+        if (pool.length === 0) return [];
+
+        // 物品类型对应的半径
+        const radiusMap = { blocker: 32, mud: 64, bomb: coinRadius };
+
+        // 已占用位置：硬币 + 已放置道具（用 {x, y, r} 表示碰撞圆）
+        const occupied: { x: number; y: number; r: number }[] = [];
+        for (const pos of coinPositions) {
+            occupied.push({ x: pos.x, y: pos.y, r: coinRadius });
+        }
+
+        const GAP = 8; // 物品之间、物品与硬币之间的最小间隙
+        const margin = wallThickness + GAP;
+        const halfW = tableWidth / 2;
+        const halfH = tableHeight / 2;
+        const maxAttempts = 100;
+
+        const result: { type: 'blocker' | 'mud' | 'bomb'; x: number; y: number; radius: number }[] = [];
+
+        for (let i = 0; i < itemCount; i++) {
+            // 随机选类型
+            const type = pool[Math.floor(Math.random() * pool.length)];
+            const r = radiusMap[type];
+
+            // 尝试找一个不重叠的位置
+            let placed = false;
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                const x = (Math.random() * 2 - 1) * (halfW - margin - r);
+                const y = (Math.random() * 2 - 1) * (halfH - margin - r);
+
+                // 检查与所有已占用位置是否重叠
+                let overlap = false;
+                for (const occ of occupied) {
+                    const dx = x - occ.x;
+                    const dy = y - occ.y;
+                    const minDist = r + occ.r + GAP;
+                    if (dx * dx + dy * dy < minDist * minDist) {
+                        overlap = true;
+                        break;
+                    }
+                }
+
+                if (!overlap) {
+                    occupied.push({ x, y, r });
+                    result.push({ type, x, y, radius: r });
+                    placed = true;
+                    break;
+                }
+            }
+
+            if (!placed) {
+                console.log(`[RoundManager] 第 ${i + 1} 个道具（${type}）放置失败，跳过`);
+            }
+        }
+
+        return result;
+    }
 }

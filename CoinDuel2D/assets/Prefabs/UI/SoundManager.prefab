@@ -102,6 +102,10 @@
       "__uuid__": "856bf89b-f358-441d-b985-487eaf8eaf5d",
       "__expectedType__": "cc.AudioClip"
     },
+    "secondaryCollision": {
+      "__uuid__": "9cd0865a-e63c-441f-822c-038870ebc6c4",
+      "__expectedType__": "cc.AudioClip"
+    },
     "bgmFadeDuration": 0.5,
     "bgmTargetVolume": 0.7,
     "_id": ""

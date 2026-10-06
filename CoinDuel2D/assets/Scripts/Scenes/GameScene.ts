@@ -154,6 +154,10 @@ export class GameScene extends Component {
             this.uiManager.uiFail.onBtnRetryClick = ()=>{
                 // 如果是天梯模式，直接退回第一关
                 if (LevelManager.getCurrent() === null) {
+                    this.level = 1;
+                    this.gameLogic.score = 0;
+                    this.uiManager.setLevel(this.level);
+                    this.uiManager.setScore(0);
                     this.startNewRound();
                 }else{
                     // 如果是关卡模式，重新加载当前关卡
@@ -172,8 +176,15 @@ export class GameScene extends Component {
         this.uiManager.onBack = () => {
             this.uiManager.uiConfirm.open("确定要退出游戏吗？", (yes)=>{
                 if (yes){
-                    LevelManager.clear();
-                    director.loadScene('levels');
+                    if (LevelManager.getCurrent() === null) {
+                        // 如果是天梯模式，退出后回到首页
+                        director.loadScene('main');
+                    }else{
+                        // 如果是关卡模式，退出后回到关卡选择
+                        LevelManager.clear();
+                        director.loadScene('levels');
+                    }
+
                 }
             });
         };
@@ -224,7 +235,7 @@ export class GameScene extends Component {
         this.uiManager.buttonBack.node.active = true;
     }
 
-    // 开始新的一局
+    // 开始新的一局（天梯模式）
     private startNewRound(){
         // 删除现存硬币与场上道具（障碍物/陷阱）
         this.clearCoins();
@@ -272,6 +283,26 @@ export class GameScene extends Component {
             let ctrl = coin.addComponent(CoinController);
             ctrl.setGameLogic(this.gameLogic);
         }
+
+        // 生成随机道具（天梯模式，level >= 2 时）
+        const props = this.roundManager.generateRandomProps(
+            this.tableController.tableWidth,
+            this.tableController.tableHeight,
+            this.gameLogic.wallThickness,
+            this.gameLogic.coinRadius,
+            coinPositions,
+            this.level,
+        );
+        for (const prop of props) {
+            if (prop.type === 'blocker') {
+                this.gameLogic.spawnBlockerAt(prop.x, prop.y, prop.radius);
+            } else if (prop.type === 'mud') {
+                this.gameLogic.spawnMudAt(prop.x, prop.y, prop.radius);
+            } else if (prop.type === 'bomb') {
+                this.gameLogic.spawnBombCoinAt(this.bomberPrefab, prop.x, prop.y, prop.radius);
+            }
+        }
+
         this.gameLogic.waitingPlayerOperation();
 
         // 开局按指定 coin id 应用外观（配置已加载时）

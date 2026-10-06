@@ -34,6 +34,8 @@ export class SoundManager extends Component {
 
     @property(AudioClip)
     public explosion: AudioClip = null;
+    @property(AudioClip)
+    public secondaryCollision: AudioClip = null;
 
     @property({ tooltip: 'BGM 淡入淡出时长（秒）' })
     public bgmFadeDuration: number = 0.5;
@@ -86,6 +88,12 @@ export class SoundManager extends Component {
     public playCollisionCoin() {
         if (this.collisionCoin && this.audioSource) {
             this.audioSource.playOneShot(this.collisionCoin);
+        }
+    }
+
+    public playSecondaryCollision() {
+        if (this.secondaryCollision && this.audioSource) {
+            this.audioSource.playOneShot(this.secondaryCollision);
         }
     }
 

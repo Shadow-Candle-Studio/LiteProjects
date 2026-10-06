@@ -524,8 +524,8 @@ export class CoinController extends Component {
         const rawDy = mousePos.y - this._dragStartPos.y;
         this._clampedDragVec = this._calcClampedDrag(rawDx, rawDy);
         this._updateDragArrow(this._clampedDragVec.x, this._clampedDragVec.y);
-        // 瞄准线：发射方向与拖拽方向相反
-        this._gameLogic?.drawAimLine(this.node.position.x, this.node.position.y, -rawDx, -rawDy);
+        // 瞄准线：发射方向与拖拽方向相反（使用限位后的向量，与发射力量一致）
+        this._gameLogic?.drawAimLine(this.node.position.x, this.node.position.y, -this._clampedDragVec.x, -this._clampedDragVec.y);
     }
 
     /** 绘制拖拽引导线（经墙面限位后更新箭头） */
@@ -535,8 +535,8 @@ export class CoinController extends Component {
         const rawDy = cur.y - this._dragStartPos.y;
         this._clampedDragVec = this._calcClampedDrag(rawDx, rawDy);
         this._updateDragArrow(this._clampedDragVec.x, this._clampedDragVec.y);
-        // 瞄准线：发射方向与拖拽方向相反
-        this._gameLogic?.drawAimLine(this.node.position.x, this.node.position.y, -rawDx, -rawDy);
+        // 瞄准线：发射方向与拖拽方向相反（使用限位后的向量，与发射力量一致）
+        this._gameLogic?.drawAimLine(this.node.position.x, this.node.position.y, -this._clampedDragVec.x, -this._clampedDragVec.y);
     }
 
     private _onPointerUp(_event: EventTouch): void {
