@@ -1,5 +1,6 @@
-import { _decorator, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip, Color, director, JsonAsset } from 'cc';
+import { _decorator, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip, Color, director, JsonAsset, Label } from 'cc';
 import { BombCoinMarker } from '../BombCoinMarker';
+import { I18n } from '../I18n';
 import { RoundManager } from '../RoundManager';
 import { GameLogic } from '../GameLogic';
 import { UIManager } from '../UIManager';
@@ -76,24 +77,27 @@ export class GameScene extends Component {
         // 启动时读取全局 config.json 配置
         this._loadCoinsConfig();
 
-        // 加载游戏参数配置
-        ConfigManager.load((err) => {
-            if (!err) {
-                this._applyGameConfig();
-            }
+        // 加载多语言翻译，完成后翻译场景 Label 并加载游戏配置
+        I18n.init(() => {
+            this._translateLabels();
+            ConfigManager.load((err) => {
+                if (!err) {
+                    this._applyGameConfig();
+                }
 
-            // 检查是否有从关卡选择传入的配置
-            const levelData = LevelManager.getCurrent();
-            if (levelData) {
-                // 闯关模式
-                this._levelFiles = LevelManager.getLevelFiles();
-                this._levelIndex = LevelManager.getLevelIndex();
-                this._initFromLevel(levelData);
-            } else {
-                // 天梯模式
-                LevelManager.clear();
-                this.startNewRound();
-            }
+                // 检查是否有从关卡选择传入的配置
+                const levelData = LevelManager.getCurrent();
+                if (levelData) {
+                    // 闯关模式
+                    this._levelFiles = LevelManager.getLevelFiles();
+                    this._levelIndex = LevelManager.getLevelIndex();
+                    this._initFromLevel(levelData);
+                } else {
+                    // 天梯模式
+                    LevelManager.clear();
+                    this.startNewRound();
+                }
+            });
         });
 
         // this.uiManager.onRetry = ()=>{
@@ -174,7 +178,7 @@ export class GameScene extends Component {
         }
 
         this.uiManager.onBack = () => {
-            this.uiManager.uiConfirm.open("确定要退出游戏吗？", (yes)=>{
+            this.uiManager.uiConfirm.open(I18n.t('confirm_quit'), (yes)=>{
                 if (yes){
                     if (LevelManager.getCurrent() === null) {
                         // 如果是天梯模式，退出后回到首页
@@ -385,7 +389,9 @@ export class GameScene extends Component {
         } else {
             // 最后一关通关，显示最终胜利
             this.gameLogic.enabled = false;
-            this.uiManager.showVictory(true);
+            //this.uiManager.uiwin.show(this._levelFiles.length, this.gameLogic.score, 0);
+            this.uiManager.uiWin.show(this.level, this.gameLogic.score, 0);
+            this.uiManager.uiWin.setNextEnabled(false);
         }
     }
 
@@ -611,6 +617,47 @@ export class GameScene extends Component {
         }
 
         console.log('[GameScene] 游戏配置已应用');
+    }
+
+    /** 翻译场景中所有硬编码中文 Label */
+    private _translateLabels(): void {
+        const scene = director.getScene();
+        if (!scene) return;
+
+        // 中文 → i18n key 的映射表
+        const textMap: Record<string, string> = {
+            '闯关模式': 'main_level_mode',
+            '天梯模式': 'main_ladder_mode',
+            '对战模式': 'main_pvp_mode',
+            '关卡': 'game_level',
+            '得分': 'game_score',
+            '耗时': 'game_time',
+            '退出': 'game_exit',
+            '重试': 'game_retry',
+            '下一关': 'game_next_level',
+            '恭喜过关！': 'game_level_complete',
+            '恭喜过关': 'game_level_complete',
+            '排行榜': 'game_leaderboard',
+            '排名': 'game_rank',
+            '按Q键打开和关闭调试面板': 'game_debug_hint',
+            '确定要退出吗？': 'ui_confirm_quit',
+            '确定': 'ui_confirm',
+            '取消': 'ui_cancel',
+        };
+
+        const walk = (node: Node) => {
+            const label = node.getComponent(Label);
+            if (label) {
+                const key = textMap[label.string];
+                if (key) {
+                    label.string = I18n.t(key);
+                }
+            }
+            for (const child of node.children) {
+                walk(child);
+            }
+        };
+        walk(scene);
     }
 }
 

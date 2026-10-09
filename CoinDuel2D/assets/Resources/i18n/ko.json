@@ -1,0 +1,31 @@
+{
+    "final_victory": "최종 승리!",
+    "confirm_quit": "게임을 종료하시겠습니까?",
+    "pvp_not_supported": "대전 모드는 아직 지원되지 않습니다",
+    "debug_coin_radius": "코인 반지름",
+    "debug_speed_threshold": "정지 속도 임계값",
+    "debug_coin_damping": "감쇠",
+
+    "main_level_mode": "스테이지 모드",
+    "main_ladder_mode": "래더 모드",
+    "main_pvp_mode": "대전 모드",
+
+    "pvp_start_match": "매치 시작",
+    "pvp_create_room": "방 만들기",
+    "pvp_join_room": "방 참가",
+
+    "game_level": "스테이지",
+    "game_score": "점수",
+    "game_time": "시간",
+    "game_exit": "나가기",
+    "game_retry": "재시도",
+    "game_next_level": "다음 스테이지",
+    "game_level_complete": "스테이지 클리어!",
+    "game_leaderboard": "리더보드",
+    "game_rank": "순위",
+    "game_debug_hint": "Q키로 디버그 패널 열기/닫기",
+
+    "ui_confirm_quit": "나가시겠습니까?",
+    "ui_confirm": "확인",
+    "ui_cancel": "취소"
+}

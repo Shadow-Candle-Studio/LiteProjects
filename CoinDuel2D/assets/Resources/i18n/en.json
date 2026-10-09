@@ -1,0 +1,31 @@
+{
+    "final_victory": "Final Victory!",
+    "confirm_quit": "Are you sure you want to quit?",
+    "pvp_not_supported": "PvP mode is not supported yet",
+    "debug_coin_radius": "Coin Radius",
+    "debug_speed_threshold": "Speed Threshold",
+    "debug_coin_damping": "Damping",
+
+    "main_level_mode": "Level Mode",
+    "main_ladder_mode": "Ladder Mode",
+    "main_pvp_mode": "PvP Mode",
+
+    "pvp_start_match": "Start Match",
+    "pvp_create_room": "Create Room",
+    "pvp_join_room": "Join Room",
+
+    "game_level": "Level",
+    "game_score": "Score",
+    "game_time": "Time",
+    "game_exit": "Exit",
+    "game_retry": "Retry",
+    "game_next_level": "Next Level",
+    "game_level_complete": "Level Complete!",
+    "game_leaderboard": "Leaderboard",
+    "game_rank": "Rank",
+    "game_debug_hint": "Press Q to toggle debug panel",
+
+    "ui_confirm_quit": "Are you sure you want to quit?",
+    "ui_confirm": "Confirm",
+    "ui_cancel": "Cancel"
+}

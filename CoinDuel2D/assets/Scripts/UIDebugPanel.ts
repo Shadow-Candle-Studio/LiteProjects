@@ -1,5 +1,6 @@
 import { _decorator, Component, Node, EditBox, log, RigidBody2D } from 'cc';
 import { GameLogic } from './GameLogic';
+import { I18n } from './I18n';
 const { ccclass, property } = _decorator;
 
 @ccclass('UIDebugPanel')
@@ -28,19 +29,19 @@ export class UIDebugPanel extends Component {
         const params: { key: string; label: string; get: () => number; set: (v: number) => void }[] = [
             {
                 key: 'coinRadius',
-                label: '硬币半径',
+                label: I18n.t('debug_coin_radius'),
                 get: () => this.gameLogic.coinRadius,
                 set: v => { this.gameLogic.coinRadius = v; this.gameLogic.syncCoinRadius(); },
             },
             {
                 key: 'speedThreshold',
-                label: '静止速度阈值',
+                label: I18n.t('debug_speed_threshold'),
                 get: () => this.gameLogic.speedThreshold,
                 set: v => { this.gameLogic.speedThreshold = v; },
             },
             {
                 key: 'coinDamping',
-                label: '滑动阻尼',
+                label: I18n.t('debug_coin_damping'),
                 get: () => this.gameLogic.coinDamping,
                 set: v => {
                     this.gameLogic.coinDamping = v;

@@ -1,6 +1,7 @@
-import { _decorator, Button, Component, director, Node } from 'cc';
+import { _decorator, Button, Component, director, Node, Label } from 'cc';
 import { UIMessageBox } from '../UI/UIMessageBox';
 import { SoundManager } from '../SoundManager';
+import { I18n } from '../I18n';
 const { ccclass, property } = _decorator;
 
 @ccclass('PVPScene')
@@ -27,10 +28,39 @@ export class PVPScene extends Component {
     }
 
     start(){
-        this.messageBox.open("暂不支持对战模式", () => {
-            director.loadScene('main');
+        I18n.init(() => {
+            this._translateLabels();
+            this.messageBox.open(I18n.t('pvp_not_supported'), () => {
+                director.loadScene('main');
+            });
         });
         SoundManager.instance.stopBGM();
+    }
+
+    /** 翻译 PVP 场景中的 Label */
+    private _translateLabels(): void {
+        const scene = director.getScene();
+        if (!scene) return;
+
+        const textMap: Record<string, string> = {
+            '开始匹配': 'pvp_start_match',
+            '创建房间': 'pvp_create_room',
+            '加入房间': 'pvp_join_room',
+        };
+
+        const walk = (node: Node) => {
+            const label = node.getComponent(Label);
+            if (label) {
+                const key = textMap[label.string];
+                if (key) {
+                    label.string = I18n.t(key);
+                }
+            }
+            for (const child of node.children) {
+                walk(child);
+            }
+        };
+        walk(scene);
     }
 }
 

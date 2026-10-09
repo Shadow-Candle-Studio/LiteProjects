@@ -1,0 +1,31 @@
+{
+    "final_victory": "最終勝利！",
+    "confirm_quit": "確定要退出遊戲嗎？",
+    "pvp_not_supported": "暫不支持對戰模式",
+    "debug_coin_radius": "硬幣半徑",
+    "debug_speed_threshold": "靜止速度閾值",
+    "debug_coin_damping": "滑動阻尼",
+
+    "main_level_mode": "闖關模式",
+    "main_ladder_mode": "天梯模式",
+    "main_pvp_mode": "對戰模式",
+
+    "pvp_start_match": "開始匹配",
+    "pvp_create_room": "創建房間",
+    "pvp_join_room": "加入房間",
+
+    "game_level": "關卡",
+    "game_score": "得分",
+    "game_time": "耗時",
+    "game_exit": "退出",
+    "game_retry": "重試",
+    "game_next_level": "下一關",
+    "game_level_complete": "恭喜過關！",
+    "game_leaderboard": "排行榜",
+    "game_rank": "排名",
+    "game_debug_hint": "按Q鍵打開和關閉調試面板",
+
+    "ui_confirm_quit": "確定要退出嗎？",
+    "ui_confirm": "確定",
+    "ui_cancel": "取消"
+}

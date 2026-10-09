@@ -1,0 +1,31 @@
+{
+    "final_victory": "最終勝利！",
+    "confirm_quit": "ゲームを終了しますか？",
+    "pvp_not_supported": "対戦モードはまだサポートされていません",
+    "debug_coin_radius": "コイン半径",
+    "debug_speed_threshold": "停止速度しきい値",
+    "debug_coin_damping": "減衰",
+
+    "main_level_mode": "ステージモード",
+    "main_ladder_mode": "ラダーモード",
+    "main_pvp_mode": "対戦モード",
+
+    "pvp_start_match": "マッチ開始",
+    "pvp_create_room": "ルーム作成",
+    "pvp_join_room": "ルーム参加",
+
+    "game_level": "ステージ",
+    "game_score": "スコア",
+    "game_time": "時間",
+    "game_exit": "退出",
+    "game_retry": "リトライ",
+    "game_next_level": "次のステージ",
+    "game_level_complete": "ステージクリア！",
+    "game_leaderboard": "ランキング",
+    "game_rank": "順位",
+    "game_debug_hint": "Qキーでデバッグパネルの表示/非表示",
+
+    "ui_confirm_quit": "退出してもよろしいですか？",
+    "ui_confirm": "確認",
+    "ui_cancel": "キャンセル"
+}
