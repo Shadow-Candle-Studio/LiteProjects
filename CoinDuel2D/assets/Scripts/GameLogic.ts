@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec2, Vec3, Color, Sprite, SpriteFrame, Texture2D, RigidBody2D, ERigidBody2DType, PhysicsSystem2D, Contact2DType, Collider2D, UITransform, CircleCollider2D, AnimationComponent, Camera, EventMouse, EventTouch, Prefab, instantiate, tween, Tween } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3, Color, Sprite, SpriteFrame, Texture2D, RigidBody2D, ERigidBody2DType, PhysicsSystem2D, Contact2DType, Collider2D, UITransform, CircleCollider2D, AnimationComponent, Camera, EventMouse, EventTouch, Prefab, instantiate } from 'cc';
 import { Bomb } from './Effects/Bomb';
 import { BombCoinMarker } from './BombCoinMarker';
 import { MudController } from './Effects/MudController';
@@ -6,7 +6,7 @@ import { CoinController } from './CoinController';
 import { HitEffectManager } from './HitEffectManager';
 import { Leaderboard } from './Leaderboard';
 import { SoundManager } from './SoundManager';
-import { UIManager } from './UIManager';
+import { TutorialManager } from './TutorialManager';
 const { ccclass, property } = _decorator;
 
 enum GamePhase {
@@ -75,13 +75,10 @@ export class GameLogic extends Component {
 
     private _currentPhase: GamePhase = GamePhase.WAITING_PLAYER;
 
-    private static readonly _tagClickNode = 1;
-
-    /** 当前游戏阶段，切换时自动清空空闲计时器并隐藏点击提示 */
+    /** 当前游戏阶段，切换时重置闲置计时 */
     private set currentPhase(value: GamePhase) {
         this._currentPhase = value;
-        this._idleTimer = 0;
-        this._hideClickNode();
+        this.tutorialManager?.resetIdleTimer();
     }
 
     private get currentPhase(): GamePhase {
@@ -128,21 +125,17 @@ export class GameLogic extends Component {
     /** 慢动作开始时间（毫秒） */
     private _slowMotionStartTime: number = 0;
 
-    // ── 空闲提示（clickNode） ──
-    /** 闲置超过此时间（秒）后显示 clickNode */
-    @property({ tooltip: "闲置多久后显示点击提示（秒）" })
-    public idleShowDelay: number = 5;
-    @property(UIManager)
-    public uiManager: UIManager | null = null;
+    // ── 教程管理器 ──
+    /** 教程管理器引用（由 GameScene 注入，可为 null） */
+    public tutorialManager: TutorialManager | null = null;
 
-    /** 空闲计时器（秒） */
-    private _idleTimer: number = 0;
-
-    /** clickNode 是否正在显示（避免每帧重复调用） */
-    private _isClickNodeShowing: boolean = false;
-
-    /** 是否有硬币正在被拖拽（由 CoinController 设置），拖拽期间暂停空闲计时 */
-    public isDragging: boolean = false;
+    /** 教程模式下是否允许拖动这枚硬币 */
+    public canLaunchCoin(coin: Node): boolean {
+        if (this.tutorialManager?.isActive()) {
+            return this.tutorialManager.onCoinDragStart(coin);
+        }
+        return true;
+    }
 
     /** 慢动作最长持续毫秒数 */
     private readonly _slowMotionMaxDuration: number = 3000;
@@ -358,6 +351,7 @@ export class GameLogic extends Component {
         if (hitBomb) {
             this.coinHitCount++;
             this.resetIdleTimer();
+            this.tutorialManager?.onCoinHit(otherNode);
             return;
         }
 
@@ -392,6 +386,7 @@ export class GameLogic extends Component {
         }
 
         this.onCoinHitByActiveShot(otherNode);
+        this.tutorialManager?.onCoinHit(otherNode);
     }
 
     // ── 供 HitEffectManager 调用的公开桥接方法 ──
@@ -622,13 +617,7 @@ export class GameLogic extends Component {
         // 4. 摄像机跟踪：发射中跟随硬币，否则平滑回到原始位置
         this._updateCamera(deltaTime);
 
-        // 5. 空闲提示：玩家长时间无操作时显示 clickNode
-        if (this.currentPhase === GamePhase.WAITING_PLAYER && !this.isDragging && !this._isClickNodeShowing) {
-            this._idleTimer += deltaTime;
-            if (this._idleTimer >= this.idleShowDelay) {
-                this._showClickNode();
-            }
-        }
+        // 5. 空闲提示：由 TutorialManager 处理
 
         // 5. 摄像机还原后，启用待命的下一次击打
         if (this._pendingLockedCoin && this.hitEffectManager?.isCameraAtRest) {
@@ -917,6 +906,13 @@ export class GameLogic extends Component {
     private processResult() {
         console.log(">>> 物理静止，开始结算逻辑 <<<");
 
+        // 教程模式：验证结果，返回 false 表示教程已处理（重置位置），不执行正常结算
+        if (this.tutorialManager?.isActive()) {
+            if (!this.tutorialManager.onTurnSettled()) {
+                return;
+            }
+        }
+
         // 1. 有任意硬币掉落 → 游戏结束
         if (this.coinFallCount > 0) {
             this._handleGameOver();
@@ -1074,97 +1070,13 @@ export class GameLogic extends Component {
         this.coinHitCount = 0;
         this.coinFallCount = 0;
         this._setCoinsInteraction(true);
-        // 重置空闲计时器，隐藏 clickNode
-        this._idleTimer = 0;
-        this._hideClickNode();
+        // 重置空闲计时器
+        this.tutorialManager?.resetIdleTimer();
     }
 
-    /** 重置空闲计时器（玩家有任何操作时调用） */
+    /** 重置空闲计时器（由 TutorialManager 代理） */
     public resetIdleTimer(): void {
-        this._idleTimer = 0;
-        this._hideClickNode();
-    }
-
-    /** 获取目标硬币位置（有锁定硬币时用锁定的，否则用第一个） */
-    private _getClickTargetPos(): Vec3 | null {
-        const target = this._lockedCoin || this.coinGroup.children[0];
-        if (!target || !target.isValid) return null;
-        return target.position;
-    }
-
-    /** 选择第一个硬币作为源，找离它最近的目标硬币，返回拖拽方向提示 */
-    private _getGestureHint(): { source: Node; direction: Vec3 } | null {
-        const coins = this.coinGroup.children;
-        if (coins.length < 2) return null;
-
-        // 优先使用指定的发射硬币，否则使用第一个硬币
-        const source = (this._lockedCoin && this._lockedCoin.isValid) ? this._lockedCoin : coins[0];
-        if (!source || !source.isValid) return null;
-
-        // 找到离源硬币最近的目标硬币
-        let closestTarget: Node | null = null;
-        let minDist = Infinity;
-        for (const coin of coins) {
-            if (!coin || !coin.isValid || coin === source) continue;
-            const dist = Vec3.distance(source.position, coin.position);
-            if (dist < minDist) {
-                minDist = dist;
-                closestTarget = coin;
-            }
-        }
-
-        if (!closestTarget) return null;
-
-        // 计算从源指向远离目标的方向（用户应拖拽的方向）
-        const dir = new Vec3();
-        Vec3.subtract(dir, source.position, closestTarget.position);
-        dir.normalize();
-
-        return { source, direction: dir };
-    }
-
-    /** 显示 clickNode 手势提示：选择硬币，朝目标反方向滑动 */
-    private _showClickNode(): void {
-        if (!this.uiManager.clickNode || !this.uiManager.clickNode.isValid) return;
-
-        const hint = this._getGestureHint();
-        if (!hint) { this.uiManager.clickNode.active = false; return; }
-
-        const { source, direction } = hint;
-        const startPos = new Vec3(source.position.x, source.position.y, 0);
-        const endPos = new Vec3(
-            startPos.x + direction.x * 80,
-            startPos.y + direction.y * 80,
-            0
-        );
-
-        // 设置起始位置并激活
-        this.uiManager.clickNode.setPosition(startPos);
-        this.uiManager.clickNode.active = true;
-        this._isClickNodeShowing = true;
-
-        // 创建循环滑动手势动画
-        //tween(this.uiManager.clickNode).stop();
-        Tween.stopAllByTag(GameLogic._tagClickNode);
-        tween(this.uiManager.clickNode)
-            .tag(GameLogic._tagClickNode)
-            .call(() => {
-                this.uiManager.clickNode.setPosition(startPos);
-            })
-            .to(0.5, { position: endPos }, { easing: 'linear' })
-            .delay(0.5)
-            .union()           // 合并为一个序列
-            .repeatForever()   // 无限循环
-            .start();
-    }
-
-    /** 隐藏 clickNode */
-    private _hideClickNode(): void {
-        if (this.uiManager.clickNode && this.uiManager.clickNode.isValid) {
-            Tween.stopAllByTag(GameLogic._tagClickNode);
-            this.uiManager.clickNode.active = false;
-        }
-        this._isClickNodeShowing = false;
+        this.tutorialManager?.resetIdleTimer();
     }
 
     /** 启用/禁用所有硬币的交互 */

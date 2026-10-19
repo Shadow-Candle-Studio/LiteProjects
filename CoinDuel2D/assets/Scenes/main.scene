@@ -793,7 +793,7 @@
   },
   {
     "__type__": "cc.Node",
-    "_name": "ButtonTop",
+    "_name": "ButtonLadder",
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
@@ -1498,7 +1498,7 @@
     "btnLevels": {
       "__id__": 18
     },
-    "btnTop": {
+    "btnLadder": {
       "__id__": 25
     },
     "btnPVP": {

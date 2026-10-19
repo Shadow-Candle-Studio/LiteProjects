@@ -27,5 +27,12 @@
 
     "ui_confirm_quit": "退出してもよろしいですか？",
     "ui_confirm": "確認",
-    "ui_cancel": "キャンセル"
+    "ui_cancel": "キャンセル",
+
+    "tutorial_step_1": "左のコインをドラッグして、右上のコインを打ちましょう",
+    "tutorial_step_2": "素晴らしい！続けてコインをドラッグして、下のコインを打ちましょう",
+    "tutorial_wrong_coin": "指定されたコインをドラッグしてください",
+    "tutorial_miss": "目標に当たりませんでした。もう一度挑戦しましょう",
+    "tutorial_skip": "チュートリアルをスキップ",
+    "tutorial_complete": "チュートリアル完了！"
 }

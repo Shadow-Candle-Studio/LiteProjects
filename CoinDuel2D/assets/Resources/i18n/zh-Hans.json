@@ -27,5 +27,12 @@
 
     "ui_confirm_quit": "确定要退出吗？",
     "ui_confirm": "确定",
-    "ui_cancel": "取消"
+    "ui_cancel": "取消",
+
+    "tutorial_step_1": "拖动左边的硬币，击打右上方的硬币",
+    "tutorial_step_2": "很好！继续拖动硬币，击打下方的硬币",
+    "tutorial_wrong_coin": "请拖动指定的硬币",
+    "tutorial_miss": "没有击中目标，再来一次",
+    "tutorial_skip": "跳过新手教程",
+    "tutorial_complete": "教程完成！"
 }

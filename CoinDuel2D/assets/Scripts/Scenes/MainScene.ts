@@ -2,6 +2,7 @@ import { _decorator, Button, Component, director, Node, Label } from 'cc';
 import { LevelManager } from '../LevelManager';
 import { SoundManager } from '../SoundManager';
 import { I18n } from '../I18n';
+import { GameMode, GameScene } from './GameScene';
 const { ccclass, property } = _decorator;
 
 @ccclass('MainScene')
@@ -9,15 +10,17 @@ export class MainScene extends Component {
     @property(Button)
     public btnLevels: Button | null = null;
     @property(Button)
-    public btnTop: Button | null = null;
+    public btnLadder: Button | null = null;
     @property(Button)
     public btnPVP: Button | null = null;
 
     start() {
         this.btnLevels.node.on(Button.EventType.CLICK, () => {
+            GameScene.mode = GameMode.Level;
             director.loadScene('levels');
         }, this);
-        this.btnTop.node.on(Button.EventType.CLICK, () => {
+        this.btnLadder.node.on(Button.EventType.CLICK, () => {
+            GameScene.mode = GameMode.Ladder;
             LevelManager.setCurrent(null);
             director.loadScene('game');
         }, this);

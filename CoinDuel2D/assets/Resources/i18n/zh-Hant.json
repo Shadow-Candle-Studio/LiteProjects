@@ -27,5 +27,12 @@
 
     "ui_confirm_quit": "確定要退出嗎？",
     "ui_confirm": "確定",
-    "ui_cancel": "取消"
+    "ui_cancel": "取消",
+
+    "tutorial_step_1": "拖動左邊的硬幣，擊打右上方的硬幣",
+    "tutorial_step_2": "很好！繼續拖動硬幣，擊打下方的硬幣",
+    "tutorial_wrong_coin": "請拖動指定的硬幣",
+    "tutorial_miss": "沒有擊中目標，再來一次",
+    "tutorial_skip": "跳過新手教程",
+    "tutorial_complete": "教程完成！"
 }

@@ -250,6 +250,8 @@ export class CoinController extends Component {
 
     private _onPointerDown(event: EventTouch): void {
         if (!this._allowedOperation) return;
+        // 教程模式：验证是否允许拖动这枚硬币
+        if (!this._gameLogic?.canLaunchCoin(this.node)) return;
         // 已经有硬币在拖拽中，不再响应（防止 Cocos Creator 在鼠标经过其他节点时误触 MOUSE_DOWN）
         if (CoinController._anyDragging) return;
 
@@ -278,7 +280,7 @@ export class CoinController extends Component {
         this._isDragging = true;
         // 重置空闲计时器
         this._gameLogic?.resetIdleTimer();
-        if (this._gameLogic) this._gameLogic.isDragging = true;
+        if (this._gameLogic?.tutorialManager) this._gameLogic.tutorialManager.isDragging = true;
         // 拖拽瞄准中 → 拖拽贴图
         this.showAim();
         event.getLocation(this._dragStartPos);
@@ -542,7 +544,7 @@ export class CoinController extends Component {
     private _onPointerUp(_event: EventTouch): void {
         if (!this._isDragging) return;
         this._isDragging = false;
-        if (this._gameLogic) this._gameLogic.isDragging = false;
+        if (this._gameLogic?.tutorialManager) this._gameLogic.tutorialManager.isDragging = false;
         this._unregisterGlobalEvents();
 
         // 复位拖拽距离和预测

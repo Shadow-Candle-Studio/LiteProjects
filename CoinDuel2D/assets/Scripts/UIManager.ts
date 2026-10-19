@@ -5,6 +5,7 @@ import { UIWin } from './UI/UIWin';
 import { UIFail } from './UI/UIFail';
 import { UIRank } from './UI/UIRank';
 import { UIConfirm } from './UI/UIConfirm';
+import { UITips } from './UI/UITips';
 const { ccclass, property } = _decorator;
 
 @ccclass('UIManager')

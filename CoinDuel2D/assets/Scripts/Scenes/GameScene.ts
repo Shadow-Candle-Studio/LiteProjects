@@ -12,8 +12,20 @@ import { LevelData } from '../LevelData';
 import { ConfigManager } from '../ConfigManager';
 import { HitEffectManager } from '../HitEffectManager';
 import { Leaderboard } from '../Leaderboard';
+import { TutorialManager, TutorialStep } from '../TutorialManager';
 
 const { ccclass, property } = _decorator;
+
+export enum GameMode{
+    Level = 0,
+    Ladder, // 天梯模式（随机关卡）
+}
+
+/** Level 1 教程步骤：3 枚硬币位置 (-264,176), (229,172), (-11,-140) */
+const TUTORIAL_STEPS_LEVEL_1: TutorialStep[] = [
+    { hintKey: 'tutorial_step_1', sourceCoinIndex: 0, targetCoinIndex: 1 },
+    { hintKey: 'tutorial_step_2', sourceCoinIndex: 1, targetCoinIndex: 2, isFinal: true },
+];
 
 @ccclass('GameScene')
 export class GameScene extends Component {
@@ -37,6 +49,10 @@ export class GameScene extends Component {
     public uiManager:UIManager = null;
     @property({ tooltip: "开局使用的硬币 id（config.json 中 coins 的 key，默认为 1）" })
     public coinId: string = "1";
+    @property(TutorialManager)
+    public tutorialManager: TutorialManager = null;
+
+    public static mode:GameMode = GameMode.Level;
 
     private _debugPanel: Node | null = null;
     /** 缺口宽度基数（从 TableController 面板值快照） */
@@ -76,6 +92,13 @@ export class GameScene extends Component {
 
         // 启动时读取全局 config.json 配置
         this._loadCoinsConfig();
+
+        // 注入 TutorialManager 到 GameLogic（闲置提示需要）
+        if (this.tutorialManager) {
+            this.tutorialManager.gameLogic = this.gameLogic;
+            this.tutorialManager.uiManager = this.uiManager;
+            this.gameLogic.tutorialManager = this.tutorialManager;
+        }
 
         // 加载多语言翻译，完成后翻译场景 Label 并加载游戏配置
         I18n.init(() => {
@@ -121,10 +144,10 @@ export class GameScene extends Component {
             // 下一关
             this.uiManager.uiWin.onBtnNextClick = () => {
                 this.uiManager.uiWin.close();
-                if (this._levelIndex >= 0) {
+                if (GameScene.mode === GameMode.Level) {
                     // 关卡模式：加载下一关
                     this._loadNextLevel();
-                } else {
+                } else if (GameScene.mode === GameMode.Ladder){
                     // 随机模式：开始新的一轮
                     this.level++;
                     this.uiManager.setLevel(this.level);
@@ -144,8 +167,12 @@ export class GameScene extends Component {
             // 返回关卡选择
             this.uiManager.uiFail.onBtnHomeClick = () => {
                 this.uiManager.uiFail.close();
-                LevelManager.clear();
-                director.loadScene('levels');
+                if (GameScene.mode === GameMode.Ladder) {
+                    director.loadScene('main');
+                }else if (GameScene.mode === GameMode.Level){
+                    LevelManager.clear();
+                    director.loadScene('levels');
+                }
             };
             // 显示排行榜
             this.uiManager.uiFail.onBtnRankClick = () => {
@@ -157,13 +184,13 @@ export class GameScene extends Component {
             // 重试
             this.uiManager.uiFail.onBtnRetryClick = ()=>{
                 // 如果是天梯模式，直接退回第一关
-                if (LevelManager.getCurrent() === null) {
+                if (GameScene.mode === GameMode.Ladder) {
                     this.level = 1;
                     this.gameLogic.score = 0;
                     this.uiManager.setLevel(this.level);
                     this.uiManager.setScore(0);
                     this.startNewRound();
-                }else{
+                }else if (GameScene.mode === GameMode.Level){
                     // 如果是关卡模式，重新加载当前关卡
                     this._initFromLevel(LevelManager.getCurrent());
                 }
@@ -180,10 +207,10 @@ export class GameScene extends Component {
         this.uiManager.onBack = () => {
             this.uiManager.uiConfirm.open(I18n.t('confirm_quit'), (yes)=>{
                 if (yes){
-                    if (LevelManager.getCurrent() === null) {
+                    if (GameScene.mode === GameMode.Ladder) {
                         // 如果是天梯模式，退出后回到首页
                         director.loadScene('main');
-                    }else{
+                    }else if (GameScene.mode === GameMode.Level){
                         // 如果是关卡模式，退出后回到关卡选择
                         LevelManager.clear();
                         director.loadScene('levels');
@@ -217,7 +244,7 @@ export class GameScene extends Component {
 
         this.gameLogic.onGameWin = (duration: number) => {
             // 关卡模式：标记当前关卡 Passed，自动解锁下一关
-            if (this._levelIndex >= 0) {
+            if (GameScene.mode == GameMode.Level && this._levelIndex >= 0) {
                 LevelManager.markLevelPassed(this._levelIndex);
             }
             const uiWin = this.uiManager.uiWin;
@@ -366,6 +393,14 @@ export class GameScene extends Component {
             this._applyCoinConfig(this.coinId);
         }
         this.onGameStart();
+
+        // 闯关模式第一关 → 激活新手教程
+        if (this._levelIndex === 0 && this.tutorialManager) {
+            this.tutorialManager.gameLogic = this.gameLogic;
+            this.tutorialManager.uiManager = this.uiManager;
+            this.gameLogic.tutorialManager = this.tutorialManager;
+            this.tutorialManager.startTutorial(TUTORIAL_STEPS_LEVEL_1);
+        }
     }
 
     private clearCoins(){
@@ -384,6 +419,7 @@ export class GameScene extends Component {
                     return;
                 }
                 const levelData = asset.json as LevelData;
+                LevelManager.setCurrent(levelData);
                 this._initFromLevel(levelData);
             });
         } else {
@@ -576,7 +612,9 @@ export class GameScene extends Component {
             this.gameLogic.bombPushForce = gameConfig.bombPushForce;
             this.gameLogic.bombMudPushFactor = gameConfig.bombMudPushFactor;
             this.gameLogic.aimLineFactor = gameConfig.aimLineFactor;
-            this.gameLogic.idleShowDelay = gameConfig.idleShowDelay;
+            if (this.tutorialManager) {
+                this.tutorialManager.idleShowDelay = gameConfig.idleShowDelay;
+            }
         }
 
         const tableConfig = ConfigManager.getTableControllerConfig();
