@@ -33,6 +33,8 @@
     "tutorial_step_2": "很好！继续拖动硬币，击打下方的硬币",
     "tutorial_wrong_coin": "请拖动指定的硬币",
     "tutorial_miss": "没有击中目标，再来一次",
+    "tutorial_foul_fall": "硬币掉出桌面了！请重新操作",
+    "tutorial_foul_multi_hit": "撞到了多个硬币！请重新操作",
     "tutorial_skip": "跳过新手教程",
     "tutorial_complete": "教程完成！"
 }

@@ -33,6 +33,8 @@
     "tutorial_step_2": "Great! Now drag the coin to hit the bottom coin",
     "tutorial_wrong_coin": "Please drag the highlighted coin",
     "tutorial_miss": "Missed the target, try again",
+    "tutorial_foul_fall": "Coin fell off the table! Try again",
+    "tutorial_foul_multi_hit": "Hit multiple coins! Try again",
     "tutorial_skip": "Skip Tutorial",
     "tutorial_complete": "Tutorial Complete!"
 }

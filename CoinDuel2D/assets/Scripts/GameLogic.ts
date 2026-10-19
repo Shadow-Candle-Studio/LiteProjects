@@ -84,8 +84,8 @@ export class GameLogic extends Component {
     private get currentPhase(): GamePhase {
         return this._currentPhase;
     }
-    private coinHitCount: number = 0;
-    private coinFallCount: number = 0;
+    public coinHitCount: number = 0;
+    public coinFallCount: number = 0;
     private _activeShotCoin: Node | null = null;
     private _lockedCoin: Node | null = null;
     private _lastHitCoin: Node | null = null;
@@ -621,6 +621,7 @@ export class GameLogic extends Component {
 
         // 5. 摄像机还原后，启用待命的下一次击打
         if (this._pendingLockedCoin && this.hitEffectManager?.isCameraAtRest) {
+            console.log('[Game] enabling pending locked coin:', this._pendingLockedCoin.name);
             const ctrl = this._pendingLockedCoin.getComponent(CoinController);
             if (ctrl) {
                 ctrl.allowedOperation = true;
@@ -906,13 +907,45 @@ export class GameLogic extends Component {
     private processResult() {
         console.log(">>> 物理静止，开始结算逻辑 <<<");
 
-        // 教程模式：验证结果，返回 false 表示教程已处理（重置位置），不执行正常结算
+        // ── 教程模式 ──
         if (this.tutorialManager?.isActive()) {
             if (!this.tutorialManager.onTurnSettled()) {
-                return;
+                return; // 教程已处理失败（重置位置）
             }
+            // 教程成功 → 播放打飞特效，跳过游戏结束/胜利判定
+            this.score++;
+            this.onScoreUpdate?.(this.score);
+
+            const afterKnockOut = () => {
+                this._activeShotCoin = null;
+
+                // 教程最后一步完成 → 结束教程，弹出胜利窗口
+                if (this.tutorialManager?.wasLastStep()) {
+                    this.tutorialManager.skipTutorial();
+                    this._handleGameWin();
+                    return;
+                }
+
+                // 锁定被撞硬币为下一发起手子弹
+                this._lockedCoin = this._lastHitCoin;
+                this._continueWithLockedCoin();
+            };
+
+            const shotCoin = this._activeShotCoin;
+            const hitCoin = this._lastHitCoin;
+            if (shotCoin && hitCoin && this.hitEffectManager) {
+                this.hitEffectManager.playKnockOut(shotCoin, hitCoin, afterKnockOut);
+            } else {
+                if (shotCoin) {
+                    shotCoin.removeFromParent();
+                    shotCoin.destroy();
+                }
+                afterKnockOut();
+            }
+            return;
         }
 
+        // ── 正常模式 ──
         // 1. 有任意硬币掉落 → 游戏结束
         if (this.coinFallCount > 0) {
             this._handleGameOver();
@@ -1013,6 +1046,7 @@ export class GameLogic extends Component {
 
         // 等待摄像机还原后启用操作
         this._pendingLockedCoin = this._lockedCoin;
+        console.log('[Game] _continueWithLockedCoin, pending:', this._pendingLockedCoin?.name, 'cameraAtRest:', this.hitEffectManager?.isCameraAtRest);
         this.currentPhase = GamePhase.WAITING_PLAYER;
     }
 

@@ -43,6 +43,8 @@ export class TutorialManager extends Component {
     private _currentStepIndex: number = 0;
     private _coinSnapshots: { node: Node; x: number; y: number }[] = [];
     private _hitTargetThisTurn: boolean = false;
+    private _foulCount: number = 0;
+    private _wasLastStep: boolean = false;
 
     // ── UI（编辑器中创建，通过 @property 注入）──
 
@@ -92,6 +94,17 @@ export class TutorialManager extends Component {
     /** 教程是否激活 */
     public isActive(): boolean {
         return this._active;
+    }
+
+    /** 当前步骤是否为最后一步 */
+    public isFinalStep(): boolean {
+        const step = this._resolvedSteps[this._currentStepIndex];
+        return step ? step.isFinal : false;
+    }
+
+    /** 上一次成功命中时是否为最后一步（在 onTurnSettled 中推进索引前记录） */
+    public wasLastStep(): boolean {
+        return this._wasLastStep;
     }
 
     // ── 玩家操作钩子 ──
@@ -144,12 +157,12 @@ export class TutorialManager extends Component {
 
         if (this._hitTargetThisTurn) {
             // ✅ 正确击中目标 → 继续正常结算（a 硬币被打飞消失）
+            this._foulCount = 0;
+            // 在推进索引之前，记录当前步是否为最终步
+            this._wasLastStep = step.isFinal;
             if (step.isFinal) {
-                // 最后一步完成 → 教程结束
+                // 最后一步完成 → 显示完成提示，打飞特效结束后由 processResult 调用 skipTutorial
                 this._showHint('tutorial_complete');
-                this.scheduleOnce(() => {
-                    this.skipTutorial();
-                }, 1.5);
             } else {
                 // 立即推进步骤索引（让 onCoinDragStart 马上用新步骤的 sourceCoin）
                 this._currentStepIndex++;
@@ -163,16 +176,28 @@ export class TutorialManager extends Component {
             }
             return true;
         } else {
-            // ❌ 未击中目标 → 重置位置，不执行正常结算
+            // ❌ 失败 → 判断失败原因，提示用户，重置位置
             this._restorePositions();
-            this._showHint('tutorial_miss');
+            this._foulCount++;
+
+            const hitCount = this.gameLogic?.coinHitCount ?? 0;
+            const fallCount = this.gameLogic?.coinFallCount ?? 0;
+
+            if (fallCount > 0) {
+                this._showHint('tutorial_foul_fall');
+            } else if (hitCount >= 2) {
+                this._showHint('tutorial_foul_multi_hit');
+            } else {
+                this._showHint('tutorial_miss');
+            }
+
             // 1秒后重新显示原始提示和手势
             this.scheduleOnce(() => {
                 if (this._active) {
                     this._showHint(step.hintKey);
                     this._beginCurrentStep();
                 }
-            }, 1.0);
+            }, 2.0);
             return false;
         }
     }

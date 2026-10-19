@@ -251,7 +251,10 @@ export class CoinController extends Component {
     private _onPointerDown(event: EventTouch): void {
         if (!this._allowedOperation) return;
         // 教程模式：验证是否允许拖动这枚硬币
-        if (!this._gameLogic?.canLaunchCoin(this.node)) return;
+        if (!this._gameLogic?.canLaunchCoin(this.node)) {
+            console.log('[Coin] drag blocked by tutorial:', this.node.name);
+            return;
+        }
         // 已经有硬币在拖拽中，不再响应（防止 Cocos Creator 在鼠标经过其他节点时误触 MOUSE_DOWN）
         if (CoinController._anyDragging) return;
 

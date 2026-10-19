@@ -33,6 +33,8 @@
     "tutorial_step_2": "素晴らしい！続けてコインをドラッグして、下のコインを打ちましょう",
     "tutorial_wrong_coin": "指定されたコインをドラッグしてください",
     "tutorial_miss": "目標に当たりませんでした。もう一度挑戦しましょう",
+    "tutorial_foul_fall": "コインがテーブルから落ちました！もう一度やり直してください",
+    "tutorial_foul_multi_hit": "複数のコインに当たりました！もう一度やり直してください",
     "tutorial_skip": "チュートリアルをスキップ",
     "tutorial_complete": "チュートリアル完了！"
 }
