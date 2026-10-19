@@ -36,5 +36,7 @@
     "tutorial_foul_fall": "硬币掉出桌面了！请重新操作",
     "tutorial_foul_multi_hit": "撞到了多个硬币！请重新操作",
     "tutorial_skip": "跳过新手教程",
-    "tutorial_complete": "教程完成！"
+    "tutorial_complete": "教程完成！",
+    "tutorial_block_intro": "这是障碍物！硬币碰到会反弹，注意避开",
+    "tutorial_mud_intro": "这是泥潭！硬币进入后会减速，小心陷阱"
 }

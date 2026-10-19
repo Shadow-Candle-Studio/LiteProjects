@@ -1009,6 +1009,7 @@ export class GameLogic extends Component {
         this._restoreSpeed();
         this.hitEffectManager?.stopTracking();
         this._pendingLockedCoin = null;
+        this.tutorialManager && (this.tutorialManager.gameOver = true);
         SoundManager.instance.stopDragDirectionLoop();
         SoundManager.instance.playGameOver();
         const duration = Math.floor((Date.now() - this._gameStartTime) / 1000);
@@ -1025,6 +1026,7 @@ export class GameLogic extends Component {
         this._restoreSpeed();
         this.hitEffectManager?.stopTracking();
         this._pendingLockedCoin = null;
+        this.tutorialManager && (this.tutorialManager.gameOver = true);
         SoundManager.instance.stopDragDirectionLoop();
         this._setCoinsInteraction(false);
         const duration = Math.floor((Date.now() - this._gameStartTime) / 1000);
@@ -1097,6 +1099,7 @@ export class GameLogic extends Component {
         this._restoreSpeed();
         this.hitEffectManager?.stopTracking();
         this._pendingLockedCoin = null;
+        if (this.tutorialManager) this.tutorialManager.gameOver = false;
         this.currentPhase = GamePhase.WAITING_PLAYER;
         this._activeShotCoin = null;
         this._lockedCoin = null;

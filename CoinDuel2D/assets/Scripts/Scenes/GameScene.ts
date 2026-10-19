@@ -12,7 +12,7 @@ import { LevelData } from '../LevelData';
 import { ConfigManager } from '../ConfigManager';
 import { HitEffectManager } from '../HitEffectManager';
 import { Leaderboard } from '../Leaderboard';
-import { TutorialManager, TutorialStep } from '../TutorialManager';
+import { TutorialManager, TutorialStep, IntroStep } from '../TutorialManager';
 
 const { ccclass, property } = _decorator;
 
@@ -400,6 +400,35 @@ export class GameScene extends Component {
             this.tutorialManager.uiManager = this.uiManager;
             this.gameLogic.tutorialManager = this.tutorialManager;
             this.tutorialManager.startTutorial(TUTORIAL_STEPS_LEVEL_1);
+        }
+
+        // 闯关模式第二关 → 道具介绍（block + mud）
+        if (this._levelIndex === 1 && this.tutorialManager) {
+            this.tutorialManager.gameLogic = this.gameLogic;
+            this.tutorialManager.uiManager = this.uiManager;
+            this.gameLogic.tutorialManager = this.tutorialManager;
+
+            const introSteps: IntroStep[] = [];
+            for (const item of data.coins) {
+                if (item.type === 'block') {
+                    introSteps.push({
+                        hintKey: 'tutorial_block_intro',
+                        x: item.x,
+                        y: item.y,
+                        radius: item.radius,
+                    });
+                } else if (item.type === 'mud') {
+                    introSteps.push({
+                        hintKey: 'tutorial_mud_intro',
+                        x: item.x,
+                        y: item.y,
+                        radius: item.radius,
+                    });
+                }
+            }
+            if (introSteps.length > 0) {
+                this.tutorialManager.startIntroTutorial(introSteps);
+            }
         }
     }
 

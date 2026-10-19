@@ -18,6 +18,17 @@ export interface TutorialStep {
     isFinal?: boolean;
 }
 
+/** 道具介绍步骤（只展示指示器 + 文字，无需玩家操作） */
+export interface IntroStep {
+    /** 提示文字的 i18n key */
+    hintKey: string;
+    /** 指示器目标位置 */
+    x: number;
+    y: number;
+    /** 指示器半径（对应目标大小） */
+    radius: number;
+}
+
 /** 教程步骤（已解析为 Node 引用） */
 interface ResolvedStep {
     hintKey: string;
@@ -46,6 +57,12 @@ export class TutorialManager extends Component {
     private _foulCount: number = 0;
     private _wasLastStep: boolean = false;
 
+    // ── 道具介绍模式 ──
+    private _isIntroMode: boolean = false;
+    private _introSteps: IntroStep[] = [];
+    private _introIndex: number = 0;
+    private _introAutoDelay: number = 4;
+
     // ── UI（编辑器中创建，通过 @property 注入）──
 
     // ── 手势提示 ──
@@ -57,6 +74,8 @@ export class TutorialManager extends Component {
     private _idleTimer: number = 0;
     private _isClickNodeShowing: boolean = false;
     public isDragging: boolean = false;
+    /** 游戏已结束（失败/胜利弹窗显示中），抑制闲置提示 */
+    public gameOver: boolean = false;
 
     // ── 教程生命周期 ──
 
@@ -85,10 +104,64 @@ export class TutorialManager extends Component {
     /** 跳过教程 */
     public skipTutorial(): void {
         this._active = false;
+        this._isIntroMode = false;
         this._hideGestureHint();
+        this._hideTargetIndicator();
         this._hideHint();
         this._hideSkipButton();
         this._clearCoinHighlight();
+    }
+
+    /** 开始道具介绍（只展示指示器 + 文字，自动或点击推进） */
+    public startIntroTutorial(steps: IntroStep[]): void {
+        this._active = true;
+        this._isIntroMode = true;
+        this._introSteps = steps;
+        this._introIndex = 0;
+
+        this._bindSkipButton();
+        this._showSkipButton();
+        this._showIntroStep();
+    }
+
+    /** 介绍模式：点击屏幕推进到下一步 */
+    public onIntroClick(): void {
+        if (!this._isIntroMode) return;
+        this.unscheduleAllCallbacks();
+        this._introIndex++;
+        if (this._introIndex >= this._introSteps.length) {
+            this.skipTutorial();
+        } else {
+            this._showIntroStep();
+        }
+    }
+
+    /** 显示当前介绍步骤 */
+    private _showIntroStep(): void {
+        const step = this._introSteps[this._introIndex];
+        if (!step) return;
+
+        // 显示目标指示器
+        const indicator = this.uiManager?.targetIndicator;
+        if (indicator) {
+            indicator.node.setPosition(step.x, step.y, 0);
+            indicator.open(step.radius);
+        }
+
+        // 显示提示文字
+        this._showHint(step.hintKey);
+
+        // 自动推进到下一步
+        this.scheduleOnce(() => {
+            if (this._isIntroMode) {
+                this._introIndex++;
+                if (this._introIndex >= this._introSteps.length) {
+                    this.skipTutorial();
+                } else {
+                    this._showIntroStep();
+                }
+            }
+        }, this._introAutoDelay);
     }
 
     /** 教程是否激活 */
@@ -115,6 +188,8 @@ export class TutorialManager extends Component {
      */
     public onCoinDragStart(coin: Node): boolean {
         if (!this._active) return true;
+        // 介绍模式下不允许拖动
+        if (this._isIntroMode) return false;
         const step = this._resolvedSteps[this._currentStepIndex];
         if (!step) return true;
 
@@ -123,8 +198,9 @@ export class TutorialManager extends Component {
             return false;
         }
 
-        // 正确的硬币 → 隐藏手势提示，允许拖动
+        // 正确的硬币 → 隐藏手势提示和目标指示器，允许拖动
         this._hideGestureHint();
+        this._hideTargetIndicator();
         this._hitTargetThisTurn = false;
         this._snapshotPositions();
         return true;
@@ -204,7 +280,7 @@ export class TutorialManager extends Component {
 
     // ── 步骤管理 ──
 
-    /** 开始当前步骤：高亮硬币 + 显示手势提示 */
+    /** 开始当前步骤：高亮硬币 + 显示手势提示 + 目标指示器 */
     private _beginCurrentStep(): void {
         const step = this._resolvedSteps[this._currentStepIndex];
         if (!step) return;
@@ -218,6 +294,9 @@ export class TutorialManager extends Component {
 
         // 显示手势提示
         this._showGestureHint(sourceCoin, targetCoin);
+
+        // 显示目标指示器
+        this._showTargetIndicator(targetCoin);
     }
 
     // ── 手势提示 ──
@@ -264,6 +343,21 @@ export class TutorialManager extends Component {
             clickNode.active = false;
         }
         this._isGestureShowing = false;
+    }
+
+    // ── 目标指示器 ──
+
+    /** 显示目标指示器，对准目标硬币 */
+    private _showTargetIndicator(targetCoin: Node): void {
+        const indicator = this.uiManager?.targetIndicator;
+        if (!indicator) return;
+        indicator.node.setPosition(targetCoin.position);
+        indicator.open(this.gameLogic?.coinRadius ?? 32);
+    }
+
+    /** 隐藏目标指示器 */
+    private _hideTargetIndicator(): void {
+        this.uiManager?.targetIndicator?.close();
     }
 
     // ── 硬币高亮 ──
@@ -434,6 +528,7 @@ export class TutorialManager extends Component {
             clickNode.active = false;
         }
         this._isClickNodeShowing = false;
+        this._hideTargetIndicator();
     }
 
     // ── 帧更新 ──
@@ -441,6 +536,7 @@ export class TutorialManager extends Component {
     update(deltaTime: number) {
         // 闲置提示：玩家长时间无操作时显示 clickNode（教程模式下由手势提示接管）
         if (this._active) return;
+        if (this.gameOver) return;
         if (this.isDragging || this._isClickNodeShowing) return;
 
         // 只在等待操作阶段显示闲置提示

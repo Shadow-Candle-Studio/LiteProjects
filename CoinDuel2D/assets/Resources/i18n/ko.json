@@ -36,5 +36,7 @@
     "tutorial_foul_fall": "코인이 테이블에서 떨어졌습니다! 다시 시도하세요",
     "tutorial_foul_multi_hit": "여러 코인에 부딪혔습니다! 다시 시도하세요",
     "tutorial_skip": "튜토리얼 건너뛰기",
-    "tutorial_complete": "튜토리얼 완료!"
+    "tutorial_complete": "튜토리얼 완료!",
+    "tutorial_block_intro": "이것은 장애물입니다! 코인이 튕겨나가니 피하세요",
+    "tutorial_mud_intro": "이것은 진흙입니다! 코인이 들어가면 느려지니 조심하세요"
 }

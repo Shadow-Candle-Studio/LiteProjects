@@ -36,5 +36,7 @@
     "tutorial_foul_fall": "Coin fell off the table! Try again",
     "tutorial_foul_multi_hit": "Hit multiple coins! Try again",
     "tutorial_skip": "Skip Tutorial",
-    "tutorial_complete": "Tutorial Complete!"
+    "tutorial_complete": "Tutorial Complete!",
+    "tutorial_block_intro": "This is a blocker! Coins bounce off it — avoid hitting it",
+    "tutorial_mud_intro": "This is mud! Coins slow down when entering — watch out"
 }

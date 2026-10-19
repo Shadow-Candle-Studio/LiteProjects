@@ -36,5 +36,7 @@
     "tutorial_foul_fall": "コインがテーブルから落ちました！もう一度やり直してください",
     "tutorial_foul_multi_hit": "複数のコインに当たりました！もう一度やり直してください",
     "tutorial_skip": "チュートリアルをスキップ",
-    "tutorial_complete": "チュートリアル完了！"
+    "tutorial_complete": "チュートリアル完了！",
+    "tutorial_block_intro": "これは障害物です！コインは跳ね返るので注意しましょう",
+    "tutorial_mud_intro": "これは泥沼です！コインが入ると減速します。注意しましょう"
 }

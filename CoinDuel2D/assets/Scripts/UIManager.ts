@@ -6,6 +6,7 @@ import { UIFail } from './UI/UIFail';
 import { UIRank } from './UI/UIRank';
 import { UIConfirm } from './UI/UIConfirm';
 import { UITips } from './UI/UITips';
+import { TargetIndicator } from './Effects/TargetIndicator';
 const { ccclass, property } = _decorator;
 
 @ccclass('UIManager')
@@ -33,6 +34,9 @@ export class UIManager extends Component {
 
     @property(UIConfirm)
     public uiConfirm:UIConfirm = null;
+
+    @property(TargetIndicator)
+    public targetIndicator:TargetIndicator = null;
 
     public onBack:()=>void;
 
