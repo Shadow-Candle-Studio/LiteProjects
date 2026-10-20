@@ -1,4 +1,4 @@
-import { _decorator, Button, Component, director, Node, Label } from 'cc';
+import { _decorator, Button, Component, director, Node, Label, resources, instantiate, Prefab } from 'cc';
 import { LevelManager } from '../LevelManager';
 import { SoundManager } from '../SoundManager';
 import { I18n } from '../I18n';
@@ -13,8 +13,10 @@ export class MainScene extends Component {
     public btnLadder: Button | null = null;
     @property(Button)
     public btnPVP: Button | null = null;
+    @property(Prefab)
+    public soundManagerPrefab: Prefab | null = null;
 
-    start() {
+    onLoad() {
         this.btnLevels.node.on(Button.EventType.CLICK, () => {
             GameScene.mode = GameMode.Level;
             director.loadScene('levels');
@@ -27,8 +29,16 @@ export class MainScene extends Component {
         this.btnPVP.node.on(Button.EventType.CLICK, () => {
             director.loadScene('pvp');
         }, this);
-        SoundManager.instance.stopBGM();
+        if (SoundManager.instance == null) {
+            let sm = instantiate(this.soundManagerPrefab);
+            director.getScene()?.addChild(sm);
+        }
+        if (SoundManager.instance != null) {
+            SoundManager.instance.stopBGM();
+        }
+    }
 
+    start(){
         I18n.init(() => {
             this._translateLabels();
         });

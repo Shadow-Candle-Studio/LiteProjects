@@ -6,8 +6,23 @@ import { I18n } from './I18n';
 import { UITips } from './UI/UITips';
 const { ccclass, property } = _decorator;
 
-/** 教程步骤定义 */
-export interface TutorialStep {
+// ── 统一教程步骤定义 ──
+
+/** 道具介绍步骤（展示指示器 + 文字，无需玩家操作） */
+export interface IntroTutorialStep {
+    type: 'intro';
+    /** 提示文字的 i18n key */
+    hintKey: string;
+    /** 指示器目标位置 */
+    x: number;
+    y: number;
+    /** 指示器半径（对应目标大小） */
+    radius: number;
+}
+
+/** 硬币拖拽步骤（要求玩家拖动指定硬币击打目标） */
+export interface DragTutorialStep {
+    type: 'drag';
     /** 提示文字的 i18n key */
     hintKey: string;
     /** 要求拖动的硬币索引（coinGroup.children 中的序号，教程开始时解析为 Node 引用） */
@@ -18,24 +33,29 @@ export interface TutorialStep {
     isFinal?: boolean;
 }
 
-/** 道具介绍步骤（只展示指示器 + 文字，无需玩家操作） */
-export interface IntroStep {
-    /** 提示文字的 i18n key */
-    hintKey: string;
-    /** 指示器目标位置 */
-    x: number;
-    y: number;
-    /** 指示器半径（对应目标大小） */
-    radius: number;
-}
+/** 统一教程步骤：介绍或拖拽，可顺序混排 */
+export type TutorialStep = IntroTutorialStep | DragTutorialStep;
 
-/** 教程步骤（已解析为 Node 引用） */
-interface ResolvedStep {
+/** 拖拽步骤（已解析为 Node 引用） */
+interface ResolvedDragStep {
+    type: 'drag';
     hintKey: string;
     sourceCoin: Node;
     targetCoin: Node;
     isFinal: boolean;
 }
+
+/** 介绍步骤（无需解析，直接使用坐标） */
+interface IntroStep {
+    type: 'intro';
+    hintKey: string;
+    x: number;
+    y: number;
+    radius: number;
+}
+
+/** 内部统一为解析后的步骤 */
+type ResolvedStep = IntroStep | ResolvedDragStep;
 
 @ccclass('TutorialManager')
 export class TutorialManager extends Component {
@@ -43,31 +63,25 @@ export class TutorialManager extends Component {
     public uiTips:UITips = null;
     @property(Button)
     public btnSkip:Button = null;
-    
+
     // ── 引用（由 GameScene 注入）──
     public gameLogic: GameLogic | null = null;
     public uiManager: UIManager | null = null;
 
     // ── 教程状态 ──
     private _active: boolean = false;
-    private _resolvedSteps: ResolvedStep[] = [];
+    private _steps: ResolvedStep[] = [];
     private _currentStepIndex: number = 0;
     private _coinSnapshots: { node: Node; x: number; y: number }[] = [];
     private _hitTargetThisTurn: boolean = false;
     private _foulCount: number = 0;
     private _wasLastStep: boolean = false;
 
-    // ── 道具介绍模式 ──
-    private _isIntroMode: boolean = false;
-    private _introSteps: IntroStep[] = [];
-    private _introIndex: number = 0;
+    // ── 介绍步骤自动推进延迟 ──
     private _introAutoDelay: number = 4;
-
-    // ── UI（编辑器中创建，通过 @property 注入）──
 
     // ── 手势提示 ──
     private static readonly _tagGesture = 100;
-    private _isGestureShowing: boolean = false;
 
     // ── 闲置提示（从 GameLogic 移入）──
     public idleShowDelay: number = 5;
@@ -79,23 +93,27 @@ export class TutorialManager extends Component {
 
     // ── 教程生命周期 ──
 
-    /** 开始新手教程 */
+    /** 统一教程入口：按顺序执行介绍/拖拽步骤，可混排 */
     public startTutorial(steps: TutorialStep[]): void {
         this._active = true;
         this._currentStepIndex = 0;
 
-        // 解析索引为 Node 引用（硬币销毁后索引会变，必须用引用）
+        // 解析拖拽步骤索引为 Node 引用（硬币销毁后索引会变，必须用引用）
         const coins = this.gameLogic?.coinGroup?.children ?? [];
-        this._resolvedSteps = steps.map(s => ({
-            hintKey: s.hintKey,
-            sourceCoin: coins[s.sourceCoinIndex],
-            targetCoin: coins[s.targetCoinIndex],
-            isFinal: s.isFinal ?? false,
-        }));
+        this._steps = steps.map(s => {
+            if (s.type === 'intro') {
+                return { type: 'intro', hintKey: s.hintKey, x: s.x, y: s.y, radius: s.radius };
+            }
+            return {
+                type: 'drag',
+                hintKey: s.hintKey,
+                sourceCoin: coins[s.sourceCoinIndex],
+                targetCoin: coins[s.targetCoinIndex],
+                isFinal: s.isFinal ?? false,
+            };
+        });
 
         this._bindSkipButton();
-        console.log('[Tutorial] startTutorial, uiTips:', this.uiTips, 'btnSkip:', this.btnSkip);
-        this._showHint(this._resolvedSteps[0].hintKey);
         this._showSkipButton();
         this._snapshotPositions();
         this._beginCurrentStep();
@@ -104,64 +122,12 @@ export class TutorialManager extends Component {
     /** 跳过教程 */
     public skipTutorial(): void {
         this._active = false;
-        this._isIntroMode = false;
+        this.unscheduleAllCallbacks();
         this._hideGestureHint();
         this._hideTargetIndicator();
         this._hideHint();
         this._hideSkipButton();
         this._clearCoinHighlight();
-    }
-
-    /** 开始道具介绍（只展示指示器 + 文字，自动或点击推进） */
-    public startIntroTutorial(steps: IntroStep[]): void {
-        this._active = true;
-        this._isIntroMode = true;
-        this._introSteps = steps;
-        this._introIndex = 0;
-
-        this._bindSkipButton();
-        this._showSkipButton();
-        this._showIntroStep();
-    }
-
-    /** 介绍模式：点击屏幕推进到下一步 */
-    public onIntroClick(): void {
-        if (!this._isIntroMode) return;
-        this.unscheduleAllCallbacks();
-        this._introIndex++;
-        if (this._introIndex >= this._introSteps.length) {
-            this.skipTutorial();
-        } else {
-            this._showIntroStep();
-        }
-    }
-
-    /** 显示当前介绍步骤 */
-    private _showIntroStep(): void {
-        const step = this._introSteps[this._introIndex];
-        if (!step) return;
-
-        // 显示目标指示器
-        const indicator = this.uiManager?.targetIndicator;
-        if (indicator) {
-            indicator.node.setPosition(step.x, step.y, 0);
-            indicator.open(step.radius);
-        }
-
-        // 显示提示文字
-        this._showHint(step.hintKey);
-
-        // 自动推进到下一步
-        this.scheduleOnce(() => {
-            if (this._isIntroMode) {
-                this._introIndex++;
-                if (this._introIndex >= this._introSteps.length) {
-                    this.skipTutorial();
-                } else {
-                    this._showIntroStep();
-                }
-            }
-        }, this._introAutoDelay);
     }
 
     /** 教程是否激活 */
@@ -171,13 +137,22 @@ export class TutorialManager extends Component {
 
     /** 当前步骤是否为最后一步 */
     public isFinalStep(): boolean {
-        const step = this._resolvedSteps[this._currentStepIndex];
-        return step ? step.isFinal : false;
+        const step = this._steps[this._currentStepIndex];
+        return step && step.type === 'drag' ? step.isFinal : false;
     }
 
     /** 上一次成功命中时是否为最后一步（在 onTurnSettled 中推进索引前记录） */
     public wasLastStep(): boolean {
         return this._wasLastStep;
+    }
+
+    /** 点击屏幕推进介绍步骤 */
+    public onIntroClick(): void {
+        if (!this._active) return;
+        const step = this._steps[this._currentStepIndex];
+        if (!step || step.type !== 'intro') return;
+        this.unscheduleAllCallbacks();
+        this._advanceStep();
     }
 
     // ── 玩家操作钩子 ──
@@ -188,10 +163,9 @@ export class TutorialManager extends Component {
      */
     public onCoinDragStart(coin: Node): boolean {
         if (!this._active) return true;
-        // 介绍模式下不允许拖动
-        if (this._isIntroMode) return false;
-        const step = this._resolvedSteps[this._currentStepIndex];
-        if (!step) return true;
+        // 介绍步骤中不允许拖动
+        const step = this._steps[this._currentStepIndex];
+        if (!step || step.type !== 'drag') return false;
 
         if (coin !== step.sourceCoin) {
             // 不是当前步骤指定的硬币 → 不响应
@@ -214,8 +188,8 @@ export class TutorialManager extends Component {
     /** 硬币碰撞时调用，验证是否击中目标 */
     public onCoinHit(hitCoin: Node): void {
         if (!this._active) return;
-        const step = this._resolvedSteps[this._currentStepIndex];
-        if (!step) return;
+        const step = this._steps[this._currentStepIndex];
+        if (!step || step.type !== 'drag') return;
 
         if (hitCoin === step.targetCoin) {
             this._hitTargetThisTurn = true;
@@ -228,8 +202,8 @@ export class TutorialManager extends Component {
      */
     public onTurnSettled(): boolean {
         if (!this._active) return true;
-        const step = this._resolvedSteps[this._currentStepIndex];
-        if (!step) return true;
+        const step = this._steps[this._currentStepIndex];
+        if (!step || step.type !== 'drag') return true;
 
         const hitCount = this.gameLogic?.coinHitCount ?? 0;
         const fallCount = this.gameLogic?.coinFallCount ?? 0;
@@ -248,7 +222,6 @@ export class TutorialManager extends Component {
                 // 延迟到打飞动画结束后更新 UI
                 this.scheduleOnce(() => {
                     if (this._active) {
-                        this._showHint(this._resolvedSteps[this._currentStepIndex].hintKey);
                         this._beginCurrentStep();
                     }
                 }, 1.0);
@@ -259,8 +232,6 @@ export class TutorialManager extends Component {
             this._restorePositions();
             this._foulCount++;
 
-
-
             if (fallCount > 0) {
                 this._showHint('tutorial_foul_fall');
             } else if (hitCount >= 2) {
@@ -269,10 +240,9 @@ export class TutorialManager extends Component {
                 this._showHint('tutorial_miss');
             }
 
-            // 1秒后重新显示原始提示和手势
+            // 2秒后重新显示原始提示和手势
             this.scheduleOnce(() => {
                 if (this._active) {
-                    this._showHint(step.hintKey);
                     this._beginCurrentStep();
                 }
             }, 2.0);
@@ -282,11 +252,50 @@ export class TutorialManager extends Component {
 
     // ── 步骤管理 ──
 
-    /** 开始当前步骤：高亮硬币 + 显示手势提示 + 目标指示器 */
+    /** 推进到下一步 */
+    private _advanceStep(): void {
+        this._currentStepIndex++;
+        if (this._currentStepIndex >= this._steps.length) {
+            this.skipTutorial();
+        } else {
+            this._beginCurrentStep();
+        }
+    }
+
+    /** 开始当前步骤：根据类型展示介绍或拖拽 */
     private _beginCurrentStep(): void {
-        const step = this._resolvedSteps[this._currentStepIndex];
+        const step = this._steps[this._currentStepIndex];
         if (!step) return;
 
+        if (step.type === 'intro') {
+            this._beginIntroStep(step);
+        } else {
+            this._beginDragStep(step);
+        }
+    }
+
+    /** 开始介绍步骤：显示指示器 + 文字，自动/点击推进 */
+    private _beginIntroStep(step: IntroStep): void {
+        // 显示目标指示器
+        const indicator = this.uiManager?.targetIndicator;
+        if (indicator) {
+            indicator.node.setPosition(step.x, step.y, 0);
+            indicator.open(step.radius);
+        }
+
+        // 显示提示文字
+        this._showHint(step.hintKey);
+
+        // 自动推进到下一步
+        this.scheduleOnce(() => {
+            if (this._active) {
+                this._advanceStep();
+            }
+        }, this._introAutoDelay);
+    }
+
+    /** 开始拖拽步骤：高亮硬币 + 显示手势提示 + 目标指示器 */
+    private _beginDragStep(step: ResolvedDragStep): void {
         const { sourceCoin, targetCoin } = step;
         if (!sourceCoin || !sourceCoin.isValid || !targetCoin || !targetCoin.isValid) return;
 
@@ -299,6 +308,9 @@ export class TutorialManager extends Component {
 
         // 显示目标指示器
         this._showTargetIndicator(targetCoin);
+
+        // 显示提示文字
+        this._showHint(step.hintKey);
     }
 
     // ── 手势提示 ──
@@ -322,7 +334,6 @@ export class TutorialManager extends Component {
 
         clickNode.setPosition(startPos);
         clickNode.active = true;
-        this._isGestureShowing = true;
 
         Tween.stopAllByTag(TutorialManager._tagGesture);
         tween(clickNode)
@@ -344,12 +355,11 @@ export class TutorialManager extends Component {
             Tween.stopAllByTag(TutorialManager._tagGesture);
             clickNode.active = false;
         }
-        this._isGestureShowing = false;
     }
 
     // ── 目标指示器 ──
 
-    /** 显示目标指示器，对准目标硬币 */
+    /** 显示目标指示器，对准目标 */
     private _showTargetIndicator(targetCoin: Node): void {
         const indicator = this.uiManager?.targetIndicator;
         if (!indicator) return;
@@ -429,7 +439,6 @@ export class TutorialManager extends Component {
     /** 显示提示文字（传入 i18n key） */
     private _showHint(key: string): void {
         const text = I18n.t(key);
-        console.log('[Tutorial] _showHint:', key, '→', text, 'uiTips:', this.uiTips);
         this.uiTips?.open(text);
     }
 

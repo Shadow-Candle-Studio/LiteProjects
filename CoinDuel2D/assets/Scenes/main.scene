@@ -18,15 +18,12 @@
     "_children": [
       {
         "__id__": 2
-      },
-      {
-        "__id__": 39
       }
     ],
     "_active": true,
     "_components": [],
     "_prefab": {
-      "__id__": 51
+      "__id__": 39
     },
     "_lpos": {
       "__type__": "cc.Vec3",
@@ -57,7 +54,7 @@
     },
     "autoReleaseAssets": false,
     "_globals": {
-      "__id__": 52
+      "__id__": 40
     },
     "_id": "c6fb5356-14d1-4078-b500-d9c39a835f27"
   },
@@ -1504,6 +1501,10 @@
     "btnPVP": {
       "__id__": 32
     },
+    "soundManagerPrefab": {
+      "__uuid__": "332b809b-073c-41f2-9935-3e8c002012fe",
+      "__expectedType__": "cc.Prefab"
+    },
     "_id": "d9eZlSKK1A3ZMHcS5mtZd/"
   },
   {
@@ -1575,195 +1576,38 @@
     "_id": "c5V1EV8IpMtrIvY1OE9t2u"
   },
   {
-    "__type__": "cc.Node",
-    "_objFlags": 0,
-    "_parent": {
-      "__id__": 1
-    },
-    "_prefab": {
-      "__id__": 40
-    },
-    "__editorExtras__": {}
-  },
-  {
-    "__type__": "cc.PrefabInfo",
-    "root": {
-      "__id__": 39
-    },
-    "asset": {
-      "__uuid__": "332b809b-073c-41f2-9935-3e8c002012fe",
-      "__expectedType__": "cc.Prefab"
-    },
-    "fileId": "642t5MhUdG965L8LZxLbnM",
-    "instance": {
-      "__id__": 41
-    },
-    "targetOverrides": null,
-    "nestedPrefabInstanceRoots": null
-  },
-  {
-    "__type__": "cc.PrefabInstance",
-    "fileId": "20uMXwavJPCbcjKgPSjFjL",
-    "prefabRootNode": null,
-    "mountedChildren": [],
-    "mountedComponents": [],
-    "propertyOverrides": [
-      {
-        "__id__": 42
-      },
-      {
-        "__id__": 44
-      },
-      {
-        "__id__": 45
-      },
-      {
-        "__id__": 46
-      },
-      {
-        "__id__": 47
-      },
-      {
-        "__id__": 49
-      }
-    ],
-    "removedComponents": []
-  },
-  {
-    "__type__": "CCPropertyOverrideInfo",
-    "targetInfo": {
-      "__id__": 43
-    },
-    "propertyPath": [
-      "_name"
-    ],
-    "value": "SoundManager"
-  },
-  {
-    "__type__": "cc.TargetInfo",
-    "localID": [
-      "642t5MhUdG965L8LZxLbnM"
-    ]
-  },
-  {
-    "__type__": "CCPropertyOverrideInfo",
-    "targetInfo": {
-      "__id__": 43
-    },
-    "propertyPath": [
-      "_lpos"
-    ],
-    "value": {
-      "__type__": "cc.Vec3",
-      "x": 0,
-      "y": 0,
-      "z": 0
-    }
-  },
-  {
-    "__type__": "CCPropertyOverrideInfo",
-    "targetInfo": {
-      "__id__": 43
-    },
-    "propertyPath": [
-      "_lrot"
-    ],
-    "value": {
-      "__type__": "cc.Quat",
-      "x": 0,
-      "y": 0,
-      "z": 0,
-      "w": 1
-    }
-  },
-  {
-    "__type__": "CCPropertyOverrideInfo",
-    "targetInfo": {
-      "__id__": 43
-    },
-    "propertyPath": [
-      "_euler"
-    ],
-    "value": {
-      "__type__": "cc.Vec3",
-      "x": 0,
-      "y": 0,
-      "z": 0
-    }
-  },
-  {
-    "__type__": "CCPropertyOverrideInfo",
-    "targetInfo": {
-      "__id__": 48
-    },
-    "propertyPath": [
-      "coindrag"
-    ],
-    "value": {
-      "__uuid__": "b08a12c2-f485-4d9d-a85f-96bcb8da34f2",
-      "__expectedType__": "cc.AudioClip"
-    }
-  },
-  {
-    "__type__": "cc.TargetInfo",
-    "localID": [
-      "76mqlS+zhMaLX/nMj3BJqi"
-    ]
-  },
-  {
-    "__type__": "CCPropertyOverrideInfo",
-    "targetInfo": {
-      "__id__": 50
-    },
-    "propertyPath": [
-      "_playOnAwake"
-    ],
-    "value": false
-  },
-  {
-    "__type__": "cc.TargetInfo",
-    "localID": [
-      "daiKJJcMBK8rqYwOoKglPY"
-    ]
-  },
-  {
     "__type__": "cc.PrefabInfo",
     "root": null,
     "asset": null,
     "fileId": "c6fb5356-14d1-4078-b500-d9c39a835f27",
     "instance": null,
-    "targetOverrides": null,
-    "nestedPrefabInstanceRoots": [
-      {
-        "__id__": 39
-      }
-    ]
+    "targetOverrides": null
   },
   {
     "__type__": "cc.SceneGlobals",
     "ambient": {
-      "__id__": 53
+      "__id__": 41
     },
     "shadows": {
-      "__id__": 54
+      "__id__": 42
     },
     "_skybox": {
-      "__id__": 55
+      "__id__": 43
     },
     "fog": {
-      "__id__": 56
+      "__id__": 44
     },
     "octree": {
-      "__id__": 57
+      "__id__": 45
     },
     "skin": {
-      "__id__": 58
+      "__id__": 46
     },
     "lightProbeInfo": {
-      "__id__": 59
+      "__id__": 47
     },
     "postSettings": {
-      "__id__": 60
+      "__id__": 48
     },
     "bakedWithStationaryMainLight": false,
     "bakedWithHighpLightmap": false

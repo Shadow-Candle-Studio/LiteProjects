@@ -12,7 +12,7 @@ import { LevelData } from '../LevelData';
 import { ConfigManager } from '../ConfigManager';
 import { HitEffectManager } from '../HitEffectManager';
 import { Leaderboard } from '../Leaderboard';
-import { TutorialManager, TutorialStep, IntroStep } from '../TutorialManager';
+import { TutorialManager, TutorialStep } from '../TutorialManager';
 
 const { ccclass, property } = _decorator;
 
@@ -21,11 +21,18 @@ export enum GameMode{
     Ladder, // 天梯模式（随机关卡）
 }
 
-/** Level 1 教程步骤：3 枚硬币位置 (-264,176), (229,172), (-11,-140) */
-const TUTORIAL_STEPS_LEVEL_1: TutorialStep[] = [
-    { hintKey: 'tutorial_step_1', sourceCoinIndex: 0, targetCoinIndex: 1 },
-    { hintKey: 'tutorial_step_2', sourceCoinIndex: 1, targetCoinIndex: 2, isFinal: true },
-];
+/** 统一教程配置：key 为关卡索引（0-based），intro 和 drag 步骤可混排 */
+const TUTORIAL_CONFIG: Record<number, TutorialStep[]> = {
+    0: [
+        { type: 'drag', hintKey: 'tutorial_step_1', sourceCoinIndex: 0, targetCoinIndex: 1 },
+        { type: 'drag', hintKey: 'tutorial_step_2', sourceCoinIndex: 1, targetCoinIndex: 2, isFinal: true },
+    ],
+    1: [
+        // 第二关：block/mud 介绍由 _buildTutorialSteps 动态插入在拖拽步骤之前
+        { type: 'drag', hintKey: 'tutorial_step_1', sourceCoinIndex: 0, targetCoinIndex: 1 },
+        { type: 'drag', hintKey: 'tutorial_step_2', sourceCoinIndex: 1, targetCoinIndex: 2, isFinal: true },
+    ],
+};
 
 @ccclass('GameScene')
 export class GameScene extends Component {
@@ -67,10 +74,12 @@ export class GameScene extends Component {
     /** levels.json 中的关卡文件列表 */
     private _levelFiles: string[] = [];
 
-    start() {
+    protected onLoad(): void {
         // Q 键开关 DebugPanel（提前注册，即使面板初始 inactive 也能生效）
         input.on(Input.EventType.KEY_DOWN, this._onKeyDown, this);
+    }
 
+    start() {
         // UI 在场景根级 UICanvas 下（不在 World 内），用场景根查找
         const uiRoot = director.getScene()?.getChildByName('UICanvas');
         const uiManager = uiRoot?.getChildByName('UIManager');
@@ -343,6 +352,28 @@ export class GameScene extends Component {
         this.onGameStart();
     }
 
+    /** 构建当前关卡的统一教程步骤：静态配置 + 动态道具介绍 */
+    private _buildTutorialSteps(data: LevelData): TutorialStep[] {
+        const steps: TutorialStep[] = [];
+
+        // 动态生成 block/mud 介绍步骤（从关卡数据提取位置和大小）
+        for (const item of data.coins) {
+            if (item.type === 'block') {
+                steps.push({ type: 'intro', hintKey: 'tutorial_block_intro', x: item.x, y: item.y, radius: item.radius });
+            } else if (item.type === 'mud') {
+                steps.push({ type: 'intro', hintKey: 'tutorial_mud_intro', x: item.x, y: item.y, radius: item.radius });
+            }
+        }
+
+        // 追加静态配置的拖拽步骤
+        const staticSteps = TUTORIAL_CONFIG[this._levelIndex];
+        if (staticSteps) {
+            steps.push(...staticSteps);
+        }
+
+        return steps;
+    }
+
     /** 按关卡 JSON 配置初始化桌面、硬币、障碍物、陷阱 */
     private _initFromLevel(data: LevelData): void {
         this.clearCoins();
@@ -394,40 +425,15 @@ export class GameScene extends Component {
         }
         this.onGameStart();
 
-        // 闯关模式第一关 → 激活新手教程
-        if (this._levelIndex === 0 && this.tutorialManager) {
-            this.tutorialManager.gameLogic = this.gameLogic;
-            this.tutorialManager.uiManager = this.uiManager;
-            this.gameLogic.tutorialManager = this.tutorialManager;
-            this.tutorialManager.startTutorial(TUTORIAL_STEPS_LEVEL_1);
-        }
-
-        // 闯关模式第二关 → 道具介绍（block + mud）
-        if (this._levelIndex === 1 && this.tutorialManager) {
+        // 闯关模式 → 统一教程入口（intro 和 drag 步骤可混排）
+        if (this._levelIndex >= 0 && this.tutorialManager) {
             this.tutorialManager.gameLogic = this.gameLogic;
             this.tutorialManager.uiManager = this.uiManager;
             this.gameLogic.tutorialManager = this.tutorialManager;
 
-            const introSteps: IntroStep[] = [];
-            for (const item of data.coins) {
-                if (item.type === 'block') {
-                    introSteps.push({
-                        hintKey: 'tutorial_block_intro',
-                        x: item.x,
-                        y: item.y,
-                        radius: item.radius,
-                    });
-                } else if (item.type === 'mud') {
-                    introSteps.push({
-                        hintKey: 'tutorial_mud_intro',
-                        x: item.x,
-                        y: item.y,
-                        radius: item.radius,
-                    });
-                }
-            }
-            if (introSteps.length > 0) {
-                this.tutorialManager.startIntroTutorial(introSteps);
+            const steps = this._buildTutorialSteps(data);
+            if (steps.length > 0) {
+                this.tutorialManager.startTutorial(steps);
             }
         }
     }
