@@ -231,7 +231,10 @@ export class TutorialManager extends Component {
         const step = this._resolvedSteps[this._currentStepIndex];
         if (!step) return true;
 
-        if (this._hitTargetThisTurn) {
+        const hitCount = this.gameLogic?.coinHitCount ?? 0;
+        const fallCount = this.gameLogic?.coinFallCount ?? 0;
+
+        if (this._hitTargetThisTurn && fallCount == 0 && hitCount == 1) {
             // ✅ 正确击中目标 → 继续正常结算（a 硬币被打飞消失）
             this._foulCount = 0;
             // 在推进索引之前，记录当前步是否为最终步
@@ -256,8 +259,7 @@ export class TutorialManager extends Component {
             this._restorePositions();
             this._foulCount++;
 
-            const hitCount = this.gameLogic?.coinHitCount ?? 0;
-            const fallCount = this.gameLogic?.coinFallCount ?? 0;
+
 
             if (fallCount > 0) {
                 this._showHint('tutorial_foul_fall');
