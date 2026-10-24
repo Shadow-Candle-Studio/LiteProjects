@@ -57,10 +57,16 @@ export class I18n {
     /**
      * 获取翻译文本
      * @param key 翻译 key
+     * @param params 占位参数，替换译文中的 {name} 占位符
      * @returns 翻译后的文本，找不到时返回 key 本身
      */
-    public static t(key: string): string {
-        return I18n._data[key] ?? I18n._fallback[key] ?? key;
+    public static t(key: string, params?: Record<string, string | number>): string {
+        const text = I18n._data[key] ?? I18n._fallback[key] ?? key;
+        if (!params) return text;
+        return text.replace(/\{(\w+)\}/g, (match, name) => {
+            const value = params[name];
+            return value !== undefined ? String(value) : match;
+        });
     }
 
     /** 检测浏览器/设备语言，映射到支持的语言代码 */

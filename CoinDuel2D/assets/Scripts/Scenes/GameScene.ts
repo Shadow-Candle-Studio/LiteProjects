@@ -1,4 +1,4 @@
-import { _decorator, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip, Color, director, JsonAsset, Label } from 'cc';
+import { _decorator, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip, Color, director, Label } from 'cc';
 import { BombCoinMarker } from '../BombCoinMarker';
 import { I18n } from '../I18n';
 import { RoundManager } from '../RoundManager';
@@ -10,6 +10,7 @@ import { SoundManager } from '../SoundManager';
 import { LevelManager } from '../LevelManager';
 import { LevelData } from '../LevelData';
 import { ConfigManager } from '../ConfigManager';
+import { DataProvider } from '../DataProvider';
 import { HitEffectManager } from '../HitEffectManager';
 import { Leaderboard } from '../Leaderboard';
 import { TutorialManager, TutorialStep } from '../TutorialManager';
@@ -448,12 +449,12 @@ export class GameScene extends Component {
         if (this._levelIndex < this._levelFiles.length) {
             const levelFile = this._levelFiles[this._levelIndex];
             const path = 'levels/' + levelFile.replace('.json', '');
-            resources.load(path, JsonAsset, (err, asset) => {
+            DataProvider.loadJson(path, (err, data) => {
                 if (err) {
                     console.error(`Failed to load next level ${path}:`, err);
                     return;
                 }
-                const levelData = asset.json as LevelData;
+                const levelData = data as LevelData;
                 LevelManager.setCurrent(levelData);
                 this._initFromLevel(levelData);
             });
@@ -484,12 +485,12 @@ export class GameScene extends Component {
 
     /** 启动时读取全局 config.json，缓存数据并应用全局颜色 */
     private _loadCoinsConfig(): void {
-        resources.load('config', (err: any, asset: any) => {
+        DataProvider.loadJson('config', (err, data) => {
             if (err) {
                 console.warn('[GameScene] 加载 config.json 失败:', err);
                 return;
             }
-            this._coinsConfig = asset.json ?? {};
+            this._coinsConfig = (data as any) ?? {};
 
             // 应用全局颜色配置
             const parseHex = (hex: string) => new Color(

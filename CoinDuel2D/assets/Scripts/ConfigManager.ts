@@ -1,4 +1,4 @@
-import { resources, JsonAsset } from 'cc';
+import { DataProvider } from './DataProvider';
 
 /** GameLogic 相关配置 */
 export interface GameLogicConfig {
@@ -59,15 +59,15 @@ export interface GameConfig {
 export class ConfigManager {
     private static _config: GameConfig | null = null;
 
-    /** 加载配置文件 */
+    /** 加载配置文件（优先 serverdata，失败回退内置 Resources） */
     static load(callback: (err: Error | null) => void): void {
-        resources.load('config', JsonAsset, (err, asset) => {
-            if (err) {
+        DataProvider.loadJson('config', (err, data) => {
+            if (err || !data) {
                 console.warn('[ConfigManager] 加载 config.json 失败:', err);
-                callback(err);
+                callback(err ?? new Error('加载 config.json 失败'));
                 return;
             }
-            ConfigManager._config = asset.json as GameConfig;
+            ConfigManager._config = data as GameConfig;
             console.log('[ConfigManager] 配置加载完成');
             callback(null);
         });

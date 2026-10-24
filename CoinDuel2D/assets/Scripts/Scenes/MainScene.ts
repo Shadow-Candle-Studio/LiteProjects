@@ -2,6 +2,7 @@ import { _decorator, Button, Component, director, Node, Label, resources, instan
 import { LevelManager } from '../LevelManager';
 import { SoundManager } from '../SoundManager';
 import { I18n } from '../I18n';
+import { UpdateManager } from '../UpdateManager';
 import { GameMode, GameScene } from './GameScene';
 const { ccclass, property } = _decorator;
 
@@ -13,10 +14,13 @@ export class MainScene extends Component {
     public btnLadder: Button | null = null;
     @property(Button)
     public btnPVP: Button | null = null;
+    @property(Label)
+    public labelUpdateMessage: Label | null = null;
     @property(Prefab)
     public soundManagerPrefab: Prefab | null = null;
 
     onLoad() {
+
         this.btnLevels.node.on(Button.EventType.CLICK, () => {
             GameScene.mode = GameMode.Level;
             director.loadScene('levels');
@@ -41,7 +45,30 @@ export class MainScene extends Component {
     start(){
         I18n.init(() => {
             this._translateLabels();
+
+            this.showMenus(false);
+            this.labelUpdateMessage.string = I18n.t('main_check_update');
+            
+            // 游戏启动时从服务器更新关卡和配置（后台进行，不阻塞界面）
+            UpdateManager.checkUpdate(
+                (p) => {
+                    console.log(`[Update] 更新进度 ${(p * 100).toFixed(0)}%`);
+                    this.labelUpdateMessage.string = I18n.t('main_update_progress') + (p * 100).toFixed(0) + "%";
+                },
+                (err, errParams) => {
+                    if (err) {
+                        console.warn('[Update] 更新失败:', err, errParams);
+                        this.labelUpdateMessage.string = I18n.t('main_update_error') + I18n.t(err, errParams);
+                    } else {
+                        console.log('[Update] 更新完成');
+                        this.labelUpdateMessage.string = I18n.t('main_update_complete');
+                    }
+                    this.showMenus(true);
+                }
+            );
+
         });
+
     }
 
     /** 翻译主菜单场景中的 Label */
@@ -69,5 +96,12 @@ export class MainScene extends Component {
         };
         walk(scene);
     }
+
+    private showMenus(e:boolean){
+        this.btnLevels.node.active = e;
+        this.btnLadder.node.active = e;
+        //this.btnPVP.node.active = e;
+    }
+
 }
 

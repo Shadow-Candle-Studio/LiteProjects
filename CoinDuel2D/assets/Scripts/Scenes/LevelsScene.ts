@@ -1,6 +1,7 @@
-import { _decorator, Component, Node, resources, JsonAsset, instantiate, Prefab, Label, Button, director } from 'cc';
+import { _decorator, Component, Node, instantiate, Prefab, Label, Button, director } from 'cc';
 import { LevelManager } from '../LevelManager';
 import { LevelData, LevelState } from '../LevelData';
+import { DataProvider } from '../DataProvider';
 import { UILevelItem } from '../UI/UILevelItem';
 import { SoundManager } from '../SoundManager';
 const { ccclass, property } = _decorator;
@@ -23,12 +24,12 @@ export class LevelsScene extends Component {
         if (state === LevelState.Locked) return;
 
         const path = 'levels/' + levelFile.replace('.json', '');
-        resources.load(path, JsonAsset, (err, asset) => {
+        DataProvider.loadJson(path, (err, data) => {
             if (err) {
                 console.error(`Failed to load ${path}:`, err);
                 return;
             }
-            const levelData = asset.json as LevelData;
+            const levelData = data as LevelData;
             LevelManager.setLevelList(this._levelFiles, index);
             LevelManager.setCurrent(levelData);
             director.loadScene('game');
@@ -59,19 +60,19 @@ export class LevelsScene extends Component {
     }
 
     loadLevels() {
-        resources.load('levels', JsonAsset, (err, asset) => {
+        DataProvider.loadJson('levels', (err, data) => {
             if (err) {
                 console.error('Failed to load levels.json:', err);
                 return;
             }
-            const data = asset.json as { levels: string[] };
-            this._levelFiles = data.levels;
+            const list = data as { levels: string[] };
+            this._levelFiles = list.levels;
 
             // 初始化关卡状态（第一个自动解锁）
             LevelManager.setLevelList(this._levelFiles, 0);
 
-            for (let i = 0; i < data.levels.length; i++) {
-                const levelFile = data.levels[i];
+            for (let i = 0; i < list.levels.length; i++) {
+                const levelFile = list.levels[i];
                 const btn = instantiate(this.levelButtonPrefab);
                 btn.name = levelFile;
                 this.levelsContainer.addChild(btn);
