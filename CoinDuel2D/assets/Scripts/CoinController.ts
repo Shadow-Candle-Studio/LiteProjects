@@ -45,8 +45,6 @@ export class CoinController extends Component {
 
     /** 经墙面限位后的拖拽向量（箭头尾部不进入墙内） */
     private _clampedDragVec: Vec2 = new Vec2();
-    /** 鼠标是否位于墙内（用于触发拒绝音效） */
-    private _mouseInWall: boolean = false;
     /** 上一次拖拽距离（用于判断增加/减少音效） */
     private _lastDragDist: number = 0;
     /** 当前拖拽方向音效状态：'increase' | 'decrease' | null */
@@ -277,7 +275,6 @@ export class CoinController extends Component {
         this._clearPredictedTarget();
         this._hideDragArrow();
 
-        this._mouseInWall = false;
         this._lastDragDist = 0;
         this._dragSoundDir = null;
         this._isDragging = true;
@@ -291,7 +288,7 @@ export class CoinController extends Component {
         event.getLocation(CoinController._lastWorldPos);
 
         // 开始循环播放拖拽音效
-        SoundManager.instance.startCoinDrag();
+        SoundManager.instance?.startCoinDrag();
 
         // 其他硬币高亮为绿色（表示可被打击）
         const coinGroup = this._gameLogic?.coinGroup;
@@ -336,7 +333,7 @@ export class CoinController extends Component {
         event.getLocation(CoinController._lastWorldPos);
         if (!this._isDragging) return;
         // 播放一次拖拽音效（若已在播放则跳过）
-        SoundManager.instance.startCoinDrag();
+        SoundManager.instance?.startCoinDrag();
         // 先绘制箭头（计算墙面限位后的拖拽向量）
         this._drawDragLine(event);
         // 距离增加/减少音效
@@ -408,53 +405,20 @@ export class CoinController extends Component {
         this._dragSoundDir = dir;
 
         if (dir === 'increase') {
-            SoundManager.instance.startDragIncreaseLoop();
+            SoundManager.instance?.startDragIncreaseLoop();
         } else if (dir === 'decrease') {
-            SoundManager.instance.startDragDecreaseLoop();
+            SoundManager.instance?.startDragDecreaseLoop();
         } else {
-            SoundManager.instance.stopDragDirectionLoop();
+            SoundManager.instance?.stopDragDirectionLoop();
         }
     }
 
     /**
-     * 计算经墙面限位后的拖拽向量。
-     * 箭头尾部 = 硬币位置 + 拖拽向量，不能超出桌面可玩区域（墙内），
-     * 超出时截断到边界，确保力度计算基于实际可视的箭头长度。
+     * 拖曳向量就是手指拉離的距離。
+     * 發射和瞄準線都往反方向，所以拉出桌邊不該把力道截短。
      */
     private _calcClampedDrag(rawDx: number, rawDy: number): Vec2 {
-        const gl = this._gameLogic;
-        if (!gl) return new Vec2(rawDx, rawDy);
-
-        // 箭头尾部可到墙内边缘（不受硬币半径限制）
-        const halfW = gl.tableWidth / 2 - gl.wallThickness;
-        const halfH = gl.tableHeight / 2 - gl.wallThickness;
-        const coinPos = this.node.position;
-
-        // 箭头尾部原始位置
-        let tailX = coinPos.x + rawDx;
-        let tailY = coinPos.y + rawDy;
-
-        // 检测鼠标是否超出墙内（触发拒绝音效 + 摄像机震动）
-        const nowInWall = Math.abs(tailX) > halfW || Math.abs(tailY) > halfH;
-        if (nowInWall && !this._mouseInWall) {
-            SoundManager.instance.startNegative();
-            // 震动方向：硬币中心 → 鼠标位置（= raw 拖拽向量方向）
-            const hem = this._gameLogic.hitEffectManager;
-            if (hem) {
-                const dir = new Vec2(rawDx, rawDy);
-                const len = dir.length();
-                if (len > 0.001) { dir.x /= len; dir.y /= len; }
-                hem.shakeCamera(0.1, dir);
-            }
-        }
-        this._mouseInWall = nowInWall;
-
-        // 限位到可玩区域
-        tailX = Math.max(-halfW, Math.min(halfW, tailX));
-        tailY = Math.max(-halfH, Math.min(halfH, tailY));
-
-        // 从限位后的尾部反算拖拽向量
-        return new Vec2(tailX - coinPos.x, tailY - coinPos.y);
+        return new Vec2(rawDx, rawDy);
     }
 
     /** 清理预测高亮 */
@@ -556,8 +520,8 @@ export class CoinController extends Component {
         this._hideDragArrow();
         this._clearTargetableAll();
         this._gameLogic?.clearAimLine();
-        SoundManager.instance.stopDragDirectionLoop();
-        SoundManager.instance.playDragRelease();
+        SoundManager.instance?.stopDragDirectionLoop();
+        SoundManager.instance?.playDragRelease();
 
         if (!this._rigidBody) return;
 
@@ -582,7 +546,7 @@ export class CoinController extends Component {
         } else {
             // fallback：直接发射
             this._rigidBody.linearVelocity = velocity;
-            SoundManager.instance.playShot();
+            SoundManager.instance?.playShot();
         }
     }
 }

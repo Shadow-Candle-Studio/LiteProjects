@@ -7,6 +7,13 @@ import { HitEffectManager } from './HitEffectManager';
 import { Leaderboard } from './Leaderboard';
 import { SoundManager } from './SoundManager';
 import { TutorialManager } from './TutorialManager';
+import { BehaviorRegistry } from './Behaviors/BehaviorRegistry';
+import { BehaviorResolver } from './Behaviors/BehaviorResolver';
+import { BehaviorBase } from './Behaviors/BehaviorBase';
+import './Behaviors/FreezeBehavior';
+import './Behaviors/FlashStepBehavior';
+import './Behaviors/KnockbackBehavior';
+import { MemeLoader } from './Meme/MemeLoader';
 const { ccclass, property } = _decorator;
 
 enum GamePhase {
@@ -40,6 +47,8 @@ export class GameLogic extends Component {
     @property({ type: HitEffectManager, tooltip: "击中特效管理器（控制拖拽拉近/发射追踪/暂停/震动/粒子/碰撞追踪/恢复）" })
     public hitEffectManager: HitEffectManager | null = null;
 
+    /** 由 GameScene 在初始化时注入。Meme 硬幣也用這顆 prefab。 */
+    public coinPrefab: Prefab | null = null;
     /** 由 GameScene 在初始化时注入 */
     public blockerPrefab: Prefab | null = null;
     /** 由 GameScene 在初始化时注入 */
@@ -57,7 +66,7 @@ export class GameLogic extends Component {
     public bombMudPushFactor: number = 0.333;
 
     @property({ tooltip: "瞄准线长度系数（拖动距离 × 系数 = 瞄准线长度）" })
-    public aimLineFactor: number = 6;
+    public aimLineFactor: number = 2;
 
     @property({ tooltip: "泥潭内硬币滑动阻尼（越大减速越明显）" })
     public mudDamping: number = 8;
@@ -89,6 +98,8 @@ export class GameLogic extends Component {
     private _activeShotCoin: Node | null = null;
     private _lockedCoin: Node | null = null;
     private _lastHitCoin: Node | null = null;
+    /** 這一發射已經計過分的硬幣。同一枚被碰到兩次只算 1 次。 */
+    private _hitCoinsThisShot: Set<Node> = new Set();
     private _gameStartTime: number = 0;
 
     /** 场上所有道具节点（障碍物 + 陷阱），关卡开始时统一清理 */
@@ -171,70 +182,98 @@ export class GameLogic extends Component {
     public drawAimLine(fromX: number, fromY: number, dirX: number, dirY: number): void {
         this._aimDotIdx = 0;
 
-        const len = Math.sqrt(dirX * dirX + dirY * dirY);
+        const len = Math.hypot(dirX, dirY);
         if (len < 0.001) { this._hideAimDots(); return; }
         let dx = dirX / len;
         let dy = dirY / len;
 
-        // 瞄准线长度 = 拖动距离 × 系数
         const aimLength = len * this.aimLineFactor;
+        const limitX = this.tableWidth / 2 - this.wallThickness - this.coinRadius;
+        const limitY = this.tableHeight / 2 - this.wallThickness - this.coinRadius;
+        const gapHalf = this.gapWidth / 2;
+        const eps = 0.25;
 
-        const halfW = this.tableWidth / 2 - this.wallThickness;
-        const halfH = this.tableHeight / 2 - this.wallThickness;
-
-        // 1. 收集所有反射线段的端点
-        const pts: { x: number; y: number }[] = [{ x: fromX, y: fromY }];
-        let x = fromX, y = fromY;
+        let x = Math.max(-limitX, Math.min(limitX, fromX));
+        let y = Math.max(-limitY, Math.min(limitY, fromY));
+        const pts: { x: number; y: number }[] = [{ x, y }];
         let remaining = aimLength;
 
-        for (let i = 0; i < 10 && remaining > 0; i++) {
-            let tMin = remaining;
-            let hitWall = -1;
-            if (dx > 0) { const t = (halfW - x) / dx; if (t > 0.01 && t < tMin) { tMin = t; hitWall = 0; } }
-            if (dx < 0) { const t = (-halfW - x) / dx; if (t > 0.01 && t < tMin) { tMin = t; hitWall = 1; } }
-            if (dy > 0) { const t = (halfH - y) / dy; if (t > 0.01 && t < tMin) { tMin = t; hitWall = 2; } }
-            if (dy < 0) { const t = (-halfH - y) / dy; if (t > 0.01 && t < tMin) { tMin = t; hitWall = 3; } }
-            x += dx * tMin;
-            y += dy * tMin;
-            remaining -= tMin;
-            pts.push({ x, y });
-            if (hitWall < 0 || remaining <= 0) break;
-            if (hitWall === 0 || hitWall === 1) dx = -dx; else dy = -dy;
-        }
+        for (let bounce = 0; bounce < 8 && remaining > eps; bounce++) {
+            let tx = Number.POSITIVE_INFINITY;
+            let ty = Number.POSITIVE_INFINITY;
+            if (dx > 1e-6) tx = (limitX - x) / dx;
+            else if (dx < -1e-6) tx = (-limitX - x) / dx;
+            if (dy > 1e-6) ty = (limitY - y) / dy;
+            else if (dy < -1e-6) ty = (-limitY - y) / dy;
 
-        // 2. 沿路径每 12px 放一个圆点
-        const step = 12;
-        let acc = 0;
-        let seg = 0;
-        let sx = pts[0].x, sy = pts[0].y;
-        let segLen = pts.length > 1 ? Math.hypot(pts[1].x - sx, pts[1].y - sy) : 0;
-        let segIdx = 0;
-
-        while (acc < aimLength && segIdx < pts.length - 1) {
-            if (seg + step <= segLen) {
-                seg += step;
-                acc += step;
-            } else {
-                // 进入下一段
-                segIdx++;
-                if (segIdx >= pts.length - 1) break;
-                sx = pts[segIdx].x;
-                sy = pts[segIdx].y;
-                segLen = Math.hypot(pts[segIdx + 1].x - sx, pts[segIdx + 1].y - sy);
-                seg = 0;
-                continue;
+            const hitX = tx > eps && tx <= remaining;
+            const hitY = ty > eps && ty <= remaining;
+            if (!hitX && !hitY) {
+                pts.push({ x: x + dx * remaining, y: y + dy * remaining });
+                break;
             }
-            const t = seg / segLen;
-            const px = sx + (pts[segIdx + 1].x - sx) * t;
-            const py = sy + (pts[segIdx + 1].y - sy) * t;
-            const dot = this._getAimDot();
-            dot.setPosition(px, py, 0);
-            // 距离越远越透明
-            const alpha = Math.round(220 * (1 - acc / aimLength));
-            dot.getComponent(Sprite)!.color = new Color(255, 255, 100, alpha);
+
+            const nearCorner = hitX && hitY && Math.abs(tx - ty) <= 1;
+            const t = nearCorner ? Math.min(tx, ty) : (hitX && (!hitY || tx <= ty) ? tx : ty);
+            const bounceX = nearCorner || (hitX && t === tx);
+            const bounceY = nearCorner || (hitY && t === ty);
+
+            x += dx * t;
+            y += dy * t;
+            remaining -= t;
+            pts.push({ x, y });
+
+            const throughGap = (bounceX && this._aimHitsGap(dx > 0 ? 1 : 3, y, gapHalf))
+                || (bounceY && this._aimHitsGap(dy > 0 ? 0 : 2, x, gapHalf));
+            if (throughGap || remaining <= eps) break;
+
+            if (bounceX) dx = -dx;
+            if (bounceY) dy = -dy;
+            x += dx * eps;
+            y += dy * eps;
+            remaining -= eps;
         }
 
+        this._stampAimDots(pts, aimLength);
         this._hideAimDots();
+    }
+
+    /** 這一點是不是落在牆的缺口上。缺口不反彈，線停在這裡。 */
+    private _aimHitsGap(side: number, along: number, gapHalf: number): boolean {
+        if (gapHalf <= 0 || this.gaps.length === 0) return false;
+        return this.gaps.some((gap) => gap.side === side && Math.abs(along - gap.center) < gapHalf);
+    }
+
+    /** 沿折線每 12px 放一個點，轉角把剩餘間距帶到下一段，避免斷開或重疊。 */
+    private _stampAimDots(pts: { x: number; y: number }[], aimLength: number): void {
+        const step = 12;
+        let untilDot = step;
+        let traveled = 0;
+        for (let i = 0; i < pts.length - 1; i++) {
+            const ax = pts[i].x;
+            const ay = pts[i].y;
+            const bx = pts[i + 1].x;
+            const by = pts[i + 1].y;
+            const segLen = Math.hypot(bx - ax, by - ay);
+            if (segLen < 0.001) continue;
+
+            let walked = 0;
+            while (walked + untilDot <= segLen + 0.001) {
+                walked += untilDot;
+                traveled += untilDot;
+                if (traveled > aimLength) return;
+                const t = walked / segLen;
+                const dot = this._getAimDot();
+                dot.setPosition(ax + (bx - ax) * t, ay + (by - ay) * t, 0);
+                const alpha = Math.round(220 * (1 - traveled / aimLength));
+                dot.getComponent(Sprite)!.color = new Color(255, 255, 100, Math.max(0, alpha));
+                untilDot = step;
+            }
+            const rest = segLen - walked;
+            traveled += rest;
+            untilDot -= rest;
+            if (untilDot < 0.001) untilDot = step;
+        }
     }
 
     /** 隐藏多余的圆点 */
@@ -269,8 +308,13 @@ export class GameLogic extends Component {
     }
 
     public score: number = 0;
+    /** 連續成功次數。失敗或開新關時歸零。 */
+    private _combo = 0;
+    private static readonly _COMBO_MULTIPLIERS = [1, 1.5, 2];
+    public onCoinsLeft: ((count: number) => void) | null = null;
+    private _coinsLeftShown = -1;
     public onGameOver: ((duration: number) => void) | null = null;
-    public onScoreUpdate: ((score: number) => void) | null = null;
+    public onScoreUpdate: ((score: number, multiplier: number) => void) | null = null;
     public onGameWin: ((duration: number) => void) | null = null;
 
     /** 当前活跃的弹射硬币（用于碰撞检测） */
@@ -278,8 +322,36 @@ export class GameLogic extends Component {
         return this._activeShotCoin;
     }
 
+    /** 新的一關開始。分數與過關時間都從這一關起算。 */
+    public beginLevel(): void {
+        this.score = 0;
+        this._combo = 0;
+        this._coinsLeftShown = -1;
+        this._gameStartTime = Date.now();
+        this.onScoreUpdate?.(this.score, 1);
+    }
+
+    public countCoins(): number {
+        if (!this.coinGroup) return 0;
+        let count = 0;
+        for (const child of this.coinGroup.children) {
+            if (child.getComponent(CoinController)) count++;
+        }
+        return count;
+    }
+
+    /** 這一發成功。第 1 發 x1，第 2 發 x1.5，之後 x2。 */
+    private _awardSuccess(): void {
+        const index = Math.min(this._combo, GameLogic._COMBO_MULTIPLIERS.length - 1);
+        const multiplier = GameLogic._COMBO_MULTIPLIERS[index];
+        this._combo++;
+        this.score += multiplier;
+        this.onScoreUpdate?.(this.score, multiplier);
+    }
+
     protected start(): void {
         this._gameStartTime = Date.now();
+        MemeLoader.checkAndDownload();
 
         // 自动创建拖拽引导线 Graphics 节点（挂在 coinGroup 下，与硬币同坐标系）
         // if (!this.dragGraphics) {
@@ -340,15 +412,33 @@ export class GameLogic extends Component {
         if (markerA && !markerA.activated) markerA.activated = true;
         if (markerB && !markerB.activated) markerB.activated = true;
 
+        const behaviorConsumed = BehaviorResolver.resolveContact(nodeA, nodeB, this);
+
         if (!this._activeShotCoin) return;
 
         // 只处理硬币-硬币碰撞，跳过围墙碰撞
         const otherNode = nodeA === this._activeShotCoin ? nodeB : nodeA;
         if (nodeA !== this._activeShotCoin && nodeB !== this._activeShotCoin) return;
+        if (this._hitCoinsThisShot.has(otherNode)) return;
+
+        // 主動行為已消費碰撞：仍算一次命中，避免被判定成 miss，但不再播一般打擊特效。
+        if (behaviorConsumed) {
+            const hitCtrl = otherNode.getComponent(CoinController);
+            const hitBomb = otherNode.getComponent(BombCoinMarker);
+            if (hitCtrl || hitBomb) {
+                this._hitCoinsThisShot.add(otherNode);
+                this.coinHitCount++;
+                this.resetIdleTimer();
+                this.onCoinHitByActiveShot(otherNode);
+                this.tutorialManager?.onCoinHit(otherNode);
+            }
+            return;
+        }
 
         // 撞到炸弹硬币：仅计数，不触发打击特效
         const hitBomb = otherNode.getComponent(BombCoinMarker);
         if (hitBomb) {
+            this._hitCoinsThisShot.add(otherNode);
             this.coinHitCount++;
             this.resetIdleTimer();
             this.tutorialManager?.onCoinHit(otherNode);
@@ -374,15 +464,16 @@ export class GameLogic extends Component {
         // 被打击硬币切换被打击贴图 + 播放被打击音效（优先使用 config.json 配置的 hitted_sfx）
         hitCtrl.showHit();
         if (hitCtrl.hittedSfxClip) {
-            SoundManager.instance.playClip(hitCtrl.hittedSfxClip);
+            SoundManager.instance?.playClip(hitCtrl.hittedSfxClip);
         } else {
-            SoundManager.instance.playCollisionCoin();
+            SoundManager.instance?.playCollisionCoin();
         }
 
         // 当发射硬币发生二次碰撞时，播放音效
+        this._hitCoinsThisShot.add(otherNode);
         this.coinHitCount++;
         if (this.coinHitCount == 2){
-            SoundManager.instance.playSecondaryCollision();
+            SoundManager.instance?.playSecondaryCollision();
         }
 
         this.onCoinHitByActiveShot(otherNode);
@@ -452,7 +543,7 @@ export class GameLogic extends Component {
     }
 
     /** 在指定位置生成普通硬币（关卡配置用），radius 缺省时使用 coinRadius */
-    public spawnCoinAt(prefab: Prefab, x: number, y: number, radius?: number): void {
+    public spawnCoinAt(prefab: Prefab, x: number, y: number, radius?: number, behaviorId?: string): Node {
         const node = instantiate(prefab);
         this.coinGroup.addChild(node);
         node.setPosition(x, y, 0);
@@ -464,6 +555,45 @@ export class GameLogic extends Component {
         if (cc) cc.radius = r;
         const ctrl = node.addComponent(CoinController);
         ctrl.setGameLogic(this);
+        if (behaviorId) this.attachCoinBehavior(node, behaviorId);
+        return node;
+    }
+
+    /**
+     * 依註冊 id 把行為掛到硬幣上。
+     * 例：this.attachCoinBehavior(coin, 'FreezeBehavior')
+     */
+    public attachCoinBehavior(coin: Node, behaviorId: string): void {
+        BehaviorRegistry.attach(coin, behaviorId);
+    }
+
+    /**
+     * 用已下載的 Meme 生成硬幣。
+     * 找不到資料或圖片解不開時，仍生成一枚預設外觀的硬幣。
+     */
+    public spawnMemeCoinAt(memeId: string, x: number, y: number): Node | null {
+        if (!this.coinPrefab) {
+            console.warn('[Meme] 尚未設定 coinPrefab');
+            return null;
+        }
+        const meme = MemeLoader.getLoadedMemes().find((item) => item.id === memeId);
+        if (!meme) {
+            console.warn('[Meme] 找不到，改用預設硬幣:', memeId);
+            return this.spawnCoinAt(this.coinPrefab, x, y);
+        }
+        const node = this.spawnCoinAt(
+            this.coinPrefab,
+            x,
+            y,
+            meme.radius > 0 ? meme.radius : undefined,
+            meme.behavior || undefined,
+        );
+        MemeLoader.applySprite(memeId, (frame) => {
+            if (!frame || !node.isValid) return;
+            const sprite = CoinController.getCoinSprite(node);
+            if (sprite) sprite.spriteFrame = frame;
+        });
+        return node;
     }
 
     /** 在指定位置生成炸弹硬币（关卡配置用），被撞击静止后触发爆炸 */
@@ -511,7 +641,7 @@ export class GameLogic extends Component {
         while (stack.length > 0) {
             const n = stack.pop()!;
             if (n !== world && n.isValid && (n.name === 'Mud' || n.name === 'Blocker')) {
-                if (!this._props.includes(n)) {
+                if (this._props.indexOf(n)<0) {
                     this._props.push(n);
                     if (n.name === 'Mud') {
                         this._muds.push(n);
@@ -609,6 +739,9 @@ export class GameLogic extends Component {
         // 2.5 泥潭摩擦：硬币中心在泥潭区域内时提高阻尼
         this._applyMudFriction();
 
+        // 2.6 被動行為（磁鐵、持續減速等）
+        BehaviorResolver.tick(deltaTime, this);
+
         // 3. 慢动作超时保护：3秒后自动恢复
         if (this._isSlowMotion && Date.now() - this._slowMotionStartTime >= this._slowMotionMaxDuration) {
             this._restoreSpeed();
@@ -628,6 +761,12 @@ export class GameLogic extends Component {
                 ctrl.showIndicator(true);
             }
             this._pendingLockedCoin = null;
+        }
+
+        const coinsLeft = this.countCoins();
+        if (coinsLeft !== this._coinsLeftShown) {
+            this._coinsLeftShown = coinsLeft;
+            this.onCoinsLeft?.(coinsLeft);
         }
 
         // 6. 物理模拟中：检查是否静止
@@ -740,7 +879,7 @@ export class GameLogic extends Component {
                 coin.setPosition(newX, newY, 0);
                 rb.linearVelocity = new Vec2(newVx, newVy);
                 // 硬币与墙碰撞音效
-                SoundManager.instance.playCollisionWall();
+                SoundManager.instance?.playCollisionWall();
             }
         }
     }
@@ -811,7 +950,7 @@ export class GameLogic extends Component {
         console.log("检测到硬币坠落，执行销毁...");
         // 硬币掉落 → 恢复速度
         this._restoreSpeed();
-        SoundManager.instance.playCoinFall();
+        SoundManager.instance?.playCoinFall();
         this.coinFallCount++;
         coin.destroy();
     }
@@ -875,7 +1014,7 @@ export class GameLogic extends Component {
         }
 
         // 执行爆炸物理效果
-        SoundManager.instance.playExplosion();
+        SoundManager.instance?.playExplosion();
         Bomb.applyExplosionAt(pos, {
             pushRadius: this.bombPushRadius,
             pushForce: this.bombPushForce,
@@ -888,17 +1027,17 @@ export class GameLogic extends Component {
             wallThickness: this.wallThickness,
         });
 
-        // 移除炸弹硬币
+        // 移除炸弹硬币。若下一發鎖的就是這顆炸彈，先解開，避免鎖到已銷毀的節點。
         const idx = this._bombCoins.indexOf(bombCoin);
         if (idx >= 0) this._bombCoins.splice(idx, 1);
+        const lastHitWasBomb = this._lastHitCoin === bombCoin;
         bombCoin.removeFromParent();
         bombCoin.destroy();
 
-        // 重置碰撞计数，回到 ANIMATING 等待被推开的硬币再次静止
-        this.coinHitCount = 0;
+        // 保留這次合法命中，回到 ANIMATING 等被推開的硬幣再次靜止。
         this.coinFallCount = 0;
         this._activeShotCoin = null;
-        this._lastHitCoin = null;
+        if (lastHitWasBomb) this._lastHitCoin = null;
         this.currentPhase = GamePhase.ANIMATING;
 
         this.resetIdleTimer();
@@ -913,8 +1052,7 @@ export class GameLogic extends Component {
                 return; // 教程已处理失败（重置位置）
             }
             // 教程成功 → 播放打飞特效，跳过游戏结束/胜利判定
-            this.score++;
-            this.onScoreUpdate?.(this.score);
+            this._awardSuccess();
 
             const afterKnockOut = () => {
                 this._activeShotCoin = null;
@@ -959,9 +1097,7 @@ export class GameLogic extends Component {
                 return;
 
             case 1: {
-                // 得分 +1
-                this.score++;
-                this.onScoreUpdate?.(this.score);
+                this._awardSuccess();
 
                 // 打飞特效（B 硬币旋转手臂将 A 打飞出界）结束后再结算
                 const afterKnockOut = () => {
@@ -1006,12 +1142,13 @@ export class GameLogic extends Component {
     /** 游戏结束处理 */
     private _handleGameOver(): void {
         console.log(">>> 游戏结束 <<<");
+        this._combo = 0;
         this._restoreSpeed();
         this.hitEffectManager?.stopTracking();
         this._pendingLockedCoin = null;
         this.tutorialManager && (this.tutorialManager.gameOver = true);
-        SoundManager.instance.stopDragDirectionLoop();
-        SoundManager.instance.playGameOver();
+        SoundManager.instance?.stopDragDirectionLoop();
+        SoundManager.instance?.playGameOver();
         const duration = Math.floor((Date.now() - this._gameStartTime) / 1000);
         if (this.score > 0) {
             Leaderboard.addEntry(this.score, duration);
@@ -1027,9 +1164,12 @@ export class GameLogic extends Component {
         this.hitEffectManager?.stopTracking();
         this._pendingLockedCoin = null;
         this.tutorialManager && (this.tutorialManager.gameOver = true);
-        SoundManager.instance.stopDragDirectionLoop();
+        SoundManager.instance?.stopDragDirectionLoop();
         this._setCoinsInteraction(false);
         const duration = Math.floor((Date.now() - this._gameStartTime) / 1000);
+        if (this.score > 0) {
+            Leaderboard.addEntry(this.score, duration);
+        }
         this.onGameWin?.(duration);
     }
 
@@ -1072,12 +1212,12 @@ export class GameLogic extends Component {
         if (ctrl) {
             ctrl.showShot();
             if (ctrl.shotSfxClip) {
-                SoundManager.instance.playClip(ctrl.shotSfxClip);
+                SoundManager.instance?.playClip(ctrl.shotSfxClip);
             } else {
-                SoundManager.instance.playShot();
+                SoundManager.instance?.playShot();
             }
         } else {
-            SoundManager.instance.playShot();
+            SoundManager.instance?.playShot();
         }
 
         this.hitEffectManager?.onLaunch(coin, this);
@@ -1090,6 +1230,7 @@ export class GameLogic extends Component {
         this.coinHitCount = 0;
         this.coinFallCount = 0;
         this._lastHitCoin = null;
+        this._hitCoinsThisShot.clear();
         this._setCoinsInteraction(false);
         // 游戏速度由 HitEffectManager.onLaunch 控制
     }
@@ -1106,6 +1247,7 @@ export class GameLogic extends Component {
         this._lastHitCoin = null;
         this.coinHitCount = 0;
         this.coinFallCount = 0;
+        this._hitCoinsThisShot.clear();
         this._setCoinsInteraction(true);
         // 重置空闲计时器
         this.tutorialManager?.resetIdleTimer();
@@ -1123,6 +1265,9 @@ export class GameLogic extends Component {
             if (ctrl) {
                 ctrl.allowedOperation = allowed;
                 ctrl.showIndicator(allowed);
+            }
+            for (const behavior of coin.getComponents(BehaviorBase)) {
+                behavior.showIdleVisual();
             }
 
             // 每次启用时同步滑动阻力（持久设置，设一次即可）

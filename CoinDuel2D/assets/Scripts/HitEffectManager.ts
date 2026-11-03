@@ -140,6 +140,8 @@ export class HitEffectManager extends Component {
     public shakeStartTime: number = 0;
     public shakeEndTime: number = 0;
     public shakeDir: Vec2 = new Vec2(1, 0);
+    /** 上一幀已經加到相機上的震動。下一幀先扣掉，避免一次次疊加。 */
+    private _shakeOffset: Vec2 = new Vec2();
 
     // ── 碰撞后追踪用 ──
     public isTrackingHitCoin: boolean = false;
@@ -424,6 +426,8 @@ export class HitEffectManager extends Component {
         defaultOrthoHeight: number,
         isSlowMotion: boolean,
     ): void {
+        this._clearShakeOffset(camNode);
+
         // ── 发射追踪 ──
         if (this.enableLaunchTracking && isSlowMotion && this._activeShotCoin?.isValid) {
             this._trackTarget(dt, camNode, this._activeShotCoin.position, this.cameraZoomInDuration);
@@ -457,23 +461,29 @@ export class HitEffectManager extends Component {
             this.isCameraAtRest = false;
         }
 
-        // ── 屏幕震动 ──
+        // ── 屏幕震动：加在這一幀的乾淨位置上，結束時偏移為 0 ──
         if (this.isShaking) {
             const elapsed = Date.now() - this.shakeStartTime;
             const duration = this.shakeEndTime - this.shakeStartTime;
             if (elapsed < duration && duration > 0) {
                 const progress = elapsed / duration;
-                const amplitude = Math.sin(progress * Math.PI * 2) * 4;
+                const amplitude = Math.sin(progress * Math.PI * 2) * 4 * (1 - progress);
+                this._shakeOffset.set(this.shakeDir.x * amplitude, this.shakeDir.y * amplitude);
                 const pos = camNode.position;
-                camNode.setPosition(
-                    pos.x + this.shakeDir.x * amplitude,
-                    pos.y + this.shakeDir.y * amplitude,
-                    pos.z,
-                );
+                camNode.setPosition(pos.x + this._shakeOffset.x, pos.y + this._shakeOffset.y, pos.z);
             } else {
                 this.isShaking = false;
+                this._shakeOffset.set(0, 0);
             }
         }
+    }
+
+    /** 追蹤和回位都看不含震動的位置。 */
+    private _clearShakeOffset(camNode: Node): void {
+        if (this._shakeOffset.x === 0 && this._shakeOffset.y === 0) return;
+        const pos = camNode.position;
+        camNode.setPosition(pos.x - this._shakeOffset.x, pos.y - this._shakeOffset.y, pos.z);
+        this._shakeOffset.set(0, 0);
     }
 
     // ══════════════════════════════════════════
