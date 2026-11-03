@@ -50,7 +50,7 @@ export class CoinController extends Component {
     /** 当前拖拽方向音效状态：'increase' | 'decrease' | null */
     private _dragSoundDir: 'increase' | 'decrease' | null = null;
 
-    /** 当前硬币类型（config.json 中的 key，如 "1", "2"） */
+    /** 当前硬币类型（memes.json 中的 key，如 "1", "2"） */
     private _coinTypeKey: string = '';
     /** 当前贴图状态：默认/空闲/拖拽/发射/被打击 */
     private _textureState: 'default' | 'idle' | 'aim' | 'shot' | 'hit' = 'default';
@@ -98,7 +98,7 @@ export class CoinController extends Component {
         return this._hittedSfxClip;
     }
 
-    /** 获取 config.json 中配置的默认贴图（texture 字段） */
+    /** 获取 memes.json 中配置的默认贴图（texture 字段） */
     public get defaultFrame(): SpriteFrame | null {
         return this._defaultFrame;
     }

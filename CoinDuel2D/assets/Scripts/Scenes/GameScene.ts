@@ -55,7 +55,7 @@ export class GameScene extends Component {
     public explosionPrefab: Prefab = null;
     @property(UIManager)
     public uiManager:UIManager = null;
-    @property({ tooltip: "开局使用的硬币 id（config.json 中 coins 的 key，默认为 1）" })
+    @property({ tooltip: "开局使用的硬币 id（memes.json 中 coins 的 key，默认为 1）" })
     public coinId: string = "1";
     @property(TutorialManager)
     public tutorialManager: TutorialManager = null;
@@ -65,8 +65,10 @@ export class GameScene extends Component {
     private _debugPanel: Node | null = null;
     /** 缺口宽度基数（从 TableController 面板值快照） */
     private _baseGapWidth: number = 80;
-    /** 缓存的 config.json 数据 */
-    private _coinsConfig: any = null;
+    /** 缓存的 config.json 数据（全局颜色/拖拽音效） */
+    private _config: any = null;
+    /** 缓存的 memes.json 数据（硬币外形/音效） */
+    private _memesConfig: any = null;
 
     private level:number = 1;
 
@@ -101,8 +103,9 @@ export class GameScene extends Component {
         // 快照缺口宽度基数
         this._baseGapWidth = this.tableController.gapWidth;
 
-        // 启动时读取全局 config.json 配置
-        this._loadCoinsConfig();
+        // 启动时读取全局 config.json 与硬币外形 config（memes.json）
+        this._loadConfig();
+        this._loadMemesConfig();
 
         // 注入 TutorialManager 到 GameLogic（闲置提示需要）
         if (this.tutorialManager) {
@@ -379,7 +382,7 @@ export class GameScene extends Component {
         this.gameLogic.waitingPlayerOperation();
 
         // 开局按指定 coin id 应用外观（配置已加载时）
-        if (this._coinsConfig) {
+        if (this._memesConfig) {
             this._applyCoinConfig(this.coinId);
         }
         this.onGameStart();
@@ -461,7 +464,7 @@ export class GameScene extends Component {
         this.uiManager.setLevel(this._levelIndex + 1);
         this.uiManager.setScore(0);
 
-        if (this._coinsConfig) {
+        if (this._memesConfig) {
             this._applyCoinConfig(this.coinId);
         }
         this.onGameStart();
@@ -516,7 +519,7 @@ export class GameScene extends Component {
             this._debugPanel.active = !this._debugPanel.active;
         }
 
-        // 数字键 1-9：读取 config.json 配置并切换所有硬币贴图/音效
+        // 数字键 1-9：读取 memes.json 配置并切换所有硬币贴图/音效
         if (event.keyCode >= KeyCode.DIGIT_1 && event.keyCode <= KeyCode.DIGIT_9) {
             const keyIndex = event.keyCode - KeyCode.DIGIT_1 + 1;
             this._applyCoinConfig(keyIndex.toString());
@@ -524,13 +527,13 @@ export class GameScene extends Component {
     }
 
     /** 启动时读取全局 config.json，缓存数据并应用全局颜色 */
-    private _loadCoinsConfig(): void {
+    private _loadConfig(): void {
         DataProvider.loadJson('config', (err, data) => {
             if (err) {
                 console.warn('[GameScene] 加载 config.json 失败:', err);
                 return;
             }
-            this._coinsConfig = (data as any) ?? {};
+            this._config = (data as any) ?? {};
 
             // 应用全局颜色配置
             const parseHex = (hex: string) => new Color(
@@ -538,16 +541,16 @@ export class GameScene extends Component {
                 parseInt(hex.slice(3, 5), 16),
                 parseInt(hex.slice(5, 7), 16), 255,
             );
-            const srcHex = this._coinsConfig.sourceColor as string | undefined;
+            const srcHex = this._config.sourceColor as string | undefined;
             if (srcHex?.length >= 7) CoinController.sourceColor = parseHex(srcHex);
-            const tgtHex = this._coinsConfig.targetColor as string | undefined;
+            const tgtHex = this._config.targetColor as string | undefined;
             if (tgtHex?.length >= 7) CoinController.targetColor = parseHex(tgtHex);
 
             // 加载拖拽音效到 SoundManager
             const sm = SoundManager.instance;
             if (sm) {
                 const loadSfx = (field: string) => {
-                    const base = (this._coinsConfig[field] as string)?.replace(/\.[^/.]+$/, '');
+                    const base = (this._config[field] as string)?.replace(/\.[^/.]+$/, '');
                     if (!base) return;
                     resources.load(base, AudioClip, (sfxErr: any, clip: AudioClip) => {
                         if (!sfxErr && clip) {
@@ -561,26 +564,35 @@ export class GameScene extends Component {
                 loadSfx('dragDecreaseSfx');
                 loadSfx('dragReleaseSfx');
             }
+        });
+    }
 
-            // 全局配置加载完成，按开局 coinId 应用硬币外观
+    /** 启动时读取 memes.json，缓存硬币外形/音效配置并按开局 coinId 应用 */
+    private _loadMemesConfig(): void {
+        DataProvider.loadJson('memes', (err, data) => {
+            if (err) {
+                console.warn('[GameScene] 加载 memes.json 失败:', err);
+                return;
+            }
+            this._memesConfig = (data as any) ?? {};
             this._applyCoinConfig(this.coinId);
         });
     }
 
     /**
-     * 使用缓存的 config.json 配置，根据 key 查找并应用到场上所有硬币
-     * @param key config.json 中的硬币类型标识，如 "1", "2"
+     * 使用缓存的 memes.json 配置，根据 key 查找并应用到场上所有硬币
+     * @param key memes.json 中的硬币类型标识，如 "1", "2"
      */
     private _applyCoinConfig(key: string): void {
-        const asset = this._coinsConfig;
+        const asset = this._memesConfig;
         if (!asset) {
-            console.warn('[GameScene] config.json 尚未加载完成');
+            console.warn('[GameScene] memes.json 尚未加载完成');
             return;
         }
 
         const coinsData = asset.coins;
         if (!coinsData) {
-            console.warn('[GameScene] config.json 格式错误：缺少 coins 字段');
+            console.warn('[GameScene] memes.json 格式错误：缺少 coins 字段');
             return;
         }
 
@@ -594,7 +606,7 @@ export class GameScene extends Component {
             hittedSfx?: string;
         } | undefined;
         if (!config) {
-            console.log(`[GameScene] config.json 中未找到 key "${key}" 的配置，不做处理`);
+            console.log(`[GameScene] memes.json 中未找到 key "${key}" 的配置，不做处理`);
             return;
         }
 

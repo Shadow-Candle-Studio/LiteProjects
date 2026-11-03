@@ -1,7 +1,7 @@
 /** 关卡配置数据接口（对应 LevelEditor 导出的 JSON 格式） */
 export interface LevelCoinData {
     type: 'coin';
-    /** 硬币类型（对应 config.json 中 coins 的 key） */
+    /** 硬币类型（对应 memes.json 中 coins 的 key） */
     class: number;
     x: number;
     y: number;
@@ -28,7 +28,7 @@ export interface LevelMudData {
 
 export interface LevelBombData {
     type: 'bomb';
-    /** 硬币外观类型（对应 config.json 中 coins 的 key） */
+    /** 硬币外观类型（对应 memes.json 中 coins 的 key） */
     class: number;
     x: number;
     y: number;
