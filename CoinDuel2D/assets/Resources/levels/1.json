@@ -10,19 +10,22 @@
             "type": "coin",
             "class": 1,
             "x": -264,
-            "y": 176
+            "y": 176,
+            "canshot": true
         },
         {
             "type": "coin",
-            "class": 1,
+            "class": 2,
             "x": 229,
-            "y": 172
+            "y": 172,
+            "canshot": true
         },
         {
             "type": "coin",
             "class": 1,
             "x": -11,
-            "y": -140
+            "y": -140,
+            "canshot": true
         }
     ]
 }

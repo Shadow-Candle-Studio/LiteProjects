@@ -14,6 +14,10 @@ def main():
     window = MainWindow()
     window.show()
 
+    # 支持 `python main.py <项目目录>` 直接打开
+    if len(sys.argv) > 1:
+        window.open_project(sys.argv[1])
+
     sys.exit(app.exec())
 
 

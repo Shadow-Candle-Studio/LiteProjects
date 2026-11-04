@@ -355,7 +355,7 @@ export class GameScene extends Component {
             // 注入 GameLogic 引用，用于弹射后通知状态切换
             let ctrl = coin.addComponent(CoinController);
             ctrl.setGameLogic(this.gameLogic);
-            if (i === 0) this.gameLogic.attachCoinBehavior(coin, 'FreezeBehavior');
+            //if (i === 0) this.gameLogic.attachCoinBehavior(coin, 'FreezeBehavior');
         }
 
         // 生成随机道具（天梯模式，level >= 2 时）
@@ -450,12 +450,17 @@ export class GameScene extends Component {
             } else if (item.type === 'bomb') {
                 this.gameLogic.spawnBombCoinAt(this.bomberPrefab, item.x, item.y, item.radius);
             } else if (item.type === 'coin') {
-                spawnedCoins.push(this.gameLogic.spawnCoinAt(this.coinPrefab, item.x, item.y));
+                // canshot=false：环境硬币，作为静态障碍处理（类似 blocker/mud）
+                if (item.canshot === false) {
+                    this.gameLogic.spawnEnvCoinAt(this.coinPrefab, item);
+                } else {
+                    spawnedCoins.push(this.gameLogic.spawnCoinAt(this.coinPrefab, item));
+                }
             }
         }
-        if (this._levelIndex === 0 && spawnedCoins.length > 0) {
-            this.gameLogic.attachCoinBehavior(spawnedCoins[spawnedCoins.length - 1], 'FreezeBehavior');
-        }
+        // if (this._levelIndex === 0 && spawnedCoins.length > 0) {
+        //     this.gameLogic.attachCoinBehavior(spawnedCoins[spawnedCoins.length - 1], 'FreezeBehavior');
+        // }
 
         this.gameLogic.beginLevel();
         this.gameLogic.waitingPlayerOperation();

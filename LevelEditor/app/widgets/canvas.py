@@ -15,10 +15,12 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt, QPointF, QRectF
 from PySide6.QtGui import (
     QPen, QBrush, QColor, QPainter, QPainterPath,
-    QAction, QCursor, QPixmap, QImage
+    QAction, QCursor, QPixmap, QImage, QTransform
 )
 
 from app.models.level_data import LevelData, CoinData, BlockData, MudData, BombData, WallData
+from app.models.meme_data import MemeCollection
+from app.models.project import Project
 import os
 
 
@@ -30,7 +32,8 @@ DEFAULT_BOMB_RADIUS = 32  # 默认炸弹硬币半径
 
 # 颜色
 COLOR_TABLE_BG = QColor(34, 139, 34)  # 绿色桌面背景
-COLOR_COIN = QColor(255, 215, 0)  # 金色硬币
+COLOR_COIN = QColor(255, 215, 0)  # 金色硬币（可操作）
+COLOR_ENV_COIN = QColor(150, 150, 150)  # 灰色环境硬币（不可操作）
 COLOR_BLOCK = QColor(180, 180, 180)  # 浅灰色障碍物（深色背景上更清晰）
 COLOR_MUD = QColor(180, 120, 60)  # 浅棕色陷阱（深色背景上更清晰）
 COLOR_BOMB = QColor(255, 80, 80)  # 红色炸弹硬币
@@ -99,6 +102,10 @@ class Canvas(QGraphicsView):
         self._level_data: LevelData = None
         self._selected_obj: object = None
         self._items: dict = {}  # data_obj -> QGraphicsItem
+        # coin class -> 贴图绝对路径（仅包含实际存在的文件）
+        self._coin_textures: dict = {}
+        # (贴图路径, 尺寸) -> 已缩放 QPixmap
+        self._pixmap_cache: dict = {}
 
         # 设置场景
         self._scene = QGraphicsScene()
@@ -112,6 +119,27 @@ class Canvas(QGraphicsView):
 
         # 背景色（深色）
         self.setBackgroundBrush(QBrush(COLOR_BG))
+
+    def set_memes(self, memes: MemeCollection, project: Project) -> bool:
+        """刷新 coin class -> 默认贴图路径的映射，返回映射是否发生变化。
+
+        只有在贴图路径非空且文件存在时才使用贴图，否则回退为单色硬币。
+        """
+        new_map: dict = {}
+        if memes is not None and project is not None:
+            for key, meme in memes.memes.items():
+                texture = (meme.texture or "").strip()
+                if not texture:
+                    continue
+                absolute = project.absolute_path(texture)
+                if os.path.isfile(absolute):
+                    new_map[str(key)] = absolute
+
+        changed = new_map != self._coin_textures
+        if changed:
+            self._coin_textures = new_map
+            self._pixmap_cache.clear()
+        return changed
 
     def refresh(self, level_data: LevelData):
         """刷新画布"""
@@ -166,10 +194,27 @@ class Canvas(QGraphicsView):
         self.setSceneRect(-20, -20, w + 40, h + 40)
 
     def _add_coin_item(self, coin: CoinData, table_width: int, table_height: int):
-        """添加硬币到画布"""
+        """添加硬币到画布：优先使用 meme 的默认贴图，找不到时回退为单色圆"""
         # 转换坐标：Cocos -> Qt
         qt_x, qt_y = cocos_to_qt(coin.x, coin.y, table_width, table_height)
-        item = CanvasItem(coin, qt_x, qt_y, COIN_RADIUS, COLOR_COIN, self._on_item_moved)
+        color = COLOR_COIN if coin.canshot else COLOR_ENV_COIN
+        item = CanvasItem(coin, qt_x, qt_y, COIN_RADIUS, color, self._on_item_moved)
+
+        texture_path = self._coin_textures.get(str(coin.cls))
+        pixmap = self._get_scaled_pixmap(texture_path, COIN_RADIUS * 2) if texture_path else None
+        if pixmap is not None:
+            brush = QBrush(pixmap)
+            # QGraphicsEllipseItem 的局部原点在圆心，把贴图图案平移到左上角
+            brush.setTransform(QTransform().translate(-COIN_RADIUS, -COIN_RADIUS))
+            item.setBrush(brush)
+
+        if not coin.canshot:
+            # 环境硬币仍用颜色描边区分（贴图也存在时保留提示）
+            item.setPen(QPen(COLOR_ENV_COIN.darker(170), 2))
+        item.setToolTip(
+            ("可操作硬币" if coin.canshot else "环境硬币（静态障碍，不可操作）")
+            + (f"\n贴图：{os.path.basename(texture_path)}" if pixmap is not None else "")
+        )
         self._scene.addItem(item)
         self._items[id(coin)] = item
 
@@ -180,6 +225,23 @@ class Canvas(QGraphicsView):
         text_item.setFlag(QGraphicsItem.ItemIgnoresTransformations, True)
         text_item.setParentItem(item)
         text_item.setPos(-5, -8)
+
+    def _get_scaled_pixmap(self, path: str, size: int) -> QPixmap | None:
+        """加载并缓存硬币贴图；文件不存在或无法解析时返回 None"""
+        if not path:
+            return None
+        key = (path, size)
+        if key in self._pixmap_cache:
+            return self._pixmap_cache[key]
+
+        pixmap = QPixmap(path)
+        if pixmap.isNull():
+            self._pixmap_cache[key] = None
+            return None
+
+        scaled = pixmap.scaled(size, size, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+        self._pixmap_cache[key] = scaled
+        return scaled
 
     def _add_block_item(self, block: BlockData, table_width: int, table_height: int):
         """添加障碍物到画布"""

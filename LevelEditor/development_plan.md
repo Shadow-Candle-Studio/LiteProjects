@@ -12,7 +12,7 @@
     "width": 800,
     "height": 600,
     "coins": [
-        { "type": "coin", "class": 1, "x": 100, "y": 200 },
+        { "type": "coin", "class": 1, "x": 100, "y": 200, "canshot": true, "behaviors": ["FreezeBehavior"] },
         { "type": "block", "x": 100, "y": 100, "shape": "circle", "radius": 50 },
         { "type": "block", "x": 400, "y": 300, "shape": "circle", "radius": 30,
           "path": [{"x":400,"y":300}, {"x":500,"y":300}] },
@@ -24,7 +24,7 @@
 顶层字段：`id`（关卡ID）、`width`/`height`（桌面尺寸）、`coins`（条目数组）。
 
 所有条目（硬币/障碍物/陷阱）统一存放在 `coins` 数组中，通过 `type` 字段区分：
-- `"coin"`：硬币，额外字段 `class`
+- `"coin"`：硬币，额外字段 `class`、`canshot`（false 为环境硬币，按静态障碍处理）、`behaviors`（可选的行为 id 数组，可多选）
 - `"block"`：障碍物，额外字段 `shape`、`radius`、`path`（可选）
 - `"mud"`：陷阱，额外字段 `shape`、`radius`、`friction`
 
@@ -108,7 +108,7 @@ LevelEditor/
    - 使用 `QFormLayout` + `QScrollArea`
    - 根据选中对象类型动态生成属性编辑控件：
      - `Table`：`id`（QSpinBox）、`width`（QSpinBox）、`height`（QSpinBox）
-     - `Coin`：`class`（QSpinBox）、`x`（QDoubleSpinBox）、`y`（QDoubleSpinBox）
+     - `Coin`：`class`（从 memes.json 的 key 中选择）、`x`、`y`、`canshot`（是否玩家可操作）、`behaviors`（可多选的行为列表：`KnockbackBehavior` / `FlashStepBehavior` / `FreezeBehavior`）
      - `Block`：`x`、`y`、`shape`（QComboBox，当前仅 `circle`）、`radius`、`path`（可编辑的坐标对列表，高级功能可后做）
      - `Mud`：`x`、`y`、`shape`、`radius`、`friction`（QDoubleSpinBox）
    - 修改属性后立即更新数据模型，并触发渲染区重绘
@@ -197,6 +197,7 @@ class CoinData:
     cls: int             # 对应 JSON 中的 "class"
     x: float
     y: float
+    behaviors: list[str] # 行为 id 列表（KnockbackBehavior / FlashStepBehavior / FreezeBehavior）
 
 class BlockData:
     type: str = "block"

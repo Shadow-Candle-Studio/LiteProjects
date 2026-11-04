@@ -249,15 +249,17 @@ export class LevelEditorTool extends Component {
                 class: number;
                 x: number;
                 y: number;
-                behavior?: string;
+                canshot?: boolean;
+                behaviors?: string[];
                 radius?: number;
             } = {
                 type: mark.kind,
                 class: this.coinClass,
                 x: Math.round(child.position.x),
                 y: Math.round(child.position.y),
+                canshot: true, // 此编辑器放置的均为玩家可操作硬币
             };
-            if (mark.behavior) item.behavior = mark.behavior;
+            if (mark.behavior) item.behaviors = [mark.behavior];
             if (mark.kind === 'bomb') item.radius = this.coinRadius;
             coins.push(item);
         }

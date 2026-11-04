@@ -40,13 +40,18 @@ class ObjectTree(QTreeWidget):
 
         # 根节点：Table
         table_item = QTreeWidgetItem(self, [f"Table ({level_data.width} x {level_data.height})"])
-        table_item.setData(0, Qt.UserRole, None)  # Table 不关联具体对象
+        table_item.setData(0, Qt.UserRole, level_data)  # 选中 Table 时编辑关卡尺寸/ID
         table_item.setExpanded(True)
 
         # Wall 子节点（不可删除）
         wall_item = QTreeWidgetItem(table_item, [f"Wall (thickness: {level_data.wall.thickness})"])
         wall_item.setData(0, Qt.UserRole, level_data.wall)
         wall_item.setExpanded(True)
+
+        self._item_to_data[id(table_item)] = level_data
+        self._data_to_item[id(level_data)] = table_item
+        self._item_to_data[id(wall_item)] = level_data.wall
+        self._data_to_item[id(level_data.wall)] = wall_item
 
         # 条目分组（items 已按类型合并存储，此处按类型分组显示）
         coins_group = QTreeWidgetItem(table_item, [f"Coins ({len(level_data.coins)})"])

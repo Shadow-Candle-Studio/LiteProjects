@@ -1,0 +1,22 @@
+{
+    "behaviors": {
+        "FlashStepBehavior": {
+            "class": "FlashStepBehavior",
+            "priority": 80,
+            "mode": "dominant",
+            "exclusive": true
+        },
+        "KnockbackBehavior": {
+            "class": "KnockbackBehavior",
+            "priority": 70,
+            "mode": "dominant",
+            "exclusive": true
+        },
+        "FreezeBehavior": {
+            "class": "FreezeBehavior",
+            "priority": 60,
+            "mode": "dominant",
+            "exclusive": true
+        }
+    }
+}

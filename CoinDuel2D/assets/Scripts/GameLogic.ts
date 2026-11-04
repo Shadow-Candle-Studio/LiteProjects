@@ -16,6 +16,19 @@ import './Behaviors/KnockbackBehavior';
 import { MemeLoader } from './Meme/MemeLoader';
 const { ccclass, property } = _decorator;
 
+/** 生成硬币所需的数据（LevelCoinData 可直接传入） */
+export interface CoinSpawnData {
+    x: number;
+    y: number;
+    radius?: number;
+    /** 硬币类型（memes.json 中 coins 的 key） */
+    class?: number;
+    /** 要挂载的行为 id 列表，可同时包含多个 */
+    behaviors?: string[];
+    /** false 表示环境硬币（静态障碍，不可操作），缺省为 true */
+    canshot?: boolean;
+}
+
 enum GamePhase {
     WAITING_PLAYER, // 等待操作
     ANIMATING,      // 硬币飞行/物理运动中
@@ -543,19 +556,48 @@ export class GameLogic extends Component {
     }
 
     /** 在指定位置生成普通硬币（关卡配置用），radius 缺省时使用 coinRadius */
-    public spawnCoinAt(prefab: Prefab, x: number, y: number, radius?: number, behaviorId?: string): Node {
+    public spawnCoinAt(prefab: Prefab, data: CoinSpawnData): Node {
         const node = instantiate(prefab);
         this.coinGroup.addChild(node);
-        node.setPosition(x, y, 0);
+        node.setPosition(data.x, data.y, 0);
         node.setScale(1, 1, 1);
-        const r = radius ?? this.coinRadius;
+        const r = data.radius ?? this.coinRadius;
         const ut = node.getComponent(UITransform);
         if (ut) ut.setContentSize(r * 2, r * 2);
         const cc = node.getComponent(CircleCollider2D);
         if (cc) cc.radius = r;
         const ctrl = node.addComponent(CoinController);
         ctrl.setGameLogic(this);
-        if (behaviorId) this.attachCoinBehavior(node, behaviorId);
+        for (const behaviorId of data.behaviors ?? []) {
+            if (behaviorId) this.attachCoinBehavior(node, behaviorId);
+        }
+        return node;
+    }
+
+    /**
+     * 生成环境硬币（canshot = false）：静态、不可操作，作为障碍物处理。
+     * 与 blocker/mud 一样放入世界节点并记录到 _props，clearProps 时统一清除；
+     * 不加入 coinGroup，因此不会被玩家拖拽、不参与剩余硬币计数。
+     */
+    public spawnEnvCoinAt(prefab: Prefab, data: CoinSpawnData): Node {
+        const node = instantiate(prefab);
+        this.addChildToWorld(node);
+        node.setPosition(data.x, data.y, 0);
+        node.setScale(1, 1, 1);
+        const r = data.radius ?? this.coinRadius;
+        const ut = node.getComponent(UITransform);
+        if (ut) ut.setContentSize(r * 2, r * 2);
+        const cc = node.getComponent(CircleCollider2D);
+        if (cc) cc.radius = r;
+
+        // 固定不动的物理障碍
+        let rb = node.getComponent(RigidBody2D);
+        if (!rb) rb = node.addComponent(RigidBody2D);
+        rb.type = ERigidBody2DType.Static;
+        rb.fixedRotation = true;
+        rb.enabledContactListener = false;
+
+        this._props.push(node);
         return node;
     }
 
@@ -579,14 +621,16 @@ export class GameLogic extends Component {
         const meme = MemeLoader.getLoadedMemes().find((item) => item.id === memeId);
         if (!meme) {
             console.warn('[Meme] 找不到，改用預設硬幣:', memeId);
-            return this.spawnCoinAt(this.coinPrefab, x, y);
+            return this.spawnCoinAt(this.coinPrefab, { x, y });
         }
         const node = this.spawnCoinAt(
             this.coinPrefab,
-            x,
-            y,
-            meme.radius > 0 ? meme.radius : undefined,
-            meme.behavior || undefined,
+            {
+                x,
+                y,
+                radius: meme.radius > 0 ? meme.radius : undefined,
+                behaviors: meme.behavior ? [meme.behavior] : undefined,
+            },
         );
         MemeLoader.applySprite(memeId, (frame) => {
             if (!frame || !node.isValid) return;

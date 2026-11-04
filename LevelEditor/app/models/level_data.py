@@ -3,7 +3,8 @@ CoinDuel2D 关卡数据模型
 负责关卡数据的加载、保存和管理
 
 JSON 格式：coins/blocks/muds/bombs 合并为单个 coins 数组，通过 type 字段区分：
-    {"type": "coin", "class": 1, "x": 0, "y": 0}
+    {"type": "coin", "class": 1, "x": 0, "y": 0, "canshot": true, "behaviors": ["FreezeBehavior"]}
+    {"type": "coin", "class": 2, "x": 0, "y": 0, "canshot": false}  # 环境硬币（静态障碍）
     {"type": "block", "x": 0, "y": 0, "shape": "circle", "radius": 30, "path": [...]}
     {"type": "mud", "x": 0, "y": 0, "shape": "circle", "radius": 30, "friction": 0.5}
     {"type": "bomb", "class": 1, "x": 0, "y": 0, "radius": 32}
@@ -32,14 +33,35 @@ class CoinData:
     cls: int  # 对应 JSON 中的 "class"
     x: float
     y: float
+    canshot: bool = True  # 是否玩家可操作；false 为环境硬币（静态障碍）
+    behaviors: List[str] = field(default_factory=list)  # 要挂载的行为 id 列表，可多个
     type: str = field(default="coin", init=False)
 
     def to_dict(self) -> dict:
-        return {"type": "coin", "class": self.cls, "x": int(self.x), "y": int(self.y)}
+        result = {
+            "type": "coin", "class": self.cls,
+            "x": int(self.x), "y": int(self.y),
+            "canshot": self.canshot,
+        }
+        if self.behaviors:
+            result["behaviors"] = list(self.behaviors)
+        return result
 
     @staticmethod
     def from_dict(data: dict) -> 'CoinData':
-        return CoinData(cls=data["class"], x=data["x"], y=data["y"])
+        behaviors = data.get("behaviors", [])
+        if not isinstance(behaviors, list):
+            behaviors = []
+        canshot = data.get("canshot", True)
+        if not isinstance(canshot, bool):
+            canshot = True
+        return CoinData(
+            cls=data["class"],
+            x=data["x"],
+            y=data["y"],
+            canshot=canshot,
+            behaviors=[b for b in behaviors if isinstance(b, str) and b],
+        )
 
 
 @dataclass

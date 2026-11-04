@@ -1,6 +1,7 @@
-import { _decorator, Button, Color, Component, EventHandler, Label, Node, Tween, UIOpacity, UITransform, Vec3, director, tween } from 'cc';
+import { _decorator, Button, Color, Component, EventHandler, Label, Node, Sprite, SpriteFrame, Tween, UIOpacity, UITransform, Vec3, director, resources, tween } from 'cc';
 import { Leaderboard } from './Leaderboard';
 import { I18n } from './I18n';
+import { SoundManager } from './SoundManager';
 import { UIWin } from './UI/UIWin';
 import { UIFail } from './UI/UIFail';
 import { UIRank } from './UI/UIRank';
@@ -21,7 +22,8 @@ export class UIManager extends Component {
     public clickNode:Node = null;
     @property(Button)
     public buttonBack:Button = null;
-
+    @property(Button)
+    public buttonMusicSwith:Button = null;
     @property(UIWin)
     public uiWin:UIWin = null;
     @property(UIFail)
@@ -43,12 +45,59 @@ export class UIManager extends Component {
     public onBack:()=>void;
     private _shownScore = 0;
 
+    /** 音乐开关图标（Resources 下的 SpriteFrame 子资源路径） */
+    private static readonly MUSIC_ON_ICON = 'textures/btn_music_on/spriteFrame';
+    private static readonly MUSIC_OFF_ICON = 'textures/btn_music_off/spriteFrame';
+    private _musicOn: boolean = true;
+
     start() {
         if (this.buttonBack) {
             this.buttonBack.node.on(Button.EventType.CLICK, () => {
                 if (this.onBack)this.onBack();
             }, this);
         }
+        // 兼容场景中尚未绑定 buttonMusicSwith 属性：按节点名自动查找
+        if (!this.buttonMusicSwith) {
+            const musicNode = this.node.getChildByName('BtnMusicSwith');
+            if (musicNode) this.buttonMusicSwith = musicNode.getComponent(Button);
+        }
+        if (this.buttonMusicSwith){
+            // 与 SoundManager 的持久开关保持同步（跨场景不丢失状态）
+            this._musicOn = SoundManager.instance?.musicEnabled ?? true;
+            this._updateMusicIcon();
+            this.buttonMusicSwith.node.on(Button.EventType.CLICK, this._onMusicClick, this);
+        }
+    }
+
+    /** 点击音乐按钮：开/关 BGM 并切换图标 */
+    private _onMusicClick(): void {
+        const sm = SoundManager.instance;
+        if (!sm) return;
+        this._musicOn = sm.toggleMusic();
+        this._updateMusicIcon();
+    }
+
+    /** 根据当前开关状态刷新按钮图片 */
+    private _updateMusicIcon(): void {
+        if (!this.buttonMusicSwith) return;
+
+        const buttonNode = this.buttonMusicSwith.node;
+        const sprite = buttonNode.getComponent(Sprite) ?? buttonNode.getComponentInChildren(Sprite);
+        if (!sprite) {
+            console.warn('[UIManager] BtnMusicSwith 上找不到 Sprite 组件');
+            return;
+        }
+
+        const path = this._musicOn
+            ? UIManager.MUSIC_ON_ICON
+            : UIManager.MUSIC_OFF_ICON;
+        resources.load(path, SpriteFrame, (err: any, frame: SpriteFrame) => {
+            if (err || !frame) {
+                console.warn(`[UIManager] 加载音乐按钮图标失败: ${path}`, err);
+                return;
+            }
+            if (sprite.isValid) sprite.spriteFrame = frame;
+        });
     }
 
     public setScore(score: number, multiplier: number = 1): void {
