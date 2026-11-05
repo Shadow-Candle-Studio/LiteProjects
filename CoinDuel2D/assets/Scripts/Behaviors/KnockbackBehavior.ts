@@ -18,14 +18,14 @@ export class KnockbackBehavior extends BehaviorBase {
     private _cooldownUntil = 0;
 
     protected start(): void {
-        BehaviorVisual.startIdle(this.node, this.getVisualConfig());
+        //BehaviorVisual.startIdle(this.node, this.getVisualConfig());
     }
 
     public getVisualConfig(): BehaviorVisualConfig {
         return {
             color: new Color(255, 150, 0, 255),
             label: 'KNOCK!',
-            idlePulse: true,
+            idlePulse: false,
         };
     }
 

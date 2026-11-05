@@ -3,6 +3,34 @@ import { GameLogic } from './GameLogic';
 import { SoundManager } from './SoundManager';
 const { ccclass } = _decorator;
 
+/** memes.json 中单个硬币的外观配置 */
+export interface MemeCoinConfig {
+    name?: string;
+    texture?: string;
+    idleTexture?: string;
+    aimTexture?: string;
+    shotTexture?: string;
+    hittedTexture?: string;
+    shotSfx?: string;
+    hittedSfx?: string;
+}
+
+/** memes.json 的顶层结构 */
+export interface MemeConfig {
+    coins?: Record<string, MemeCoinConfig>;
+}
+
+/** 已加载到内存的硬币外观资源 */
+interface CoinAppearanceAssets {
+    defaultFrame: SpriteFrame | null;
+    idleFrame: SpriteFrame | null;
+    aimFrame: SpriteFrame | null;
+    shotFrame: SpriteFrame | null;
+    hittedFrame: SpriteFrame | null;
+    shotSfxClip: AudioClip | null;
+    hittedSfxClip: AudioClip | null;
+}
+
 @ccclass('CoinController')
 export class CoinController extends Component {
     public static showArrow: boolean = false;
@@ -12,6 +40,15 @@ export class CoinController extends Component {
     public static sourceColor: Color = Color.YELLOW;
     /** 从 config.json 读取的 target_color */
     public static targetColor: Color = Color.GREEN;
+
+    /** memes.json 数据（由 GameScene 加载后注入） */
+    private static _memesConfig: MemeConfig | null = null;
+    /** 已加载的外观资源缓存，key 为 memes.json 中的 class */
+    private static readonly _appearanceCache = new Map<string, CoinAppearanceAssets>();
+    /** 正在加载中的外观资源，同一 key 的请求合并等待 */
+    private static readonly _appearanceLoading = new Map<string, ((assets: CoinAppearanceAssets) => void)[]>();
+    /** memes.json 尚未加载时暂存的硬币外观请求，配置就绪后补应用 */
+    private static _pendingAppearances: { node: Node; key: string }[] = [];
 
     /**
      * 获取硬币的 Sprite 组件。
@@ -24,6 +61,136 @@ export class CoinController extends Component {
             if (s) return s;
         }
         return node.getComponent(Sprite);
+    }
+
+    /** 注入 memes.json 数据，并补应用初始化时配置尚未加载的硬币 */
+    public static setMemesConfig(config: MemeConfig | null): void {
+        CoinController._memesConfig = config ?? null;
+        CoinController._appearanceCache.clear();
+
+        const pending = CoinController._pendingAppearances;
+        CoinController._pendingAppearances = [];
+        for (const item of pending) {
+            CoinController.applyMemeAppearance(item.node, item.key);
+        }
+    }
+
+    /**
+     * 根据关卡 class 查找 memes.json 中的配置并初始化硬币贴图/音效。
+     * 配置尚未加载时先记下请求，待 setMemesConfig 后自动补应用。
+     */
+    public static applyMemeAppearance(node: Node, classKey: number | string | null | undefined): void {
+        if (classKey === null || classKey === undefined || classKey === '') return;
+        const key = String(classKey);
+        const config = CoinController._memesConfig?.coins?.[key];
+        if (!config) {
+            if (!CoinController._memesConfig) {
+                const index = CoinController._pendingAppearances.findIndex((item) => item.node === node);
+                if (index >= 0) CoinController._pendingAppearances[index].key = key;
+                else CoinController._pendingAppearances.push({ node, key });
+            } else {
+                console.log(`[CoinController] memes.json 中未找到 class "${key}" 的配置，保持默认外观`);
+            }
+            return;
+        }
+
+        CoinController._loadAppearance(key, config, (assets) => {
+            if (!node.isValid) return;
+            const ctrl = node.getComponent(CoinController);
+            if (ctrl) {
+                ctrl.setAppearance({
+                    defaultFrame: assets.defaultFrame,
+                    idleFrame: assets.idleFrame,
+                    aimFrame: assets.aimFrame,
+                    shotFrame: assets.shotFrame,
+                    hittedFrame: assets.hittedFrame,
+                    shotSfxClip: assets.shotSfxClip,
+                    hittedSfxClip: assets.hittedSfxClip,
+                    typeKey: key,
+                });
+            } else {
+                // 环境硬币没有 CoinController，只需要静态贴图
+                const sprite = CoinController.getCoinSprite(node);
+                if (sprite && assets.defaultFrame) sprite.spriteFrame = assets.defaultFrame;
+            }
+        });
+    }
+
+    /** 加载（并缓存）某个 class 的外观资源；同一 key 并发请求共用一次加载 */
+    private static _loadAppearance(
+        key: string,
+        config: MemeCoinConfig,
+        cb: (assets: CoinAppearanceAssets) => void,
+    ): void {
+        const cached = CoinController._appearanceCache.get(key);
+        if (cached) {
+            cb(cached);
+            return;
+        }
+        const waiters = CoinController._appearanceLoading.get(key);
+        if (waiters) {
+            waiters.push(cb);
+            return;
+        }
+
+        const callbacks: ((assets: CoinAppearanceAssets) => void)[] = [cb];
+        CoinController._appearanceLoading.set(key, callbacks);
+
+        const assets: CoinAppearanceAssets = {
+            defaultFrame: null,
+            idleFrame: null,
+            aimFrame: null,
+            shotFrame: null,
+            hittedFrame: null,
+            shotSfxClip: null,
+            hittedSfxClip: null,
+        };
+
+        let remaining = 0;
+        let finished = false;
+        const finish = () => {
+            if (finished) return;
+            finished = true;
+            CoinController._appearanceLoading.delete(key);
+            CoinController._appearanceCache.set(key, assets);
+            for (const callback of callbacks) callback(assets);
+        };
+        const onAssetDone = () => {
+            remaining--;
+            if (remaining <= 0) finish();
+        };
+
+        // 图片资源需指定 SpriteFrame 子资源路径
+        const loadFrame = (file: string | undefined, assign: (frame: SpriteFrame) => void) => {
+            if (!file) return;
+            remaining++;
+            const base = file.replace(/\.[^/.]+$/, '');
+            resources.load(base + '/spriteFrame', SpriteFrame, (err, frame) => {
+                if (!err && frame) assign(frame);
+                else console.warn(`[CoinController] 加载贴图 ${file} 失败:`, err);
+                onAssetDone();
+            });
+        };
+        const loadClip = (file: string | undefined, assign: (clip: AudioClip) => void) => {
+            if (!file) return;
+            remaining++;
+            const base = file.replace(/\.[^/.]+$/, '');
+            resources.load(base, AudioClip, (err, clip) => {
+                if (!err && clip) assign(clip);
+                else console.warn(`[CoinController] 加载音效 ${file} 失败:`, err);
+                onAssetDone();
+            });
+        };
+
+        loadFrame(config.texture, (frame) => { assets.defaultFrame = frame; });
+        loadFrame(config.idleTexture, (frame) => { assets.idleFrame = frame; });
+        loadFrame(config.aimTexture, (frame) => { assets.aimFrame = frame; });
+        loadFrame(config.shotTexture, (frame) => { assets.shotFrame = frame; });
+        loadFrame(config.hittedTexture, (frame) => { assets.hittedFrame = frame; });
+        loadClip(config.shotSfx, (clip) => { assets.shotSfxClip = clip; });
+        loadClip(config.hittedSfx, (clip) => { assets.hittedSfxClip = clip; });
+
+        if (remaining === 0) finish();
     }
 
     private _allowedOperation: boolean = false;
@@ -166,10 +333,11 @@ export class CoinController extends Component {
         let frame: SpriteFrame | null = null;
         switch (this._textureState) {
             case 'default': frame = this._defaultFrame; break;
-            case 'idle':    frame = this._idleFrame; break;
-            case 'aim':     frame = this._aimFrame; break;
-            case 'shot':    frame = this._shotFrame; break;
-            case 'hit':     frame = this._hittedFrame; break;
+            // 状态贴图未配置时回退到默认贴图（如行为硬币只配置了 texture）
+            case 'idle':    frame = this._idleFrame ?? this._defaultFrame; break;
+            case 'aim':     frame = this._aimFrame ?? this._defaultFrame; break;
+            case 'shot':    frame = this._shotFrame ?? this._defaultFrame; break;
+            case 'hit':     frame = this._hittedFrame ?? this._defaultFrame; break;
         }
         if (frame) sprite.spriteFrame = frame;
     }

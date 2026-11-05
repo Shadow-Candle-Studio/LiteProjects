@@ -23,6 +23,7 @@ FALLBACK_META = {
     "MagnetBehavior": {"priority": 70, "mode": "passive", "exclusive": False},
     "BlockerBehavior": {"priority": 0, "mode": "passive", "exclusive": False},
     "MudBehavior": {"priority": 0, "mode": "passive", "exclusive": False},
+    "NoneBehavior": {"priority": 0, "mode": "dominant", "exclusive": False},
 }
 
 

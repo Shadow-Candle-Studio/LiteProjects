@@ -31,14 +31,14 @@ export class FreezeBehavior extends BehaviorBase {
     private _savedDamping = new Map<Node, number>();
 
     protected start(): void {
-        BehaviorVisual.startIdle(this.node, this.getVisualConfig());
+        //BehaviorVisual.startIdle(this.node, this.getVisualConfig());
     }
 
     public getVisualConfig(): BehaviorVisualConfig {
         return {
             color: new Color(140, 210, 255, 255),
             label: 'FREEZE',
-            idlePulse: true,
+            idlePulse: false,
         };
     }
 

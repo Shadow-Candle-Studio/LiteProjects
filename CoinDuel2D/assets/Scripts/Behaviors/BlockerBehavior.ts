@@ -31,7 +31,7 @@ export class BlockerBehavior extends BehaviorBase {
             rb.fixedRotation = true;
         }
 
-        BehaviorVisual.startIdle(this.node, this.getVisualConfig());
+        //BehaviorVisual.startIdle(this.node, this.getVisualConfig());
     }
 
     public getVisualConfig(): BehaviorVisualConfig {

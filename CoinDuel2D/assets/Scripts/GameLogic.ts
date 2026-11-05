@@ -29,7 +29,7 @@ export interface CoinSpawnData {
     class?: number;
     /** 要挂载的行为 id 列表，可同时包含多个 */
     behaviors?: string[];
-    /** false 表示环境硬币（静态障碍，不可操作），缺省为 true */
+    /** false 表示环境硬币（不可操作，但可被撞击移动），缺省为 true */
     canshot?: boolean;
 }
 
@@ -112,6 +112,10 @@ export class GameLogic extends Component {
     }
     public coinHitCount: number = 0;
     public coinFallCount: number = 0;
+    /** 本局是否已结束（避免重复弹出胜利/失败面板） */
+    private _gameEnded: boolean = false;
+    /** 是否已排定延迟失败（炸弹爆炸后，等待期间不按普通规则结算） */
+    private _failPending: boolean = false;
     private _activeShotCoin: Node | null = null;
     private _lockedCoin: Node | null = null;
     private _lastHitCoin: Node | null = null;
@@ -345,6 +349,8 @@ export class GameLogic extends Component {
         this._combo = 0;
         this._coinsLeftShown = -1;
         this._gameStartTime = Date.now();
+        this._gameEnded = false;
+        this._failPending = false;
         this.onScoreUpdate?.(this.score, 1);
     }
 
@@ -572,6 +578,8 @@ export class GameLogic extends Component {
         if (cc) cc.radius = r;
         const ctrl = node.addComponent(CoinController);
         ctrl.setGameLogic(this);
+        // 按关卡 class 初始化贴图/音效（memes.json 尚未加载时会等加载完成后补应用）
+        CoinController.applyMemeAppearance(node, data.class);
         for (const behaviorId of data.behaviors ?? []) {
             if (behaviorId) this.attachCoinBehavior(node, behaviorId);
         }
@@ -579,29 +587,43 @@ export class GameLogic extends Component {
     }
 
     /**
-     * 生成环境硬币（canshot = false）：静态、不可操作，作为障碍物处理。
-     * 与 blocker/mud 一样放入世界节点并记录到 _props，clearProps 时统一清除；
-     * 不加入 coinGroup，因此不会被玩家拖拽、不参与剩余硬币计数。
+     * 生成环境硬币（canshot = false）：不可操作，但仍是有物理的硬币。
+     * 默认是 Dynamic，会被其他硬币/爆炸撞动；只有挂了 BlockerBehavior 的硬币
+     * 才由该行为自行切换成 Static。
+     *
+     * 放入 coinGroup 是为了复用墙壁反弹、泥潭摩擦、被动行为 tick 与静止判定；
+     * 但因为没有 CoinController，所以不会被拖拽、不参与剩余硬币计数与命中计分。
      */
     public spawnEnvCoinAt(prefab: Prefab, data: CoinSpawnData): Node {
         const node = instantiate(prefab);
-        this.addChildToWorld(node);
+        this.coinGroup.addChild(node);
         node.setPosition(data.x, data.y, 0);
         node.setScale(1, 1, 1);
         const r = data.radius ?? this.coinRadius;
         const ut = node.getComponent(UITransform);
         if (ut) ut.setContentSize(r * 2, r * 2);
         const cc = node.getComponent(CircleCollider2D);
-        if (cc) cc.radius = r;
+        if (cc) {
+            cc.radius = r;
+            // 与普通硬币保持一致的质量/摩擦/弹性（没有 CoinController.start 帮忙设置）
+            cc.friction = 1;
+            cc.restitution = 0.6;
+            cc.density = 2 / Math.PI * Math.pow(r, 2);
+        }
 
-        // 固定不动的物理障碍
+        // 可被撞击移动的普通动态刚体；BlockerBehavior 会在 start 里改成 Static
         let rb = node.getComponent(RigidBody2D);
         if (!rb) rb = node.addComponent(RigidBody2D);
-        rb.type = ERigidBody2DType.Static;
+        rb.type = ERigidBody2DType.Dynamic;
         rb.fixedRotation = true;
-        rb.enabledContactListener = false;
+        rb.enabledContactListener = true;
+        rb.linearDamping = this.coinDamping;
 
-        this._props.push(node);
+        // 按关卡 class 初始化贴图（环境硬币没有 CoinController，只设置静态贴图）
+        CoinController.applyMemeAppearance(node, data.class);
+        for (const behaviorId of data.behaviors ?? []) {
+            if (behaviorId) this.attachCoinBehavior(node, behaviorId);
+        }
         return node;
     }
 
@@ -983,8 +1005,11 @@ export class GameLogic extends Component {
             const coin = this.coinGroup.children[i];
             const pos = coin.position;
 
-            // 正在被打飞出界的硬币不判为掉落（由打飞特效自行处理）
             const ctrl = coin.getComponent(CoinController);
+            // 环境硬币（无 CoinController / 炸弹标记）是关卡摆件，不参与坠落/失败判定
+            if (!ctrl && !coin.getComponent(BombCoinMarker)) continue;
+
+            // 正在被打飞出界的硬币不判为掉落（由打飞特效自行处理）
             if (ctrl && ctrl.isKnockingOut) continue;
 
             // 硬币中点离开桌面范围 → 掉落
@@ -1038,11 +1063,12 @@ export class GameLogic extends Component {
         return null;
     }
 
-    /** 触发炸弹硬币爆炸：在硬币位置执行与道具炸弹一致的爆炸效果 */
-    public triggerBombCoinExplosion(bombCoin: Node): void {
-        const pos = bombCoin.worldPosition;
-
-        // 在炸弹硬币位置实例化爆炸动画（仅视觉，禁用 Bomb 组件避免重复爆炸）
+    /**
+     * 在指定位置执行一次完整爆炸：爆炸动画 + 音效 + 径向推力
+     * （同时推开泥潭、销毁范围内的 blocker），炸弹硬币与 BombBehavior 共用。
+     */
+    public explodeAt(pos: Vec3, radius: number, force: number): void {
+        // 在爆炸位置实例化爆炸动画（仅视觉，禁用 Bomb 组件避免重复爆炸）
         if (this.explosionPrefab) {
             const fxNode = instantiate(this.explosionPrefab);
             this.addChildToWorld(fxNode);
@@ -1061,11 +1087,11 @@ export class GameLogic extends Component {
             }
         }
 
-        // 执行爆炸物理效果
+        // 爆炸音效 + 物理效果
         SoundManager.instance?.playExplosion();
         Bomb.applyExplosionAt(pos, {
-            pushRadius: this.bombPushRadius,
-            pushForce: this.bombPushForce,
+            pushRadius: radius,
+            pushForce: force,
             coinGroup: this.coinGroup,
             props: this._props,
             muds: this._muds,
@@ -1074,6 +1100,13 @@ export class GameLogic extends Component {
             tableHeight: this.tableHeight,
             wallThickness: this.wallThickness,
         });
+    }
+
+    /** 触发炸弹硬币爆炸：在硬币位置执行与道具炸弹一致的爆炸效果 */
+    public triggerBombCoinExplosion(bombCoin: Node): void {
+        const pos = bombCoin.worldPosition;
+
+        this.explodeAt(pos, this.bombPushRadius, this.bombPushForce);
 
         // 移除炸弹硬币。若下一發鎖的就是這顆炸彈，先解開，避免鎖到已銷毀的節點。
         const idx = this._bombCoins.indexOf(bombCoin);
@@ -1092,6 +1125,12 @@ export class GameLogic extends Component {
     }
 
     private processResult() {
+        // 炸弹爆炸后固定等待，由 requestGameOver 的定时器负责弹出失败提示
+        if (this._failPending) {
+            this.currentPhase = GamePhase.SETTLING;
+            return;
+        }
+
         console.log(">>> 物理静止，开始结算逻辑 <<<");
 
         // ── 教程模式 ──
@@ -1187,13 +1226,30 @@ export class GameLogic extends Component {
         }
     }
 
+    /**
+     * 延时后请求游戏失败（供炸弹行为等外部逻辑调用）。
+     * @param delay 延迟秒数，默认立即结算
+     */
+    public requestGameOver(delay: number = 0): void {
+        if (this._gameEnded || this._failPending) return;
+        this._failPending = true;
+        this.scheduleOnce(() => {
+            this._failPending = false;
+            this._handleGameOver();
+        }, Math.max(0, delay));
+    }
+
     /** 游戏结束处理 */
     private _handleGameOver(): void {
+        if (this._gameEnded) return;
+        this._gameEnded = true;
         console.log(">>> 游戏结束 <<<");
         this._combo = 0;
         this._restoreSpeed();
         this.hitEffectManager?.stopTracking();
         this._pendingLockedCoin = null;
+        // 关闭教程提示（手势、目标指示、提示文字、跳过按钮与高亮）
+        this.tutorialManager?.skipTutorial();
         this.tutorialManager && (this.tutorialManager.gameOver = true);
         SoundManager.instance?.stopDragDirectionLoop();
         SoundManager.instance?.playGameOver();
@@ -1207,10 +1263,14 @@ export class GameLogic extends Component {
 
     /** 游戏胜利（桌面仅剩 1 枚硬币） */
     private _handleGameWin(): void {
+        if (this._gameEnded) return;
+        this._gameEnded = true;
         console.log(">>> 游戏胜利 <<<");
         this._restoreSpeed();
         this.hitEffectManager?.stopTracking();
         this._pendingLockedCoin = null;
+        // 关闭教程提示（手势、目标指示、提示文字、跳过按钮与高亮）
+        this.tutorialManager?.skipTutorial();
         this.tutorialManager && (this.tutorialManager.gameOver = true);
         SoundManager.instance?.stopDragDirectionLoop();
         this._setCoinsInteraction(false);
@@ -1314,9 +1374,9 @@ export class GameLogic extends Component {
                 ctrl.allowedOperation = allowed;
                 ctrl.showIndicator(allowed);
             }
-            for (const behavior of coin.getComponents(BehaviorBase)) {
-                behavior.showIdleVisual();
-            }
+            // for (const behavior of coin.getComponents(BehaviorBase)) {
+            //     behavior.showIdleVisual();
+            // }
 
             // 每次启用时同步滑动阻力（持久设置，设一次即可）
             if (allowed) {

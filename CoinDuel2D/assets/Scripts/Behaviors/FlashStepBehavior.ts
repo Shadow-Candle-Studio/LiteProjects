@@ -32,14 +32,14 @@ export class FlashStepBehavior extends BehaviorBase {
 
     protected start(): void {
         this._usesLeft = this.maxUses;
-        BehaviorVisual.startIdle(this.node, this.getVisualConfig());
+       // BehaviorVisual.startIdle(this.node, this.getVisualConfig());
     }
 
     public getVisualConfig(): BehaviorVisualConfig {
         return {
             color: new Color(255, 255, 100, 255),
             label: 'DODGE!',
-            idlePulse: true,
+            idlePulse: false,
         };
     }
 
@@ -67,9 +67,17 @@ export class FlashStepBehavior extends BehaviorBase {
             self.position.y + side.y * this.dodgeDistance,
             gl,
         );
-        self.setPosition(next.x, next.y, self.position.z);
-        selfRb.linearVelocity = new Vec2(0, 0);
-        selfRb.angularVelocity = 0;
+        // tryFire 在物理 step（BEGIN_CONTACT）里被调用。step 期间改节点位置不会同步到刚体，
+        // 而 step 结束后 syncPhysicsToScene 又会用刚体位置覆盖节点，瞬移会被吃掉；
+        // 所以延迟到下一帧 update（物理 step 之前）再设置位置。
+        this.scheduleOnce(() => {
+            if (!self.isValid) return;
+            self.setPosition(next.x, next.y, self.position.z);
+            if (selfRb.isValid) {
+                selfRb.linearVelocity = new Vec2(0, 0);
+                selfRb.angularVelocity = 0;
+            }
+        }, 0);
 
         this._fireVisual(self);
         this._usesLeft -= 1;

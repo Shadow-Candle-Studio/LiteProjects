@@ -24,7 +24,7 @@ export class MudBehavior extends BehaviorBase {
     private static readonly DAMPING_PER_FRICTION = 0.1;
 
     @property({ tooltip: '泥潭範圍（像素，從硬幣中心算起）' })
-    public range = 60;
+    public range = 128;
 
     @property({ tooltip: '摩擦力（60 ≈ 額外 6 的線性阻尼）' })
     public friction = 60;
@@ -33,7 +33,9 @@ export class MudBehavior extends BehaviorBase {
     private _savedDamping = new Map<Node, number>();
 
     protected start(): void {
-        BehaviorVisual.startIdle(this.node, this.getVisualConfig());
+        //BehaviorVisual.startIdle(this.node, this.getVisualConfig());
+        // 白色空心圆标出泥潭范围
+        BehaviorVisual.showRangeRing(this.node, this.range, 'MudRange');
     }
 
     public getVisualConfig(): BehaviorVisualConfig {
@@ -87,6 +89,7 @@ export class MudBehavior extends BehaviorBase {
     }
 
     protected onDestroy(): void {
+        BehaviorVisual.hideRangeRing(this.node, 'MudRange');
         this._restoreAll();
     }
 

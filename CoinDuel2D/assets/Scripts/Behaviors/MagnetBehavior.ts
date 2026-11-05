@@ -18,20 +18,26 @@ export class MagnetBehavior extends BehaviorBase {
     public exclusive = false;
 
     @property({ tooltip: '吸引範圍（像素，從硬幣中心算起）' })
-    public range = 60;
+    public range = 128;
 
     @property({ tooltip: '吸引力大小' })
-    public force = 60;
+    public force = 2000;
 
     protected start(): void {
-        BehaviorVisual.startIdle(this.node, this.getVisualConfig());
+        //BehaviorVisual.startIdle(this.node, this.getVisualConfig());
+        // 白色空心圆标出吸引范围
+        BehaviorVisual.showRangeRing(this.node, this.range, 'MagnetRange');
+    }
+
+    protected onDestroy(): void {
+        BehaviorVisual.hideRangeRing(this.node, 'MagnetRange');
     }
 
     public getVisualConfig(): BehaviorVisualConfig {
         return {
             color: new Color(200, 120, 255, 255),
             label: 'MAGNET',
-            idlePulse: true,
+            idlePulse: false,
         };
     }
 

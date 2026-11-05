@@ -1,4 +1,4 @@
-import { _decorator, assetManager, AudioSource, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip, Color, director, Label } from 'cc';
+import { _decorator, assetManager, AudioSource, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, AudioClip, Color, director, Label } from 'cc';
 import { BombCoinMarker } from '../BombCoinMarker';
 import { I18n } from '../I18n';
 import { RoundManager } from '../RoundManager';
@@ -24,15 +24,16 @@ export enum GameMode{
 
 /** 统一教程配置：key 为关卡索引（0-based），intro 和 drag 步骤可混排 */
 const TUTORIAL_CONFIG: Record<number, TutorialStep[]> = {
-    0: [
-        { type: 'drag', hintKey: 'tutorial_step_1', sourceCoinIndex: 0, targetCoinIndex: 1 },
-        { type: 'drag', hintKey: 'tutorial_step_2', sourceCoinIndex: 1, targetCoinIndex: 2, isFinal: true },
-    ],
-    1: [
-        // 第二关：block/mud 介绍由 _buildTutorialSteps 动态插入在拖拽步骤之前
-        { type: 'drag', hintKey: 'tutorial_step_1', sourceCoinIndex: 0, targetCoinIndex: 1 },
-        { type: 'drag', hintKey: 'tutorial_step_2', sourceCoinIndex: 1, targetCoinIndex: 2, isFinal: true },
-    ],
+    // 暂时关闭教程
+    // 0: [
+    //     { type: 'drag', hintKey: 'tutorial_step_1', sourceCoinIndex: 0, targetCoinIndex: 1 },
+    //     { type: 'drag', hintKey: 'tutorial_step_2', sourceCoinIndex: 1, targetCoinIndex: 2, isFinal: true },
+    // ],
+    // 1: [
+    //     // 第二关：block/mud 介绍由 _buildTutorialSteps 动态插入在拖拽步骤之前
+    //     { type: 'drag', hintKey: 'tutorial_step_1', sourceCoinIndex: 0, targetCoinIndex: 1 },
+    //     { type: 'drag', hintKey: 'tutorial_step_2', sourceCoinIndex: 1, targetCoinIndex: 2, isFinal: true },
+    // ],
 };
 
 @ccclass('GameScene')
@@ -450,7 +451,7 @@ export class GameScene extends Component {
             } else if (item.type === 'bomb') {
                 this.gameLogic.spawnBombCoinAt(this.bomberPrefab, item.x, item.y, item.radius);
             } else if (item.type === 'coin') {
-                // canshot=false：环境硬币，作为静态障碍处理（类似 blocker/mud）
+                // canshot=false：环境硬币，不可操作但可被撞击移动
                 if (item.canshot === false) {
                     this.gameLogic.spawnEnvCoinAt(this.coinPrefab, item);
                 } else {
@@ -469,9 +470,6 @@ export class GameScene extends Component {
         this.uiManager.setLevel(this._levelIndex + 1);
         this.uiManager.setScore(0);
 
-        if (this._memesConfig) {
-            this._applyCoinConfig(this.coinId);
-        }
         this.onGameStart();
 
         // 闯关模式 → 统一教程入口（intro 和 drag 步骤可混排）
@@ -580,12 +578,17 @@ export class GameScene extends Component {
                 return;
             }
             this._memesConfig = (data as any) ?? {};
-            this._applyCoinConfig(this.coinId);
+            CoinController.setMemesConfig(this._memesConfig);
+            // 关卡模式的硬币在生成时已按 class 应用；天梯模式硬币没有 class，统一使用开局 coinId
+            if (!LevelManager.getCurrent() || GameScene.mode === GameMode.Ladder) {
+                this._applyCoinConfig(this.coinId);
+            }
         });
     }
 
     /**
      * 使用缓存的 memes.json 配置，根据 key 查找并应用到场上所有硬币
+     * （天梯模式默认外观 / 调试数字键切换用；关卡模式的硬币按各自 class 应用）
      * @param key memes.json 中的硬币类型标识，如 "1", "2"
      */
     private _applyCoinConfig(key: string): void {
@@ -600,96 +603,17 @@ export class GameScene extends Component {
             console.warn('[GameScene] memes.json 格式错误：缺少 coins 字段');
             return;
         }
-
-        const config = coinsData[key] as {
-            texture?: string;
-            idleTexture?: string;
-            aimTexture?: string;
-            shotTexture?: string;
-            hittedTexture?: string;
-            shotSfx?: string;
-            hittedSfx?: string;
-        } | undefined;
-        if (!config) {
+        if (!coinsData[key]) {
             console.log(`[GameScene] memes.json 中未找到 key "${key}" 的配置，不做处理`);
             return;
         }
 
         console.log(`[GameScene] 切换硬币为 ${key} 号外观（默认/空闲/拖拽/发射/被打击 贴图 + 发射/被打击 音效）`);
-
-        // 并行加载各状态贴图（SpriteFrame 子资源）和音效，全部就绪后应用到所有硬币
-        let defaultFrame: SpriteFrame | null = null;
-        let idleFrame: SpriteFrame | null = null;
-        let aimFrame: SpriteFrame | null = null;
-        let shotFrame: SpriteFrame | null = null;
-        let hittedFrame: SpriteFrame | null = null;
-        let shotClip: AudioClip | null = null;
-        let hittedClip: AudioClip | null = null;
-        let total = 0;
-        let loaded = 0;
-
-        const applyToCoins = () => {
-            loaded++;
-            if (loaded < total) return;
-            for (const coin of this.gameLogic.coinGroup.children) {
-                // 跳过炸弹硬币（保留 prefab 自带贴图）
-                if (coin.getComponent(BombCoinMarker)) continue;
-                const ctrl = coin.getComponent(CoinController);
-                if (ctrl) {
-                    ctrl.setAppearance({
-                        defaultFrame,
-                        idleFrame,
-                        aimFrame,
-                        shotFrame,
-                        hittedFrame,
-                        shotSfxClip: shotClip,
-                        hittedSfxClip: hittedClip,
-                        typeKey: key,
-                    });
-                }
-            }
-        };
-
-        // 图片资源需指定 SpriteFrame 子资源路径
-        const loadFrame = (field: keyof typeof config, assign: (f: SpriteFrame) => void) => {
-            const file = config[field];
-            if (!file) return;
-            total++;
-            const base = file.replace(/\.[^/.]+$/, '');
-            resources.load(base + '/spriteFrame', SpriteFrame, (err: any, sf: SpriteFrame) => {
-                if (!err && sf) {
-                    assign(sf);
-                } else {
-                    console.warn(`[GameScene] 加载贴图 ${file} 失败:`, err);
-                }
-                applyToCoins();
-            });
-        };
-        const loadClip = (field: keyof typeof config, assign: (c: AudioClip) => void) => {
-            const file = config[field];
-            if (!file) return;
-            total++;
-            const base = file.replace(/\.[^/.]+$/, '');
-            resources.load(base, AudioClip, (err: any, clip: AudioClip) => {
-                if (!err && clip) {
-                    assign(clip);
-                } else {
-                    console.warn(`[GameScene] 加载音效 ${file} 失败:`, err);
-                }
-                applyToCoins();
-            });
-        };
-
-        loadFrame('texture', f => { defaultFrame = f; });
-        loadFrame('idleTexture', f => { idleFrame = f; });
-        loadFrame('aimTexture', f => { aimFrame = f; });
-        loadFrame('shotTexture', f => { shotFrame = f; });
-        loadFrame('hittedTexture', f => { hittedFrame = f; });
-        loadClip('shotSfx', c => { shotClip = c; });
-        loadClip('hittedSfx', c => { hittedClip = c; });
-
-        // 无任何可加载资源时也会应用一次（保持当前贴图，仅记录类型 key）
-        applyToCoins();
+        for (const coin of this.gameLogic.coinGroup.children) {
+            // 跳过炸弹硬币（保留 prefab 自带贴图）
+            if (coin.getComponent(BombCoinMarker)) continue;
+            CoinController.applyMemeAppearance(coin, key);
+        }
     }
 
     /** 从 ConfigManager 读取配置并应用到各组件 */

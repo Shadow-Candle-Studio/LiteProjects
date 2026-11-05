@@ -5,7 +5,7 @@ export interface LevelCoinData {
     class: number;
     /** 要挂载的行为 id 列表，可同时包含多个 */
     behaviors?: string[];
-    /** 是否玩家可操作。false 表示环境硬币（静态障碍，类似 blocker/mud），缺省为 true */
+    /** 是否玩家可操作。false 表示环境硬币（不可操作，但可被撞击移动），缺省为 true */
     canshot?: boolean;
     x: number;
     y: number;

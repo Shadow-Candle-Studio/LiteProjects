@@ -1,4 +1,4 @@
-import { _decorator, Color, ERigidBody2DType, Node, RigidBody2D, Vec2 } from 'cc';
+import { _decorator, Color, Node } from 'cc';
 import type { GameLogic } from '../GameLogic';
 import { BombCoinMarker } from '../BombCoinMarker';
 import { BehaviorBase, BehaviorMode } from './BehaviorBase';
@@ -18,25 +18,25 @@ export class BombBehavior extends BehaviorBase {
     public mode: BehaviorMode = 'dominant';
     public exclusive = true;
 
-    @property({ tooltip: '爆炸推力範圍（像素，從硬幣中心算起）' })
-    public range = 60;
+    @property({ tooltip: '爆炸推力半徑（像素；0 = 使用 config.json 的 bombPushRadius）' })
+    public range = 0;
 
-    @property({ tooltip: '爆炸推力大小' })
-    public force = 60;
+    @property({ tooltip: '爆炸推力大小（0 = 使用 config.json 的 bombPushForce）' })
+    public force = 0;
 
     /** 同一次撞擊可能回報多次接觸，短時間內只炸一次。 */
     private static readonly COOLDOWN_MS = 250;
     private _cooldownUntil = 0;
 
     protected start(): void {
-        BehaviorVisual.startIdle(this.node, this.getVisualConfig());
+        //BehaviorVisual.startIdle(this.node, this.getVisualConfig());
     }
 
     public getVisualConfig(): BehaviorVisualConfig {
         return {
             color: new Color(255, 90, 60, 255),
             label: 'BOOM!',
-            idlePulse: true,
+            idlePulse: false,
         };
     }
 
@@ -53,35 +53,18 @@ export class BombBehavior extends BehaviorBase {
         return true;
     }
 
-    /** 對範圍內的動態硬幣施加徑向衝量，距離越近推力越大。 */
+    /**
+     * 執行與 Effects/Bomb 相同的爆炸效果：
+     * 爆炸動畫 + 音效 + 徑向推力（推開硬幣、推開泥潭、炸毀範圍內的 blocker）。
+     * 爆炸 2 秒後提示遊戲失敗。
+     */
     private _explode(self: Node, gl: GameLogic): void {
-        const coins = gl.coinGroup?.children;
-        if (!coins || coins.length === 0) return;
+        // 0 表示沿用 config.json 裡道具炸彈的參數，保證能推開硬幣
+        const radius = this.range > 0 ? this.range : gl.bombPushRadius;
+        const force = this.force > 0 ? this.force : gl.bombPushForce;
 
-        const center = self.worldPosition;
-
-        for (const coin of coins) {
-            if (coin === self) continue;
-
-            const rb = coin.getComponent(RigidBody2D);
-            if (!rb || rb.type !== ERigidBody2DType.Dynamic) continue;
-
-            const pos = coin.worldPosition;
-            const dx = pos.x - center.x;
-            const dy = pos.y - center.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            // 距離從硬幣中心算起，越近推力越大
-            if (dist > this.range) continue;
-
-            // 完全重疊時方向無從計算，固定往右推
-            const nx = dist > 0.001 ? dx / dist : 1;
-            const ny = dist > 0.001 ? dy / dist : 0;
-            const strength = 1 - dist / Math.max(this.range, 0.0001);
-            if (strength <= 0) continue;
-
-            const impulse = this.force * strength;
-            rb.applyLinearImpulseToCenter(new Vec2(nx * impulse, ny * impulse), true);
-        }
+        gl.explodeAt(self.worldPosition, radius, force);
+        gl.requestGameOver(2);
     }
 }
 
