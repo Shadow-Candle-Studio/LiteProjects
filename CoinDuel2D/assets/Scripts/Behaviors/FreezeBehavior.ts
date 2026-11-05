@@ -13,7 +13,7 @@ const { ccclass, property } = _decorator;
  */
 @ccclass('FreezeBehavior')
 export class FreezeBehavior extends BehaviorBase {
-    public priority = 60;
+    public priority = 90;
     public mode: BehaviorMode = 'dominant';
     public exclusive = true;
 

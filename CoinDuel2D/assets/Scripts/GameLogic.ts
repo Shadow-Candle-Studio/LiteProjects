@@ -13,6 +13,10 @@ import { BehaviorBase } from './Behaviors/BehaviorBase';
 import './Behaviors/FreezeBehavior';
 import './Behaviors/FlashStepBehavior';
 import './Behaviors/KnockbackBehavior';
+import './Behaviors/MagnetBehavior';
+import './Behaviors/MudBehavior';
+import './Behaviors/BombBehavior';
+import './Behaviors/BlockerBehavior';
 import { MemeLoader } from './Meme/MemeLoader';
 const { ccclass, property } = _decorator;
 

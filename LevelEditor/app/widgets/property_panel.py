@@ -201,11 +201,11 @@ class PropertyPanel(QWidget):
         behavior_table = QTableWidget(len(metas), 4)
         behavior_table.setHorizontalHeaderLabels(["Behavior", "Priority", "Mode", "Exclusive"])
         behavior_table.verticalHeader().setVisible(False)
+        behavior_table.verticalHeader().setDefaultSectionSize(24)
         behavior_table.setSelectionMode(QAbstractItemView.NoSelection)
         behavior_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         behavior_table.setShowGrid(False)
         behavior_table.setWordWrap(False)
-        behavior_table.setMaximumHeight(120)
 
         header = behavior_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
@@ -224,6 +224,11 @@ class PropertyPanel(QWidget):
 
             behavior_table.setItem(row, 2, QTableWidgetItem(meta.mode))
             behavior_table.setItem(row, 3, QTableWidgetItem("Yes" if meta.exclusive else ""))
+
+        # 按行数撑开表格，避免新增 behavior 后只能靠内部滚动查看
+        rows_height = 24 * behavior_table.rowCount()
+        header_height = max(behavior_table.horizontalHeader().sizeHint().height(), 24)
+        behavior_table.setFixedHeight(rows_height + header_height + 4)
 
         behavior_table.itemChanged.connect(
             lambda item: self._on_behavior_item_changed(behavior_table, item, meta_map)

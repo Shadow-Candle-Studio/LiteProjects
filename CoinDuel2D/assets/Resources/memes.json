@@ -22,7 +22,7 @@
         },
         "3": {
             "name": "炸弹币",
-            "texture": "",
+            "texture": "textures/coin/coin_bomb.png",
             "idleTexture": "",
             "aimTexture": "",
             "shotTexture": "",
@@ -32,7 +32,7 @@
         },
         "4": {
             "name": "冰冻币",
-            "texture": "",
+            "texture": "textures/coin/coin_frezon.png",
             "idleTexture": "",
             "aimTexture": "",
             "shotTexture": "",
@@ -42,7 +42,7 @@
         },
         "5": {
             "name": "闪身步币",
-            "texture": "",
+            "texture": "textures/coin/coin_flashstep.png",
             "idleTexture": "",
             "aimTexture": "",
             "shotTexture": "",
@@ -52,7 +52,7 @@
         },
         "6": {
             "name": "泥潭币",
-            "texture": "",
+            "texture": "textures/coin/coin_mud.png",
             "idleTexture": "",
             "aimTexture": "",
             "shotTexture": "",
@@ -62,7 +62,17 @@
         },
         "7": {
             "name": "障碍物币",
-            "texture": "",
+            "texture": "textures/coin/coin_blocker.png",
+            "idleTexture": "",
+            "aimTexture": "",
+            "shotTexture": "",
+            "hittedTexture": "",
+            "shotSfx": "",
+            "hittedSfx": ""
+        },
+        "8": {
+            "name": "磁铁",
+            "texture": "textures/coin/coin_magnet.png",
             "idleTexture": "",
             "aimTexture": "",
             "shotTexture": "",

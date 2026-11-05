@@ -1,5 +1,17 @@
 {
     "behaviors": {
+        "BombBehavior": {
+            "class": "BombBehavior",
+            "priority": 100,
+            "mode": "dominant",
+            "exclusive": true
+        },
+        "FreezeBehavior": {
+            "class": "FreezeBehavior",
+            "priority": 90,
+            "mode": "dominant",
+            "exclusive": true
+        },
         "FlashStepBehavior": {
             "class": "FlashStepBehavior",
             "priority": 80,
@@ -12,11 +24,23 @@
             "mode": "dominant",
             "exclusive": true
         },
-        "FreezeBehavior": {
-            "class": "FreezeBehavior",
-            "priority": 60,
-            "mode": "dominant",
-            "exclusive": true
+        "MagnetBehavior": {
+            "class": "MagnetBehavior",
+            "priority": 70,
+            "mode": "passive",
+            "exclusive": false
+        },
+        "BlockerBehavior": {
+            "class": "BlockerBehavior",
+            "priority": 0,
+            "mode": "passive",
+            "exclusive": false
+        },
+        "MudBehavior": {
+            "class": "MudBehavior",
+            "priority": 0,
+            "mode": "passive",
+            "exclusive": false
         }
     }
 }

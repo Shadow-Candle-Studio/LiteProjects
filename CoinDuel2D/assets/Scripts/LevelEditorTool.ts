@@ -21,6 +21,10 @@ const BRUSHES: Brush[] = [
     { label: '3 冰凍', behavior: 'FreezeBehavior', kind: 'coin', color: new Color(140, 210, 255, 255) },
     { label: '4 閃身步', behavior: 'FlashStepBehavior', kind: 'coin', color: new Color(170, 255, 140, 255) },
     { label: '5 炸彈', behavior: 'BombBehavior', kind: 'bomb', color: new Color(255, 80, 80, 255) },
+    { label: '6 磁鐵', behavior: 'MagnetBehavior', kind: 'coin', color: new Color(200, 120, 255, 255) },
+    { label: '7 泥潭', behavior: 'MudBehavior', kind: 'coin', color: new Color(150, 110, 70, 255) },
+    { label: '8 炸彈行為', behavior: 'BombBehavior', kind: 'coin', color: new Color(255, 90, 60, 255) },
+    { label: '9 障礙物', behavior: 'BlockerBehavior', kind: 'coin', color: new Color(170, 170, 180, 255) },
 ];
 
 interface CoinMark {
@@ -144,8 +148,8 @@ export class LevelEditorTool extends Component {
     }
 
     private _digitIndex(code: number): number {
-        if (code >= KeyCode.DIGIT_1 && code <= KeyCode.DIGIT_5) return code - KeyCode.DIGIT_1;
-        if (code >= KeyCode.NUM_1 && code <= KeyCode.NUM_5) return code - KeyCode.NUM_1;
+        if (code >= KeyCode.DIGIT_1 && code <= KeyCode.DIGIT_9) return code - KeyCode.DIGIT_1;
+        if (code >= KeyCode.NUM_1 && code <= KeyCode.NUM_9) return code - KeyCode.NUM_1;
         return -1;
     }
 

@@ -16,16 +16,66 @@
         {
             "type": "coin",
             "class": 2,
-            "x": 229,
-            "y": 172,
+            "x": 242,
+            "y": 169,
             "canshot": true
         },
         {
             "type": "coin",
-            "class": 1,
-            "x": -11,
-            "y": -140,
-            "canshot": true
+            "class": 3,
+            "x": -291,
+            "y": -95,
+            "canshot": false
+        },
+        {
+            "type": "coin",
+            "class": 5,
+            "x": -190,
+            "y": -92,
+            "canshot": false,
+            "behaviors": [
+                "FlashStepBehavior"
+            ]
+        },
+        {
+            "type": "coin",
+            "class": 4,
+            "x": -82,
+            "y": -88,
+            "canshot": false,
+            "behaviors": [
+                "FreezeBehavior"
+            ]
+        },
+        {
+            "type": "coin",
+            "class": 6,
+            "x": 13,
+            "y": -89,
+            "canshot": false,
+            "behaviors": [
+                "MudBehavior"
+            ]
+        },
+        {
+            "type": "coin",
+            "class": 8,
+            "x": 116,
+            "y": -87,
+            "canshot": false,
+            "behaviors": [
+                "MagnetBehavior"
+            ]
+        },
+        {
+            "type": "coin",
+            "class": 7,
+            "x": 286,
+            "y": -91,
+            "canshot": false,
+            "behaviors": [
+                "BlockerBehavior"
+            ]
         }
     ]
 }

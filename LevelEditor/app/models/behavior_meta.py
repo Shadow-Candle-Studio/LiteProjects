@@ -16,9 +16,13 @@ META_PATH = os.path.join(
 
 # behavior_meta.json 缺失或损坏时的兜底数据（与当前游戏代码保持一致）
 FALLBACK_META = {
+    "BombBehavior": {"priority": 100, "mode": "dominant", "exclusive": True},
+    "FreezeBehavior": {"priority": 90, "mode": "dominant", "exclusive": True},
     "FlashStepBehavior": {"priority": 80, "mode": "dominant", "exclusive": True},
     "KnockbackBehavior": {"priority": 70, "mode": "dominant", "exclusive": True},
-    "FreezeBehavior": {"priority": 60, "mode": "dominant", "exclusive": True},
+    "MagnetBehavior": {"priority": 70, "mode": "passive", "exclusive": False},
+    "BlockerBehavior": {"priority": 0, "mode": "passive", "exclusive": False},
+    "MudBehavior": {"priority": 0, "mode": "passive", "exclusive": False},
 }
 
 
