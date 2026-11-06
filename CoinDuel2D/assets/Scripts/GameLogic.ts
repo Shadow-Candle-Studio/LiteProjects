@@ -423,8 +423,9 @@ export class GameLogic extends Component {
                 const sync = this.getComponent(AssetSyncManager) ?? AssetSyncManager.instance;
                 if (!sync) return;
                 sync.applyCoinSkin(coin, {
-                    skinKey: preset || undefined,
-                    skin: url ? { default: url, idle: url } : (preset ? { preset } : undefined),
+                    preset: preset || undefined,
+                    default: url || undefined,
+                    idle: url || undefined,
                 });
             },
             applyTableSkin: (felt, wall) => {
