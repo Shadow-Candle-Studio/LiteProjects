@@ -53,6 +53,10 @@ export class SoundManager extends Component {
     private _pitchCtx: any = null;
     private readonly _pitchBuffers = new Map<string, any>();
     private _currentBgmId: number = -1;
+    /** 最近一次请求播放的 BGM id，关闭音乐后重新打开时恢复 */
+    private _lastBgmId: number = 1;
+    /** 音乐开关（用户可通过 UI 切换） */
+    private _musicEnabled: boolean = true;
     private _bgmFadeTimer: number = 0;
     private _bgmFadingIn: boolean = false;
     private _bgmFadingOut: boolean = false;
@@ -243,7 +247,32 @@ export class SoundManager extends Component {
         if (this.dragRelease && this.audioSource) this.audioSource.playOneShot(this.dragRelease);
     }
 
+    /** 音乐开关是否开启 */
+    public get musicEnabled(): boolean {
+        return this._musicEnabled;
+    }
+
+    /** 设置音乐开关；开启时恢复最近一首 BGM */
+    public setMusicEnabled(enabled: boolean): boolean {
+        this._musicEnabled = enabled;
+        if (enabled) {
+            this.playBGM(this._lastBgmId);
+        } else {
+            this.stopBGM();
+        }
+        return this._musicEnabled;
+    }
+
+    /** 切换音乐开关，返回切换后的状态 */
+    public toggleMusic(): boolean {
+        return this.setMusicEnabled(!this._musicEnabled);
+    }
+
     public playBGM(id: number): void {
+        this._lastBgmId = id;
+        // 用户关闭了音乐：只记录 id，不实际播放
+        if (!this._musicEnabled) return;
+
         // 同一首 BGM 正在播放且未在淡出，跳过
         if (id === this._currentBgmId && this._bgmSource && this._bgmSource.playing && !this._bgmFadingOut) {
             return;
@@ -281,6 +310,8 @@ export class SoundManager extends Component {
                 return;
             }
             if (!this._bgmSource) return;
+            // 加载期间用户可能已关闭音乐
+            if (!this._musicEnabled) return;
             this._bgmSource.stop();
             this._bgmSource.clip = clip;
             this._bgmSource.loop = true;
