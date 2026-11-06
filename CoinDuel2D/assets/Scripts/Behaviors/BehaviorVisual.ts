@@ -1,4 +1,4 @@
-import { Color, Label, Node, Sprite, Tween, tween, UIOpacity, UITransform, Vec3 } from 'cc';
+import { Color, Graphics, Label, Node, Sprite, Tween, tween, UIOpacity, UITransform, Vec3 } from 'cc';
 
 export interface BehaviorVisualConfig {
     color: Color | null;
@@ -8,6 +8,35 @@ export interface BehaviorVisualConfig {
 
 /** 行為的共用外觀：改硬幣顏色，開火時浮出 label。 */
 export class BehaviorVisual {
+    /** 在硬币中心绘制空心圆范围指示（白色描边）。重复调用会复用并重绘。 */
+    public static showRangeRing(node: Node, radius: number, name: string = 'RangeRing'): Node {
+        let ring = node.getChildByName(name);
+        if (!ring) {
+            ring = new Node(name);
+            ring.layer = node.layer;
+            ring.setParent(node);
+            ring.setPosition(0, 0, 0);
+            const ui = ring.addComponent(UITransform);
+            ui.setContentSize(radius * 2, radius * 2);
+            ui.setAnchorPoint(0.5, 0.5);
+        }
+
+        let graphics = ring.getComponent(Graphics);
+        if (!graphics) graphics = ring.addComponent(Graphics);
+        graphics.clear();
+        graphics.lineWidth = 2;
+        graphics.strokeColor = Color.WHITE;
+        graphics.circle(0, 0, radius);
+        graphics.stroke();
+        return ring;
+    }
+
+    /** 移除范围指示器 */
+    public static hideRangeRing(node: Node, name: string = 'RangeRing'): void {
+        const ring = node.getChildByName(name);
+        if (ring && ring.isValid) ring.destroy();
+    }
+
     public static startIdle(node: Node, config: BehaviorVisualConfig): void {
         const sprite = BehaviorVisual._sprite(node);
         if (!sprite || !config.color) return;

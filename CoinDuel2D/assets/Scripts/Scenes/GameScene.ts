@@ -25,15 +25,16 @@ export enum GameMode{
 
 /** 统一教程配置：key 为关卡索引（0-based），intro 和 drag 步骤可混排 */
 const TUTORIAL_CONFIG: Record<number, TutorialStep[]> = {
-    0: [
-        { type: 'drag', hintKey: 'tutorial_step_1', sourceCoinIndex: 0, targetCoinIndex: 1 },
-        { type: 'drag', hintKey: 'tutorial_step_2', sourceCoinIndex: 1, targetCoinIndex: 2, isFinal: true },
-    ],
-    1: [
-        // 第二关：block/mud 介绍由 _buildTutorialSteps 动态插入在拖拽步骤之前
-        { type: 'drag', hintKey: 'tutorial_step_1', sourceCoinIndex: 0, targetCoinIndex: 1 },
-        { type: 'drag', hintKey: 'tutorial_step_2', sourceCoinIndex: 1, targetCoinIndex: 2, isFinal: true },
-    ],
+    // 暂时关闭教程
+    // 0: [
+    //     { type: 'drag', hintKey: 'tutorial_step_1', sourceCoinIndex: 0, targetCoinIndex: 1 },
+    //     { type: 'drag', hintKey: 'tutorial_step_2', sourceCoinIndex: 1, targetCoinIndex: 2, isFinal: true },
+    // ],
+    // 1: [
+    //     // 第二关：block/mud 介绍由 _buildTutorialSteps 动态插入在拖拽步骤之前
+    //     { type: 'drag', hintKey: 'tutorial_step_1', sourceCoinIndex: 0, targetCoinIndex: 1 },
+    //     { type: 'drag', hintKey: 'tutorial_step_2', sourceCoinIndex: 1, targetCoinIndex: 2, isFinal: true },
+    // ],
 };
 
 @ccclass('GameScene')
