@@ -1,4 +1,4 @@
-import { _decorator, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip, Color, director, Label } from 'cc';
+import { _decorator, assetManager, AudioSource, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip, Color, director, Label, sys } from 'cc';
 import { BombCoinMarker } from '../BombCoinMarker';
 import { I18n } from '../I18n';
 import { RoundManager } from '../RoundManager';
@@ -14,6 +14,7 @@ import { DataProvider } from '../DataProvider';
 import { HitEffectManager } from '../HitEffectManager';
 import { Leaderboard } from '../Leaderboard';
 import { TutorialManager, TutorialStep } from '../TutorialManager';
+import { AssetSyncManager } from '../Meme/AssetSyncManager';
 
 const { ccclass, property } = _decorator;
 
@@ -91,6 +92,7 @@ export class GameScene extends Component {
 
         this.level = 1;
         this.uiManager.setLevel(this.level);
+        this.gameLogic.coinPrefab = this.coinPrefab;
         this.gameLogic.score = 0;
         this.uiManager.setScore(0);
 
@@ -118,15 +120,27 @@ export class GameScene extends Component {
                     this._applyGameConfig();
                 }
 
-                // 检查是否有从关卡选择传入的配置
-                const levelData = LevelManager.getCurrent();
+                // 关卡选择 / Scratch COINMOD1 传入的配置
+                let levelData = LevelManager.getCurrent();
+                if (!levelData) {
+                    // Fallback: active Scratch mod in localStorage
+                    try {
+                        const raw = sys.localStorage?.getItem('CoinDuel:activeMod')
+                            ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('CoinDuel:activeMod') : null);
+                        if (raw) {
+                            const mod = JSON.parse(raw);
+                            if (mod?.level && Array.isArray(mod.level.coins)) {
+                                LevelManager.setScratchLevel(mod.level);
+                                levelData = mod.level;
+                            }
+                        }
+                    } catch { /* ignore */ }
+                }
                 if (levelData) {
-                    // 闯关模式
                     this._levelFiles = LevelManager.getLevelFiles();
                     this._levelIndex = LevelManager.getLevelIndex();
                     this._initFromLevel(levelData);
                 } else {
-                    // 天梯模式
                     LevelManager.clear();
                     this.startNewRound();
                 }
@@ -192,18 +206,14 @@ export class GameScene extends Component {
                 }
             };
             // 重试
-            this.uiManager.uiFail.onBtnRetryClick = ()=>{
-                // 如果是天梯模式，直接退回第一关
-                if (GameScene.mode === GameMode.Ladder) {
-                    this.level = 1;
-                    this.gameLogic.score = 0;
-                    this.uiManager.setLevel(this.level);
-                    this.uiManager.setScore(0);
-                    this.startNewRound();
-                }else if (GameScene.mode === GameMode.Level){
-                    // 如果是关卡模式，重新加载当前关卡
-                    this._initFromLevel(LevelManager.getCurrent());
+            this.uiManager.uiFail.onBtnRetryClick = () => {
+                const levelData = LevelManager.getCurrent();
+                if (levelData) {
+                    this._initFromLevel(levelData);
+                    return;
                 }
+                this.uiManager.setScore(0);
+                this.startNewRound();
             };
         }
 
@@ -248,8 +258,11 @@ export class GameScene extends Component {
             }
         };
 
-        this.gameLogic.onScoreUpdate = (score: number) => {
-            this.uiManager.setScore(score);
+        this.gameLogic.onScoreUpdate = (score: number, multiplier: number) => {
+            this.uiManager.setScore(score, multiplier);
+        };
+        this.gameLogic.onCoinsLeft = (count: number) => {
+            this.uiManager.setCoinsLeft(count);
         };
 
         this.gameLogic.onGameWin = (duration: number) => {
@@ -267,7 +280,36 @@ export class GameScene extends Component {
             }
         };
 
-        SoundManager.instance.playBGM(1);
+        this._ensureSoundManager(() => {
+            SoundManager.instance?.playBGM(1);
+        });
+    }
+
+    /** 直接 Play game 場景時主選單不會建立 SoundManager，這裡補上。 */
+    private _ensureSoundManager(onReady: () => void): void {
+        if (SoundManager.instance?.isValid) {
+            onReady();
+            return;
+        }
+        const scene = director.getScene();
+        if (!scene) return;
+
+        const SOUND_MANAGER_PREFAB = '332b809b-073c-41f2-9935-3e8c002012fe';
+        assetManager.loadAny({ uuid: SOUND_MANAGER_PREFAB }, (err: Error | null, asset: Prefab) => {
+            if (!scene.isValid || SoundManager.instance?.isValid) {
+                onReady();
+                return;
+            }
+            if (!err && asset) {
+                scene.addChild(instantiate(asset));
+            } else {
+                const node = new Node('SoundManager');
+                node.addComponent(AudioSource);
+                scene.addChild(node);
+                node.addComponent(SoundManager);
+            }
+            onReady();
+        });
     }
 
     private onGameStart(){
@@ -323,6 +365,7 @@ export class GameScene extends Component {
             // 注入 GameLogic 引用，用于弹射后通知状态切换
             let ctrl = coin.addComponent(CoinController);
             ctrl.setGameLogic(this.gameLogic);
+            if (i === 0) this.gameLogic.attachCoinBehavior(coin, 'FreezeBehavior');
         }
 
         // 生成随机道具（天梯模式，level >= 2 时）
@@ -344,6 +387,8 @@ export class GameScene extends Component {
             }
         }
 
+        this.gameLogic.beginLevel();
+        this.uiManager.setScore(0);
         this.gameLogic.waitingPlayerOperation();
 
         // 开局按指定 coin id 应用外观（配置已加载时）
@@ -376,7 +421,11 @@ export class GameScene extends Component {
     }
 
     /** 按关卡 JSON 配置初始化桌面、硬币、障碍物、陷阱 */
-    private _initFromLevel(data: LevelData): void {
+    private _initFromLevel(data: LevelData | null): void {
+        if (!data) {
+            this.startNewRound();
+            return;
+        }
         this.clearCoins();
         this.gameLogic.clearProps();
 
@@ -401,7 +450,13 @@ export class GameScene extends Component {
 
         this.tableController.drawTable();
 
+        const sync = this.gameLogic.getComponent(AssetSyncManager)
+            ?? this.gameLogic.addComponent(AssetSyncManager);
+        // 桌面熱換皮（felt / wall URL、preset、Base64）
+        if (data.table) sync.applyTableConfig(this.tableController, data.table);
+
         // 条目：按 type 字段区分硬币/障碍物/陷阱/炸弹硬币
+        const spawnedCoins: Node[] = [];
         for (const item of data.coins) {
             if (item.type === 'block') {
                 this.gameLogic.spawnBlockerAt(item.x, item.y, item.radius);
@@ -410,21 +465,31 @@ export class GameScene extends Component {
             } else if (item.type === 'bomb') {
                 this.gameLogic.spawnBombCoinAt(this.bomberPrefab, item.x, item.y, item.radius);
             } else if (item.type === 'coin') {
-                this.gameLogic.spawnCoinAt(this.coinPrefab, item.x, item.y);
+                const node = sync.spawnConfiguredCoin(this.gameLogic, this.coinPrefab, {
+                    type: 'coin',
+                    x: item.x,
+                    y: item.y,
+                    class: item.class,
+                    canshot: item.canshot,
+                    behaviors: item.behaviors,
+                    memeId: item.memeId,
+                    skin: item.skin,
+                    skinKey: item.skinKey,
+                    radius: item.radius,
+                });
+                spawnedCoins.push(node ?? this.gameLogic.spawnCoinAt(this.coinPrefab, item.x, item.y));
             }
         }
+        if (this._levelIndex === 0 && spawnedCoins.length > 0) {
+            this.gameLogic.attachCoinBehavior(spawnedCoins[spawnedCoins.length - 1], 'FreezeBehavior');
+        }
 
+        this.gameLogic.beginLevel();
         this.gameLogic.waitingPlayerOperation();
 
         // 更新 UI 关卡显示
         this.uiManager.setLevel(this._levelIndex + 1);
         this.uiManager.setScore(0);
-        this.gameLogic.score = 0;
-
-        if (this._coinsConfig) {
-            this._applyCoinConfig(this.coinId);
-        }
-        this.onGameStart();
 
         // 闯关模式 → 统一教程入口（intro 和 drag 步骤可混排）
         if (this._levelIndex >= 0 && this.tutorialManager) {
@@ -445,6 +510,13 @@ export class GameScene extends Component {
 
     /** 加载下一关，或显示最终胜利 */
     private _loadNextLevel(): void {
+        // Scratch solo pack has no next file level
+        if (LevelManager.isScratchPack()) {
+            this.gameLogic.enabled = false;
+            this.uiManager.uiWin.show(this.level, this.gameLogic.score, 0);
+            this.uiManager.uiWin.setNextEnabled(false);
+            return;
+        }
         this._levelIndex++;
         if (this._levelIndex < this._levelFiles.length) {
             const levelFile = this._levelFiles[this._levelIndex];

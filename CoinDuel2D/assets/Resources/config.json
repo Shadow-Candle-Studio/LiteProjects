@@ -24,7 +24,7 @@
         "bombPushRadius": 512,
         "bombPushForce": 500000,
         "bombMudPushFactor": 0.333,
-        "aimLineFactor": 7,
+        "aimLineFactor": 2,
         "idleShowDelay": 5
     },
     "tableController": {
