@@ -21,7 +21,7 @@
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text);
       font-family: "Segoe UI", "Trebuchet MS", sans-serif; }
-    body { display: grid; grid-template-rows: auto auto auto 1fr auto; }
+    body { display: grid; grid-template-rows: auto 1fr auto; }
     header {
       display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
       padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--panel);
@@ -77,127 +77,32 @@
       background: #0f131a; border: 1px solid var(--line); color: var(--text);
       border-radius: 8px; padding: 6px 10px; font: inherit; min-width: 140px;
     }
-    #gitBar {
-      border-top: 1px solid var(--line); background: #171d28; padding: 8px 14px;
-      display: grid; gap: 8px;
-    }
-    #gitBar summary {
-      cursor: pointer; color: var(--accent); font-size: 0.82rem; font-weight: 650;
-      letter-spacing: 0.04em; list-style: none;
-    }
-    #gitBar summary::-webkit-details-marker { display: none; }
-    #gitBar .git-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    #gitBar input, #gitBar select {
-      background: #0f131a; border: 1px solid var(--line); color: var(--text);
-      border-radius: 8px; padding: 6px 10px; font: inherit; min-width: 100px;
-    }
-    #gitBar input.git-token { min-width: 220px; flex: 1; }
-    #gitBar .git-hint { font-size: 0.72rem; color: var(--muted); line-height: 1.4; }
-    #gitBar a { color: var(--accent); }
-    #memeBar {
-      border-top: 1px solid var(--line); background: #171d28; padding: 8px 14px;
-      display: grid; gap: 8px;
-    }
-    #memeBar summary {
-      cursor: pointer; color: var(--accent); font-size: 0.82rem; font-weight: 650;
-      letter-spacing: 0.04em; list-style: none;
-    }
-    #memeBar summary::-webkit-details-marker { display: none; }
-    #memeBar .git-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    #memeBar input, #memeBar select {
-      background: #0f131a; border: 1px solid var(--line); color: var(--text);
-      border-radius: 8px; padding: 6px 10px; font: inherit; min-width: 100px;
-    }
-    #memeBar input.n8n-url { min-width: 260px; flex: 1; }
-    #memeBar .git-hint { font-size: 0.72rem; color: var(--muted); line-height: 1.4; }
-    #memeBar a { color: var(--accent); }
   </style>
 </head>
 <body>
   <header>
     <h1>CoinDuel2D Blockly Mod Editor</h1>
-    <span class="hint">Web-first: design here → Copy COINMOD1 / Git save → open runtime (no Cocos rebuild)</span>
+    <span class="hint">Level + Rules in Scratch → Export Share → paste in Cocos（导入 V）</span>
     <div class="meta">
       <input id="modName" placeholder="Mod name" value="Blockly Mode" />
       <input id="modAuthor" placeholder="Author" value="" />
-      <input id="uiWin" placeholder="UI: win text" value="" title="uiStrings.win" />
-      <input id="uiLose" placeholder="UI: lose text" value="" title="uiStrings.lose" />
     </div>
     <div class="actions">
-      <button class="ok" id="btnCopyShare" title="Primary CTA — paste into itch.io via Load / share">Copy COINMOD1</button>
-      <button id="btnExportShare">Export Share</button>
-      <button id="btnExportJson">Mod JSON</button>
-      <button id="btnExportLevel">Level JSON</button>
-      <button id="btnExportWs">Workspace</button>
-      <button id="btnImportShare">Import</button>
-      <button id="btnLoadLevel1" title="Fetch cdn/levels/1.json into blocks">Load Level 1</button>
-      <button id="btnLoadLevel2" title="Fetch cdn/levels/2.json into blocks">Load Level 2</button>
-      <input id="loadLevelId" type="number" min="1" value="2" title="Level id to load from CDN" style="width:52px;" />
-      <button id="btnLoadLevelN" title="Fetch cdn/levels/{id}.json">Load Level #</button>
+      <button class="primary" id="btnExportShare">Export Share Code</button>
+      <button id="btnExportJson">Export Mod JSON</button>
+      <button id="btnExportLevel">Export Level JSON</button>
+      <button id="btnExportWs">Export Workspace</button>
+      <button class="ok" id="btnImportShare">Import Share / WS</button>
       <button id="btnCopyJson">Copy JSON</button>
       <button id="btnClear">Clear</button>
-      <button id="btnGitToggle" title="GitHub version control" class="primary">Git</button>
-      <button id="btnMemeToggle" title="n8n meme pipeline" class="primary">Meme</button>
     </div>
   </header>
-  <details id="gitBar">
-    <summary>GitHub version control — save / load levels as commits on your fork</summary>
-    <div class="git-row">
-      <input id="gitOwner" placeholder="owner" value="Meyyds34555343" title="GitHub user/org" />
-      <input id="gitRepo" placeholder="repo" value="LiteProjects" title="Repository name" />
-      <input id="gitBranch" placeholder="branch" value="behavior-scratch" title="Branch" />
-      <input id="gitPath" placeholder="cdn/levels" value="cdn/levels" title="Folder path in repo" />
-      <input id="gitToken" class="git-token" type="password" placeholder="GitHub PAT (repo Contents: Read/Write)" autocomplete="off" />
-      <button type="button" id="btnGitSave">Save Level → Git</button>
-      <button type="button" id="btnGitList">List Levels</button>
-      <button type="button" id="btnGitLoad">Load Selected</button>
-      <button type="button" id="btnGitHistory">History</button>
-      <select id="gitFileList" title="Files in folder" style="min-width:140px"><option value="">(list first)</option></select>
-    </div>
-    <p class="git-hint">
-      Creates a real Git commit (e.g. <code>cdn/levels/2.json</code>). Token stays in this browser only.
-      Create a fine-grained PAT with Contents Read/Write:
-      <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub → Settings → PAT</a>.
-      After save, jsDelivr may lag ~1–5 min (or use <code>@commit</code> / purge).
-    </p>
-  </details>
-  <details id="memeBar">
-    <summary>n8n Add Meme — upload pic → Cloud webhook → GitHub CDN commit</summary>
-    <div class="git-row">
-      <input id="n8nWebhook" class="n8n-url" placeholder="n8n Production webhook URL" title="https://….app.n8n.cloud/webhook/coinduel-add-meme" />
-      <input id="n8nSecret" type="password" placeholder="Secret (optional)" autocomplete="off" title="X-Coinduel-Secret" />
-      <input id="memeIdInput" placeholder="memeId" value="" title="e.g. cool_cat" style="min-width:120px;" />
-      <select id="memeBehavior" title="behavior">
-        <option value="NoneBehavior">NoneBehavior</option>
-        <option value="FreezeBehavior">FreezeBehavior</option>
-        <option value="FlashStepBehavior">FlashStepBehavior</option>
-        <option value="BombBehavior">BombBehavior</option>
-        <option value="MudBehavior">MudBehavior</option>
-        <option value="MagnetBehavior">MagnetBehavior</option>
-        <option value="BlockerBehavior">BlockerBehavior</option>
-      </select>
-      <input id="memeFile" type="file" accept="image/png,image/jpeg,image/webp" title="Meme image" />
-      <button type="button" class="ok" id="btnAddMemeN8n">Add Meme → n8n</button>
-      <button type="button" class="primary" id="btnAddMemeGit" title="Uses Git bar PAT — bypasses n8n">Add Meme → Git</button>
-      <button type="button" id="btnRefreshMemes">Refresh catalog</button>
-    </div>
-    <p class="git-hint">
-      If n8n shows <code>Failed to fetch</code> (CORS), use <strong>Add Meme → Git</strong> instead: open <strong>Git</strong>, paste the same GitHub PAT, then upload here.
-      For n8n: Publish ON, paste full Production URL containing <code>/webhook/</code>, Repo Config <code>githubToken</code> set. jsDelivr lag ~1–5 min.
-    </p>
-  </details>
   <div id="main">
     <div id="workspace"></div>
     <aside id="previewPane">
-      <div class="title">LIVE PREVIEW <span id="parityBadge" style="color:#9aa8bd;font-weight:500;letter-spacing:0;margin-left:8px;"></span></div>
+      <div class="title">LIVE PREVIEW</div>
       <div id="previewWrap"><canvas id="previewCanvas"></canvas></div>
-      <div style="display:flex;gap:6px;padding:6px 10px;border-top:1px solid var(--line);">
-        <button type="button" id="btnPrevPlay" style="flex:1;padding:5px;">Play</button>
-        <button type="button" id="btnPrevPause" style="flex:1;padding:5px;">Pause</button>
-        <button type="button" id="btnPrevReset" style="flex:1;padding:5px;">Reset</button>
-      </div>
-      <div id="memeCatalog" style="max-height:88px;overflow:auto;padding:6px 10px;font-size:0.72rem;color:var(--muted);border-top:1px solid var(--line);"></div>
-      <div id="previewStats">Edit blocks → table / physics update instantly. Drag striker to aim-shot.</div>
+      <div id="previewStats">Edit blocks → table / physics update instantly</div>
     </aside>
   </div>
   <footer>
@@ -207,13 +112,6 @@
   </footer>
 
   <script>
-    /* ── Web-first endpoints (match CdnConfig / shipstatic runtime) ── */
-    const CDN_MANIFEST = 'https://cdn.jsdelivr.net/gh/Meyyds34555343/LiteProjects@behavior-scratch/cdn/manifest.json';
-    const WS_AUTOSAVE_KEY = 'CoinDuel:blocklyWorkspace';
-    const GIT_CFG_KEY = 'CoinDuel:gitConfig';
-    const N8N_CFG_KEY = 'CoinDuel:n8nConfig';
-    let lastExportedHash = '';
-
     /* ── Inlined CoinDuel Blockly defs (mirrors BlocklyDefinitions.ts) ── */
     const H = { event: 45, condition: 195, action: 290, fx: 330, skin: 15, rules: 120, level: 210 };
     const TYPE_TO_OP = {
@@ -286,11 +184,9 @@
       { type: 'config_win_clear_all', message0: 'WIN rule: clear all coins', colour: H.rules },
       { type: 'config_win_score', message0: 'WIN rule: reach score %1', args0: [{ type: 'field_number', name: 'SCORE', value: 100 }], colour: H.rules },
       { type: 'config_win_survive', message0: 'WIN rule: survive %1 sec', args0: [{ type: 'field_number', name: 'SEC', value: 60 }], colour: H.rules },
-      { type: 'config_win_boss', message0: 'WIN rule: knock out boss tag %1', args0: [{ type: 'field_input', name: 'TAG', text: 'boss' }], colour: H.rules },
       { type: 'config_lose_striker_fall', message0: 'LOSE rule: striker falls off table', colour: 0 },
       { type: 'config_lose_shot_limit', message0: 'LOSE rule: shot limit %1', args0: [{ type: 'field_number', name: 'COUNT', value: 10 }], colour: 0 },
-      { type: 'config_lose_timer', message0: 'LOSE rule: timer expired %1 sec', args0: [{ type: 'field_number', name: 'SEC', value: 90 }], colour: 0 },
-      { type: 'config_physics', message0: 'physics friction %1 restitution %2 time-reverse %3 aim %4', args0: [{ type: 'field_number', name: 'FRICTION', value: 0.35, min: 0, max: 1 }, { type: 'field_number', name: 'RESTITUTION', value: 1, min: 0, max: 2 }, { type: 'field_dropdown', name: 'TIME_REVERSE', options: [['ON','true'],['OFF','false']] }, { type: 'field_number', name: 'AIM', value: 1, min: 0.1, max: 3 }], colour: H.rules },
+      { type: 'config_physics', message0: 'physics friction %1 restitution %2 time-reverse %3', args0: [{ type: 'field_number', name: 'FRICTION', value: 0.35, min: 0, max: 1 }, { type: 'field_number', name: 'RESTITUTION', value: 1, min: 0, max: 2 }, { type: 'field_dropdown', name: 'TIME_REVERSE', options: [['ON','true'],['OFF','false']] }], colour: H.rules },
       { type: 'level_setup', message0: 'level id %1 size %2 x %3 wall %4', args0: [{ type: 'field_number', name: 'ID', value: 1, min: 1 }, { type: 'field_number', name: 'WIDTH', value: 800, min: 200 }, { type: 'field_number', name: 'HEIGHT', value: 600, min: 200 }, { type: 'field_number', name: 'WALL', value: 64, min: 8 }], colour: H.level },
       { type: 'level_place', message0: 'place %1 at x %2 y %3 r %4 class %5 skin %6 url %7 meme %8 mudμ %9', args0: [
         { type: 'field_dropdown', name: 'KIND', options: [['出手币 striker','striker'],['目标币 target','target'],['击退 knockback','knockback'],['冰冻 freeze','freeze'],['闪身 flash','flash'],['炸弹 bomb','bomb'],['障碍 block','block'],['泥地 mud','mud']] },
@@ -312,7 +208,7 @@
         { kind: 'category', name: '🟣 Actions', colour: String(H.action), contents: ['apply_impulse','explode_radius','swap_positions','set_coin_position','change_friction','trigger_time_reverse','set_variable','change_variable','tag_coin','declare_win','declare_lose'].map((t) => ({ kind: 'block', type: t })) },
         { kind: 'category', name: '🔴 Juice FX', colour: String(H.fx), contents: ['play_meme_sound','spawn_world_text','show_coin_position','apply_squash_stretch','screen_shake'].map((t) => ({ kind: 'block', type: t })) },
         { kind: 'category', name: '🎨 Skins', colour: String(H.skin), contents: ['set_coin_skin','set_table_skin'].map((t) => ({ kind: 'block', type: t })) },
-        { kind: 'category', name: '⚙ Rules / Math', colour: String(H.rules), contents: ['config_win_clear_all','config_win_score','config_win_survive','config_win_boss','config_lose_striker_fall','config_lose_shot_limit','config_lose_timer','config_physics','math_add','math_sub','math_random'].map((t) => ({ kind: 'block', type: t })) },
+        { kind: 'category', name: '⚙ Rules / Math', colour: String(H.rules), contents: ['config_win_clear_all','config_win_score','config_win_survive','config_lose_striker_fall','config_lose_shot_limit','config_physics','math_add','math_sub','math_random'].map((t) => ({ kind: 'block', type: t })) },
       ],
     };
 
@@ -344,26 +240,13 @@
       return (h >>> 0).toString(16).padStart(8, '0');
     }
 
-    function memeCdnTextureUrl(memeId) {
-      if (!memeId) return '';
-      var base = CDN_MANIFEST.replace(/\/[^/]*$/, '/');
-      return base + 'textures/' + encodeURIComponent(String(memeId)) + '.png';
-    }
-
     function placeToItem(kind, x, y, radius, extra) {
       extra = extra || {};
       var cls = extra.classId || 1;
       var skinBits = {};
       if (extra.skin) skinBits.skinKey = extra.skin;
       if (extra.url) skinBits.skin = { default: extra.url, idle: extra.url };
-      if (extra.meme) {
-        skinBits.memeId = extra.meme;
-        // Absolute CDN URL so Open Runtime can skin coins even before meme registry sync
-        var tex = memeCdnTextureUrl(extra.meme);
-        if (tex && !skinBits.skin) {
-          skinBits.skin = { default: tex, idle: tex, aim: tex, shot: tex, hitted: tex };
-        }
-      }
+      if (extra.meme) skinBits.memeId = extra.meme;
       if (kind === 'striker') return Object.assign({ type: 'coin', class: cls, x: x, y: y, canshot: true, radius: radius }, skinBits);
       if (kind === 'target') return Object.assign({ type: 'coin', class: cls, x: x, y: y, canshot: false, radius: radius }, skinBits);
       if (kind === 'knockback') return Object.assign({ type: 'coin', class: cls, x: x, y: y, canshot: false, radius: radius, behavior: 'KnockbackBehavior', behaviors: ['KnockbackBehavior'] }, skinBits);
@@ -375,32 +258,6 @@
       return Object.assign({ type: 'coin', class: cls, x: x, y: y, canshot: false, radius: radius }, skinBits);
     }
 
-    /** Tracks which CDN/Git level file is being edited so Save does not overwrite 1.json by accident. */
-    let editTarget = { id: null, path: null };
-
-    function parseLevelIdFromPath(path) {
-      const m = String(path || '').match(/(?:^|\/)(\d+)\.json$/i);
-      return m ? Number(m[1]) : null;
-    }
-
-    function rememberEditTarget(id, path) {
-      const fromPath = parseLevelIdFromPath(path);
-      const n = fromPath != null ? fromPath : Number(id);
-      editTarget = {
-        id: Number.isFinite(n) && n > 0 ? n : null,
-        path: path || (Number.isFinite(n) && n > 0 ? ('cdn/levels/' + n + '.json') : null),
-      };
-    }
-
-    function syncSetupBlockId(id) {
-      if (!Number.isFinite(id) || id < 1) return;
-      try {
-        workspace.getAllBlocks(false).forEach(function (b) {
-          if (b.type === 'level_setup') b.setFieldValue(id, 'ID');
-        });
-      } catch (_) {}
-    }
-
     function workspaceToMod(ws) {
       const tops = ws.getTopBlocks(true);
       const pipelines = [];
@@ -409,8 +266,7 @@
       const lose = [];
       let physics = { tableFriction: 0.35, restitutionScale: 1, enableTimeReversePenalty: true, aimPowerScale: 1 };
       const varNames = new Set(['KarmaPoints', 'ExplosionPower']);
-      const defaultId = (editTarget.id != null) ? editTarget.id : 1;
-      const levelDraft = { id: defaultId, width: 800, height: 600, wall: 64, coins: [], felt: '', wallSkin: '' };
+      const levelDraft = { id: 1, width: 800, height: 600, wall: 64, coins: [], felt: '', wallSkin: '' };
       let hasLevel = false;
 
       for (const top of tops) {
@@ -418,16 +274,14 @@
           if (top.type === 'config_win_clear_all') win.push({ type: 'CLEAR_ALL_COINS' });
           else if (top.type === 'config_win_score') win.push({ type: 'REACH_TARGET_SCORE', value: Number(top.getFieldValue('SCORE') || 100) });
           else if (top.type === 'config_win_survive') win.push({ type: 'SURVIVE_TIME_LIMIT', value: Number(top.getFieldValue('SEC') || 60) });
-          else if (top.type === 'config_win_boss') win.push({ type: 'KNOCK_OUT_BOSS_COIN', value: String(top.getFieldValue('TAG') || 'boss') });
           else if (top.type === 'config_lose_striker_fall') lose.push({ type: 'STRIKER_FALLS_OFF_TABLE' });
           else if (top.type === 'config_lose_shot_limit') lose.push({ type: 'SHOT_LIMIT', value: Number(top.getFieldValue('COUNT') || 10) });
-          else if (top.type === 'config_lose_timer') lose.push({ type: 'TIMER_EXPIRED', value: Number(top.getFieldValue('SEC') || 90) });
           else if (top.type === 'config_physics') {
             physics = {
               tableFriction: Number(top.getFieldValue('FRICTION') || 0.35),
               restitutionScale: Number(top.getFieldValue('RESTITUTION') || 1),
               enableTimeReversePenalty: String(top.getFieldValue('TIME_REVERSE')) !== 'false',
-              aimPowerScale: Number(top.getFieldValue('AIM') || 1),
+              aimPowerScale: 1,
             };
           }
           continue;
@@ -494,12 +348,6 @@
       if (!win.length) win.push({ type: 'CLEAR_ALL_COINS' });
       if (!lose.length) lose.push({ type: 'STRIKER_FALLS_OFF_TABLE' });
 
-      const uiStrings = {};
-      const winText = (document.getElementById('uiWin') && document.getElementById('uiWin').value || '').trim();
-      const loseText = (document.getElementById('uiLose') && document.getElementById('uiLose').value || '').trim();
-      if (winText) uiStrings.win = winText;
-      if (loseText) uiStrings.lose = loseText;
-
       const mod = {
         schemaVersion: 1,
         id: 'mod_' + Date.now().toString(36),
@@ -512,15 +360,8 @@
         variables: Array.from(varNames).map((name) => ({
           name, initial: name === 'ExplosionPower' ? 50 : 0,
         })),
-        assetManifestUrl: CDN_MANIFEST,
-        boot: { scene: 'game', autoPlay: true },
       };
-      if (Object.keys(uiStrings).length) mod.uiStrings = uiStrings;
       if (hasLevel) {
-        // Keep loaded level N when setup block still defaults to 1
-        if (editTarget.id != null && editTarget.id !== 1 && Number(levelDraft.id) === 1) {
-          levelDraft.id = editTarget.id;
-        }
         mod.level = {
           id: levelDraft.id,
           width: levelDraft.width,
@@ -537,18 +378,6 @@
       const raw = JSON.stringify(mod);
       mod.hash = hashText(raw);
       return mod;
-    }
-
-    function validateMod(mod) {
-      const errs = [];
-      const coins = (mod.level && mod.level.coins) || [];
-      const hasStriker = coins.some(function (c) { return c.type === 'coin' && c.canshot !== false && !(c.behaviors && c.behaviors[0]); })
-        || coins.some(function (c) { return c.canshot === true; });
-      if (mod.level && coins.length && !hasStriker) errs.push('No striker (canshot coin) in level');
-      if (!mod.win || !mod.win.length) errs.push('No WIN rule');
-      // Do not hard-fail on memeId: CDN catalog can lag jsDelivr; Drive may add textures only.
-      // Open Runtime loads absolute skin URLs regardless of memes/index.json.
-      return errs;
     }
 
     function toShare(mod) {
@@ -591,102 +420,7 @@
     const pctx = previewCanvas.getContext('2d');
     let liveMod = null;
     let liveTimer = null;
-    let t0 = performance.now();
-    let simBodies = [];
-    let simPlaying = true;
-    let simDragging = false;
-    let simDragFrom = null;
-    let simDragTo = null;
-    let simView = { cx: 0, cy: 0, scale: 1 };
-    let memeAtlas = {};
-    window.__cdnMemeIds = [];
-
-    function frictionToDamping(friction) { return Math.max(0.05, friction * 6); }
-
-    function resetSimFromMod(mod) {
-      const m = extractMarkers(mod);
-      simBodies = m.coins.map(function (c) {
-        return {
-          x: c.x, y: c.y, vx: 0, vy: 0,
-          r: 32, kind: c.kind || 'target', label: c.label || '',
-          memeId: c.memeId, canshot: c.kind === 'striker'
-        };
-      });
-      simDragging = false; simDragFrom = null; simDragTo = null;
-    }
-
-    function screenToWorld(clientX, clientY) {
-      const rect = previewCanvas.getBoundingClientRect();
-      const sx = clientX - rect.left, sy = clientY - rect.top;
-      return { x: (sx - simView.cx) / simView.scale, y: -((sy - simView.cy) / simView.scale) };
-    }
-
-    previewCanvas.addEventListener('pointerdown', function (e) {
-      const w = screenToWorld(e.clientX, e.clientY);
-      const striker = simBodies.find(function (b) { return b.canshot || b.kind === 'striker'; });
-      if (!striker) return;
-      if (Math.hypot(w.x - striker.x, w.y - striker.y) > 28) return;
-      simDragging = true; simDragFrom = { x: striker.x, y: striker.y }; simDragTo = w;
-      try { previewCanvas.setPointerCapture(e.pointerId); } catch (_) {}
-    });
-    window.addEventListener('pointermove', function (e) {
-      if (!simDragging) return;
-      simDragTo = screenToWorld(e.clientX, e.clientY);
-    });
-    window.addEventListener('pointerup', function (e) {
-      if (!simDragging || !simDragFrom || !simDragTo) { simDragging = false; return; }
-      const striker = simBodies.find(function (b) { return b.canshot || b.kind === 'striker'; });
-      if (striker) {
-        const aim = (liveMod && liveMod.physics && liveMod.physics.aimPowerScale) || 1;
-        striker.vx += (simDragFrom.x - simDragTo.x) * 8 * aim;
-        striker.vy += (simDragFrom.y - simDragTo.y) * 8 * aim;
-        simPlaying = true;
-      }
-      simDragging = false; simDragFrom = null; simDragTo = null;
-    });
-
-    function stepSim(dt) {
-      if (!simPlaying || !liveMod) return;
-      const phys = liveMod.physics || {};
-      const damping = frictionToDamping(phys.tableFriction != null ? phys.tableFriction : 0.35);
-      const rest = phys.restitutionScale != null ? phys.restitutionScale : 1;
-      const m = extractMarkers(liveMod);
-      const hw = m.tableW / 2, hh = m.tableH / 2;
-      const wall = ((liveMod.level && liveMod.level.wall && liveMod.level.wall.thickness) || 64) * 0.5;
-      const decay = Math.max(0, 1 - damping * dt * 0.35);
-      for (const b of simBodies) {
-        if (b.kind === 'block' || b.kind === 'mud') continue;
-        b.vx *= decay; b.vy *= decay;
-        b.x += b.vx * dt; b.y += b.vy * dt;
-        const rr = 14;
-        const minX = -hw + wall + rr, maxX = hw - wall - rr;
-        const minY = -hh + wall + rr, maxY = hh - wall - rr;
-        if (b.x < minX) { b.x = minX; b.vx = Math.abs(b.vx) * rest; }
-        if (b.x > maxX) { b.x = maxX; b.vx = -Math.abs(b.vx) * rest; }
-        if (b.y < minY) { b.y = minY; b.vy = Math.abs(b.vy) * rest; }
-        if (b.y > maxY) { b.y = maxY; b.vy = -Math.abs(b.vy) * rest; }
-      }
-      for (let i = 0; i < simBodies.length; i++) {
-        for (let j = i + 1; j < simBodies.length; j++) {
-          const a = simBodies[i], b = simBodies[j];
-          if (a.kind === 'mud' || b.kind === 'mud') continue;
-          const dx = b.x - a.x, dy = b.y - a.y;
-          const dist = Math.hypot(dx, dy) || 0.0001;
-          const minD = 28;
-          if (dist >= minD) continue;
-          const nx = dx / dist, ny = dy / dist, overlap = minD - dist;
-          const aStatic = a.kind === 'block', bStatic = b.kind === 'block';
-          if (!aStatic && !bStatic) { a.x -= nx * overlap * 0.5; a.y -= ny * overlap * 0.5; b.x += nx * overlap * 0.5; b.y += ny * overlap * 0.5; }
-          else if (!aStatic) { a.x -= nx * overlap; a.y -= ny * overlap; }
-          else if (!bStatic) { b.x += nx * overlap; b.y += ny * overlap; }
-          const vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
-          if (vn > 0) continue;
-          const jImp = -(1 + rest) * vn / ((aStatic ? 0 : 1) + (bStatic ? 0 : 1) || 1);
-          if (!aStatic) { a.vx -= jImp * nx; a.vy -= jImp * ny; }
-          if (!bStatic) { b.vx += jImp * nx; b.vy += jImp * ny; }
-        }
-      }
-    }
+    const t0 = performance.now();
 
     function feltColor(mod) {
       let felt = (mod && mod.level && mod.level.table && mod.level.table.felt) || 'table_1';
@@ -712,7 +446,7 @@
             else if ((item.behaviors || [])[0]) { label = String(item.behaviors[0]).replace('Behavior',''); kind = label.toLowerCase(); }
             else { label = 'target'; kind = 'target'; }
           }
-          coins.push({ x: +item.x || 0, y: +item.y || 0, label: label, kind: kind, memeId: item.memeId ? String(item.memeId) : undefined });
+          coins.push({ x: +item.x || 0, y: +item.y || 0, label: label, kind: kind });
         }
       }
       for (const pipe of (mod && mod.pipelines) || []) {
@@ -798,63 +532,34 @@
         ctx.beginPath(); ctx.moveTo(imp.x, -imp.y);
         ctx.lineTo(imp.x + Math.cos(ang) * len, -imp.y + Math.sin(ang) * len); ctx.stroke();
       }
-      const bodies = simBodies.length ? simBodies : markers.coins.map(function (c) {
-        return { x: c.x, y: c.y, kind: c.kind, label: c.label, memeId: c.memeId };
-      });
-      for (const c of bodies) {
-        const img = c.memeId && memeAtlas[c.memeId];
-        if (img) {
-          try { ctx.drawImage(img, c.x - 16, -c.y - 16, 32, 32); } catch (_) {}
-        } else {
-          ctx.beginPath(); ctx.arc(c.x, -c.y, 14, 0, Math.PI * 2);
-          ctx.fillStyle = (c.kind === 'striker' || c.label === 'striker') ? '#ffe082'
-            : c.kind === 'freeze' ? '#81d4fa' : c.kind === 'flash' ? '#aed581' : c.kind === 'bomb' ? '#ef5350' : '#eceff1';
-          ctx.fill();
-          ctx.strokeStyle = '#263238'; ctx.lineWidth = 2; ctx.stroke();
-        }
+      for (const c of markers.coins) {
+        ctx.beginPath(); ctx.arc(c.x, -c.y, 14, 0, Math.PI * 2);
+        ctx.fillStyle = c.label === 'striker' ? '#ffe082' : '#eceff1'; ctx.fill();
+        ctx.strokeStyle = '#263238'; ctx.lineWidth = 2; ctx.stroke();
         if (c.label) { ctx.fillStyle = '#fffde7'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(c.label, c.x, -c.y - 20); }
-      }
-      if (simDragging && simDragFrom && simDragTo) {
-        ctx.strokeStyle = '#5ec8ff'; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.moveTo(simDragFrom.x, -simDragFrom.y); ctx.lineTo(simDragTo.x, -simDragTo.y); ctx.stroke();
       }
       ctx.restore();
 
-      simView = { cx: cx, cy: cy, scale: scale };
       ctx.fillStyle = '#5ec8ff'; ctx.font = 'bold 12px Segoe UI,sans-serif'; ctx.textAlign = 'left';
-      ctx.fillText(simPlaying ? 'LIVE PREVIEW' : 'PAUSED', 14, 22);
+      ctx.fillText('LIVE PREVIEW', 14, 22);
       if (liveMod && liveMod.name) { ctx.fillStyle = '#e8eef8'; ctx.font = '11px Segoe UI,sans-serif'; ctx.fillText(liveMod.name, 14, 38); }
-      const badge = document.getElementById('parityBadge');
-      if (badge && liveMod) {
-        const p = liveMod.physics || {};
-        badge.textContent = 'v' + liveMod.schemaVersion + ' · μ ' + Number(p.tableFriction != null ? p.tableFriction : 0.35).toFixed(2)
-          + '/' + Number(p.restitutionScale != null ? p.restitutionScale : 1).toFixed(2)
-          + ' · #' + String(liveMod.hash || '—').slice(0, 8)
-          + (lastExportedHash && liveMod.hash !== lastExportedHash ? ' · dirty' : '');
-      }
     }
 
     function updatePreviewStats(mod) {
       const p = (mod && mod.physics) || {};
       const n = (mod && mod.level && mod.level.coins && mod.level.coins.length) || 0;
       const size = mod && mod.level ? (mod.level.width + '×' + mod.level.height) : '—';
-      const errs = mod ? validateMod(mod) : [];
       previewStats.innerHTML =
         '<strong>level</strong> ' + size + ' · <strong>objects</strong> ' + n +
         '<br><strong>μ</strong> ' + (p.tableFriction != null ? Number(p.tableFriction).toFixed(2) : '0.35') +
-        ' · aim ' + (p.aimPowerScale != null ? Number(p.aimPowerScale).toFixed(2) : '1.00') +
         ' · <strong>pipelines</strong> ' + ((mod && mod.pipelines && mod.pipelines.length) || 0) +
-        ' · <strong>win</strong> ' + ((mod && mod.win && mod.win.map(function (w) { return w.type; }).join(', ')) || '—') +
-        (errs.length ? '<br><span style="color:#ff8a8a">⚠ ' + errs.join('; ') + '</span>' : '');
+        ' · <strong>win</strong> ' + ((mod && mod.win && mod.win.map(function (w) { return w.type; }).join(', ')) || '—');
     }
 
     function dispatchLive(mod) {
-      const prevHash = liveMod && liveMod.hash;
       liveMod = mod;
-      if (!simBodies.length || !prevHash || prevHash !== mod.hash) resetSimFromMod(mod);
       drawPreview();
       updatePreviewStats(mod);
-      try { localStorage.setItem(WS_AUTOSAVE_KEY, JSON.stringify(Blockly.serialization.workspaces.save(workspace))); } catch (_) {}
       const payload = { type: 'CoinDuel:modConfig', mod: mod, modJson: JSON.stringify(mod), hash: mod.hash || null, at: Date.now() };
       try {
         if (window.parent && window.parent !== window) window.parent.postMessage(payload, '*');
@@ -928,175 +633,8 @@
     window.addEventListener('resize', resize);
     new ResizeObserver(resize).observe(document.getElementById('workspace'));
     new ResizeObserver(resizePreview).observe(document.getElementById('previewWrap'));
-    let lastTick = performance.now();
-    requestAnimationFrame(function tick(now) {
-      const dt = Math.min(0.033, (now - lastTick) / 1000 || 0.016);
-      lastTick = now;
-      stepSim(dt);
-      drawPreview();
-      requestAnimationFrame(tick);
-    });
+    requestAnimationFrame(function tick() { drawPreview(); requestAnimationFrame(tick); });
     scheduleLive();
-
-    document.getElementById('btnPrevPlay').onclick = function () { simPlaying = true; };
-    document.getElementById('btnPrevPause').onclick = function () { simPlaying = false; };
-    document.getElementById('btnPrevReset').onclick = function () { resetSimFromMod(liveMod); simPlaying = true; };
-
-    function bust(url) {
-      const sep = String(url).indexOf('?') >= 0 ? '&' : '?';
-      return url + sep + 't=' + Date.now();
-    }
-
-    const LOCAL_MEME_KEY = 'CoinDuel:knownMemes';
-
-    function loadLocalMemeIds() {
-      try {
-        const raw = localStorage.getItem(LOCAL_MEME_KEY);
-        if (!raw) return {};
-        const obj = JSON.parse(raw);
-        return obj && typeof obj === 'object' ? obj : {};
-      } catch (_) { return {}; }
-    }
-
-    function saveLocalMemeId(id, texUrl) {
-      try {
-        const map = loadLocalMemeIds();
-        map[id] = { texUrl: texUrl || map[id] && map[id].texUrl || '', savedAt: Date.now() };
-        localStorage.setItem(LOCAL_MEME_KEY, JSON.stringify(map));
-      } catch (_) {}
-    }
-
-    function rememberMemeId(id, texUrl) {
-      id = String(id || '').trim();
-      if (!id) return;
-      if (!window.__cdnMemeIds) window.__cdnMemeIds = [];
-      if (window.__cdnMemeIds.indexOf(id) < 0) window.__cdnMemeIds.push(id);
-      saveLocalMemeId(id, texUrl);
-      if (texUrl && !memeAtlas[id]) {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = function () { memeAtlas[id] = img; };
-        img.src = bust(texUrl);
-      }
-    }
-
-    function githubRawTextureUrl(memeId, ext) {
-      const c = readGitCfg();
-      const owner = c.owner || 'Meyyds34555343';
-      const repo = c.repo || 'LiteProjects';
-      const branch = c.branch || 'behavior-scratch';
-      return 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/' + branch
-        + '/cdn/textures/' + encodeURIComponent(memeId) + '.' + (ext || 'png');
-    }
-
-    function addMemeCatalogButton(el, id, texUrl) {
-      id = String(id);
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.textContent = id;
-      btn.style.cssText = 'margin:2px;padding:2px 6px;font-size:0.7rem;';
-      btn.onclick = function () {
-        const tops = workspace.getTopBlocks(true);
-        let target = null;
-        for (const t of tops) {
-          if (t.type === 'level_place' && t.getFieldValue('KIND') !== 'striker') { target = t; break; }
-        }
-        if (!target) {
-          target = workspace.newBlock('level_place');
-          target.initSvg(); target.render(); target.moveBy(420, 300);
-          target.setFieldValue('target', 'KIND');
-        }
-        target.setFieldValue(id, 'MEME');
-        scheduleLive();
-        setStatus('Applied memeId ' + id + ' to a place block.', 'ok');
-      };
-      el.appendChild(btn);
-      rememberMemeId(id, texUrl);
-    }
-
-    function loadCdnCatalog() {
-      const el = document.getElementById('memeCatalog');
-      el.textContent = 'Loading CDN memes…';
-      // Cache-bust: jsDelivr often lags; Drive uploads may only add textures/* without memes/index.json
-      fetch(bust(CDN_MANIFEST)).then(function (r) { return r.json(); }).then(function (man) {
-        const base = (man.baseUrl || CDN_MANIFEST.replace(/\/[^/]*$/, '/'));
-        const memeItem = (man.items || []).find(function (i) { return i.kind === 'meme' && String(i.filename).indexOf('index') >= 0; })
-          || (man.items || []).find(function (i) { return i.kind === 'meme'; });
-        const memeUrl = man.memeConfig ? (base + man.memeConfig) : (memeItem ? base + memeItem.filename : base + 'memes/index.json');
-        const idSet = {};
-
-        function finishUi() {
-          // Keep locally saved memes visible even when jsDelivr catalog lags
-          const local = loadLocalMemeIds();
-          Object.keys(local).forEach(function (id) {
-            if (!idSet[id]) idSet[id] = (local[id] && local[id].texUrl) || memeCdnTextureUrl(id);
-          });
-          const ids = Object.keys(idSet).sort();
-          window.__cdnMemeIds = ids;
-          el.innerHTML = '<strong style="color:#5ec8ff">CDN memes</strong> ';
-          ids.forEach(function (id) {
-            addMemeCatalogButton(el, id, idSet[id] || memeCdnTextureUrl(id));
-          });
-          if (!ids.length) el.textContent = 'CDN catalog empty — check manifest.';
-          else setStatus('CDN memes loaded: ' + ids.join(', '), 'ok');
-        }
-
-        // 1) Texture-only uploads (Google Drive path) count as known memeIds
-        (man.items || []).forEach(function (it) {
-          if (!it || !it.filename) return;
-          const m = String(it.filename).match(/^textures\/([^/]+)\.(png|jpe?g|webp|gif)$/i);
-          if (!m) return;
-          const id = m[1];
-          idSet[id] = it.url || (base + it.filename);
-        });
-
-        return fetch(bust(memeUrl)).then(function (r) { return r.json(); }).then(function (idx) {
-          const list = Array.isArray(idx) ? idx : (idx.memes || idx.items || []);
-          list.forEach(function (m) {
-            const id = m.id || m.memeId || m.name;
-            if (!id) return;
-            const tex = (m.textures && (m.textures.default || m.textures.idle)) || memeCdnTextureUrl(id);
-            idSet[String(id)] = tex.indexOf('http') === 0 ? tex : (base + tex);
-          });
-          finishUi();
-        }).catch(function () {
-          // Index missing/stale — still show texture ids from manifest
-          finishUi();
-        });
-      }).catch(function () {
-        el.textContent = 'CDN unreachable (offline ok). Meme picker disabled.';
-      });
-    }
-    loadCdnCatalog();
-
-    // Deep link ?mod= / ?modUrl= + autosave restore
-    (function bootFromQuery() {
-      try {
-        const q = new URLSearchParams(location.search);
-        const modCode = q.get('mod');
-        if (modCode && modCode.indexOf('COINMOD1:') === 0) {
-          const mod = fromShare(decodeURIComponent(modCode));
-          if (mod) {
-            document.getElementById('io').value = JSON.stringify(mod, null, 2);
-            document.getElementById('modName').value = mod.name || 'Blockly Mode';
-            if (mod.uiStrings) {
-              if (mod.uiStrings.win) document.getElementById('uiWin').value = mod.uiStrings.win;
-              if (mod.uiStrings.lose) document.getElementById('uiLose').value = mod.uiStrings.lose;
-            }
-            rebuildWorkspaceFromMod(mod);
-            scheduleLive();
-            setStatus('Loaded mod from ?mod= deep link.', 'ok');
-            return;
-          }
-        }
-        const saved = localStorage.getItem(WS_AUTOSAVE_KEY);
-        if (saved) {
-          Blockly.serialization.workspaces.load(JSON.parse(saved), workspace);
-          scheduleLive();
-          setStatus('Restored autosaved workspace.', 'ok');
-        }
-      } catch (_) {}
-    })();
 
     function rebuildWorkspaceFromMod(mod) {
       workspace.clear();
@@ -1107,33 +645,21 @@
         phys.setFieldValue(mod.physics.tableFriction != null ? mod.physics.tableFriction : 0.35, 'FRICTION');
         phys.setFieldValue(mod.physics.restitutionScale != null ? mod.physics.restitutionScale : 1, 'RESTITUTION');
         phys.setFieldValue(mod.physics.enableTimeReversePenalty === false ? 'false' : 'true', 'TIME_REVERSE');
-        if (phys.getField('AIM')) phys.setFieldValue(mod.physics.aimPowerScale != null ? mod.physics.aimPowerScale : 1, 'AIM');
-      }
-      if (mod.uiStrings) {
-        if (mod.uiStrings.win && document.getElementById('uiWin')) document.getElementById('uiWin').value = mod.uiStrings.win;
-        if (mod.uiStrings.lose && document.getElementById('uiLose')) document.getElementById('uiLose').value = mod.uiStrings.lose;
       }
       (mod.win || []).forEach(function (w, i) {
         var t = w.type === 'REACH_TARGET_SCORE' ? 'config_win_score'
-          : w.type === 'SURVIVE_TIME_LIMIT' ? 'config_win_survive'
-          : w.type === 'KNOCK_OUT_BOSS_COIN' ? 'config_win_boss' : 'config_win_clear_all';
+          : w.type === 'SURVIVE_TIME_LIMIT' ? 'config_win_survive' : 'config_win_clear_all';
         var b = workspace.newBlock(t);
         b.initSvg(); b.render(); b.moveBy(420, 100 + i * 50);
         if (t === 'config_win_score') b.setFieldValue(w.value || 100, 'SCORE');
         if (t === 'config_win_survive') b.setFieldValue(w.value || 60, 'SEC');
-        if (t === 'config_win_boss') b.setFieldValue(w.value || 'boss', 'TAG');
       });
       (mod.lose || []).forEach(function (l, i) {
-        var t = l.type === 'SHOT_LIMIT' ? 'config_lose_shot_limit'
-          : l.type === 'TIMER_EXPIRED' ? 'config_lose_timer' : 'config_lose_striker_fall';
+        var t = l.type === 'SHOT_LIMIT' ? 'config_lose_shot_limit' : 'config_lose_striker_fall';
         var b = workspace.newBlock(t);
         b.initSvg(); b.render(); b.moveBy(420, 260 + i * 50);
         if (t === 'config_lose_shot_limit') b.setFieldValue(l.value || 10, 'COUNT');
-        if (t === 'config_lose_timer') b.setFieldValue(l.value || 90, 'SEC');
       });
-      if (mod.physics && Blockly.Blocks['config_physics']) {
-        /* aim field set above when phys block created */
-      }
       if (mod.level) {
         var setup = workspace.newBlock('level_setup');
         setup.initSvg(); setup.render(); setup.moveBy(x, y);
@@ -1214,35 +740,18 @@
       });
     }
 
-    function exportShareCode(copyClipboard) {
+    document.getElementById('btnExportShare').onclick = () => {
       const mod = workspaceToMod(workspace);
-      const errs = validateMod(mod);
       let code = '';
       try {
         code = toShare(mod);
       } catch (e) {
         setStatus('Share encode failed (code too large?). Remove Base64 URLs from place blocks.', 'err');
-        return null;
+        return;
       }
       document.getElementById('io').value = code;
-      lastExportedHash = mod.hash || '';
       try { localStorage.setItem('CoinDuel:activeMod', JSON.stringify(mod)); } catch (_) {}
-      const warn = errs.length ? ' ⚠ ' + errs.join('; ') : '';
-      if (copyClipboard) {
-        navigator.clipboard.writeText(code).then(function () {
-          setStatus('Copied COINMOD1 (' + code.length + ' chars).' + warn, errs.length ? 'err' : 'ok');
-        }).catch(function () {
-          setStatus('COINMOD1 in box — clipboard blocked.' + warn, 'err');
-        });
-      } else {
-        setStatus('Exported COINMOD1 (' + code.length + ' chars).' + warn, errs.length ? 'err' : 'ok');
-      }
-      return code;
-    }
-    document.getElementById('btnExportShare').onclick = function () { exportShareCode(false); };
-    document.getElementById('btnCopyShare').onclick = function () {
-      exportShareCode(true);
-      setStatus('COINMOD1 copied — open itch.io CoinDuel, paste to load (no shipstatic Open Runtime).', 'ok');
+      setStatus('Exported COINMOD1 (' + code.length + ' chars). Cocos: 粘贴 Scratch → 试玩 Game', 'ok');
     };
     document.getElementById('btnExportJson').onclick = () => {
       const mod = workspaceToMod(workspace);
@@ -1252,8 +761,6 @@
     document.getElementById('btnExportLevel').onclick = () => {
       const mod = workspaceToMod(workspace);
       const level = mod.level || { id: 1, width: 800, height: 600, wall: { thickness: 64 }, coins: [] };
-      level.id = resolveSaveLevelId(level);
-      syncSetupBlockId(level.id);
       document.getElementById('io').value = JSON.stringify(level, null, 2);
       setStatus('Exported Level JSON (' + (level.coins || []).length + ' objects) — save as levels/' + level.id + '.json', 'ok');
     };
@@ -1269,116 +776,6 @@
       document.getElementById('io').value = 'COINWS1:' + compress(state);
       setStatus('Exported compressed workspace string (COINWS1).', 'ok');
     };
-    function levelJsonToMod(level, forcedId) {
-      const id = (forcedId != null) ? forcedId : (level && level.id != null ? level.id : 1);
-      const levelCopy = Object.assign({}, level || {}, { id: id });
-      return {
-        schemaVersion: 1,
-        id: 'mod_level_' + id,
-        name: 'Level ' + id,
-        version: Date.now(),
-        graph: { blocks: [] },
-        pipelines: [],
-        win: [{ type: 'CLEAR_ALL_COINS' }],
-        lose: [{ type: 'STRIKER_FALLS_OFF_TABLE' }],
-        physics: { tableFriction: 0.35, restitutionScale: 1, enableTimeReversePenalty: true, aimPowerScale: 1 },
-        variables: [],
-        level: levelCopy,
-        assetManifestUrl: CDN_MANIFEST,
-        boot: { scene: 'game', autoPlay: true },
-      };
-    }
-
-    function isLevelJson(obj) {
-      return obj && Array.isArray(obj.coins) && (obj.width != null || obj.id != null)
-        && obj.schemaVersion == null && !Array.isArray(obj.pipelines);
-    }
-
-    function importModIntoEditor(mod, label, sourcePath) {
-      if (!mod || mod.schemaVersion !== 1) {
-        setStatus('Invalid mod.', 'err');
-        return;
-      }
-      const pathId = parseLevelIdFromPath(sourcePath);
-      if (pathId != null) {
-        if (!mod.level) mod.level = { id: pathId, width: 800, height: 600, wall: 64, coins: [] };
-        mod.level.id = pathId;
-        mod.id = 'mod_level_' + pathId;
-        mod.name = 'Level ' + pathId;
-        rememberEditTarget(pathId, sourcePath);
-      } else if (mod.level && mod.level.id != null) {
-        rememberEditTarget(mod.level.id, null);
-      }
-      try { localStorage.setItem('CoinDuel:activeMod', JSON.stringify(mod)); } catch (_) {}
-      document.getElementById('io').value = JSON.stringify(mod, null, 2);
-      document.getElementById('modName').value = mod.name || 'Blockly Mode';
-      rebuildWorkspaceFromMod(mod);
-      if (editTarget.id != null) syncSetupBlockId(editTarget.id);
-      scheduleLive();
-      const n = (mod.level && mod.level.coins && mod.level.coins.length) || 0;
-      const idHint = editTarget.id != null ? (' (editing level ' + editTarget.id + ')') : '';
-      setStatus((label || 'Imported') + ' — ' + n + ' objects as Level blocks.' + idHint, 'ok');
-    }
-
-    /** raw.githubusercontent base — reflects editor commits within seconds (jsDelivr lags hours). */
-    function rawRepoBase() {
-      const c = readGitCfg();
-      const owner = c.owner || 'Meyyds34555343';
-      const repo = c.repo || 'LiteProjects';
-      const branch = c.branch || 'behavior-scratch';
-      return 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/' + branch + '/';
-    }
-
-    /** Fetch a repo file from raw GitHub, falling back to jsDelivr if raw fails. */
-    function fetchRepoJson(relPath) {
-      const bust = '?t=' + Date.now().toString(36);
-      return fetch(rawRepoBase() + relPath + bust, { cache: 'no-store' })
-        .then(function (r) {
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          return r.json();
-        })
-        .catch(function () {
-          const base = CDN_MANIFEST.replace(/\/[^/]*$/, '/');
-          return fetch(base + relPath.replace(/^cdn\//, '') + bust).then(function (r) {
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            return r.json();
-          });
-        });
-    }
-
-    function loadCdnLevel(id) {
-      const n = Number(id);
-      if (!Number.isFinite(n) || n < 1) {
-        setStatus('Enter a valid level id.', 'err');
-        return;
-      }
-      const filePath = 'cdn/levels/' + n + '.json';
-      setStatus('Loading Level ' + n + ' from GitHub…');
-      fetchRepoJson(filePath).then(function (level) {
-        importModIntoEditor(levelJsonToMod(level, n), 'Loaded Level ' + n, filePath);
-        const sel = document.getElementById('gitFileList');
-        if (sel) {
-          let found = false;
-          for (let i = 0; i < sel.options.length; i++) {
-            if (parseLevelIdFromPath(sel.options[i].value) === n || sel.options[i].textContent === (n + '.json')) {
-              sel.selectedIndex = i;
-              found = true;
-              break;
-            }
-          }
-          if (!found) {
-            const opt = document.createElement('option');
-            opt.value = filePath;
-            opt.textContent = n + '.json';
-            sel.appendChild(opt);
-            sel.value = filePath;
-          }
-        }
-      }).catch(function (e) {
-        setStatus('Load Level ' + n + ' failed: ' + e.message + ' — paste cdn/levels/' + n + '.json then Import.', 'err');
-      });
-    }
-
     document.getElementById('btnImportShare').onclick = () => {
       const raw = document.getElementById('io').value.trim();
       if (raw.startsWith('COINWS1:')) {
@@ -1394,513 +791,26 @@
       if (raw.startsWith('COINMOD1:')) {
         const mod = fromShare(raw);
         if (!mod) { setStatus('Invalid COINMOD1 code.', 'err'); return; }
-        importModIntoEditor(mod, 'Imported COINMOD1');
+        try { localStorage.setItem('CoinDuel:activeMod', JSON.stringify(mod)); } catch (_) {}
+        document.getElementById('io').value = JSON.stringify(mod, null, 2);
+        document.getElementById('modName').value = mod.name || 'Blockly Mode';
+        rebuildWorkspaceFromMod(mod);
+        setStatus('Imported COINMOD1 — level blocks rebuilt (' + ((mod.level && mod.level.coins && mod.level.coins.length) || 0) + ' objects). Rules stay in JSON if complex.', 'ok');
+        scheduleLive();
         return;
       }
       try {
-        const data = JSON.parse(raw);
-        if (isLevelJson(data)) {
-          const forcedId = (data.id != null) ? data.id : editTarget.id;
-          importModIntoEditor(levelJsonToMod(data, forcedId), 'Imported Level JSON',
-            forcedId != null ? ('cdn/levels/' + forcedId + '.json') : null);
-          return;
-        }
-        if (data.schemaVersion === 1 && data.level) {
-          importModIntoEditor(data, 'Imported ModConfig');
-          return;
-        }
-        if (data.schemaVersion === 1) {
-          localStorage.setItem('CoinDuel:activeMod', JSON.stringify(data));
-          setStatus('ModConfig saved (no level to rebuild).', 'ok');
-          return;
-        }
-        throw new Error('unrecognized');
+        const mod = JSON.parse(raw);
+        if (mod.schemaVersion !== 1) throw new Error('bad schema');
+        localStorage.setItem('CoinDuel:activeMod', JSON.stringify(mod));
+        setStatus('Raw ModConfig JSON stored for runtime.', 'ok');
       } catch {
-        setStatus('Paste Level JSON (1.json), COINMOD1:, COINWS1:, or ModConfig.', 'err');
+        setStatus('Paste COINMOD1:, COINWS1:, or ModConfig JSON.', 'err');
       }
-    };
-
-    document.getElementById('btnLoadLevel1').onclick = function () { loadCdnLevel(1); };
-    document.getElementById('btnLoadLevel2').onclick = function () { loadCdnLevel(2); };
-    document.getElementById('btnLoadLevelN').onclick = function () {
-      loadCdnLevel(document.getElementById('loadLevelId').value || 2);
     };
     document.getElementById('btnClear').onclick = () => {
       workspace.clear();
       setStatus('Workspace cleared.');
-    };
-
-    /* ── GitHub Contents API (version control for levels) ── */
-    function utf8ToBase64(str) {
-      return btoa(unescape(encodeURIComponent(str)));
-    }
-    function base64ToUtf8(b64) {
-      return decodeURIComponent(escape(atob(b64.replace(/\n/g, ''))));
-    }
-    function readGitCfg() {
-      return {
-        owner: (document.getElementById('gitOwner').value || '').trim(),
-        repo: (document.getElementById('gitRepo').value || '').trim(),
-        branch: (document.getElementById('gitBranch').value || 'behavior-scratch').trim(),
-        path: (document.getElementById('gitPath').value || 'cdn/levels').trim().replace(/^\/+|\/+$/g, ''),
-        token: (document.getElementById('gitToken').value || '').trim(),
-      };
-    }
-    function persistGitCfg() {
-      const c = readGitCfg();
-      try {
-        localStorage.setItem(GIT_CFG_KEY, JSON.stringify({
-          owner: c.owner, repo: c.repo, branch: c.branch, path: c.path,
-          /* token stored locally so you don't re-paste every session — clear browser data to wipe */
-          token: c.token,
-        }));
-      } catch (_) {}
-    }
-    function restoreGitCfg() {
-      try {
-        const raw = localStorage.getItem(GIT_CFG_KEY);
-        if (!raw) return;
-        const c = JSON.parse(raw);
-        if (c.owner) document.getElementById('gitOwner').value = c.owner;
-        if (c.repo) document.getElementById('gitRepo').value = c.repo;
-        if (c.branch) document.getElementById('gitBranch').value = c.branch;
-        if (c.path) document.getElementById('gitPath').value = c.path;
-        if (c.token) document.getElementById('gitToken').value = c.token;
-      } catch (_) {}
-    }
-    restoreGitCfg();
-    ['gitOwner', 'gitRepo', 'gitBranch', 'gitPath', 'gitToken'].forEach(function (id) {
-      document.getElementById(id).addEventListener('change', persistGitCfg);
-    });
-    document.getElementById('btnGitToggle').onclick = function () {
-      const bar = document.getElementById('gitBar');
-      bar.open = !bar.open;
-      if (bar.open) bar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    };
-
-    async function ghApi(path, opts) {
-      const c = readGitCfg();
-      if (!c.owner || !c.repo) throw new Error('Set owner + repo');
-      if (!c.token) throw new Error('Paste a GitHub PAT (Contents Read/Write)');
-      persistGitCfg();
-      const url = 'https://api.github.com' + path;
-      const headers = {
-        Accept: 'application/vnd.github+json',
-        Authorization: 'Bearer ' + c.token,
-        'X-GitHub-Api-Version': '2022-11-28',
-      };
-      if (opts && opts.body) headers['Content-Type'] = 'application/json';
-      const res = await fetch(url, {
-        method: (opts && opts.method) || 'GET',
-        headers: headers,
-        body: opts && opts.body ? JSON.stringify(opts.body) : undefined,
-      });
-      const text = await res.text();
-      let data = null;
-      try { data = text ? JSON.parse(text) : null; } catch (_) { data = { message: text }; }
-      if (!res.ok) {
-        const msg = (data && (data.message || data.error)) || ('HTTP ' + res.status);
-        throw new Error(msg);
-      }
-      return data;
-    }
-
-    function levelFileName(level) {
-      const id = (level && level.id != null) ? level.id : ((editTarget.id != null) ? editTarget.id : 1);
-      return String(id) + '.json';
-    }
-
-    function resolveSaveLevelId(level) {
-      const selPath = (document.getElementById('gitFileList').value || '').trim();
-      const fromSel = parseLevelIdFromPath(selPath);
-      const fromSetup = level && level.id != null ? Number(level.id) : null;
-      const fromTarget = editTarget.id;
-      // If we loaded 2.json but setup still says 1, keep writing 2.json — never clobber level 1 by accident.
-      if (fromTarget != null && fromTarget !== 1 && (!Number.isFinite(fromSetup) || fromSetup === 1)) return fromTarget;
-      if (fromSel != null && fromSel !== 1 && (!Number.isFinite(fromSetup) || fromSetup === 1)) return fromSel;
-      if (Number.isFinite(fromSetup) && fromSetup > 0) return fromSetup;
-      if (fromTarget != null) return fromTarget;
-      if (fromSel != null) return fromSel;
-      return 1;
-    }
-
-    document.getElementById('btnGitSave').onclick = async function () {
-      try {
-        const c = readGitCfg();
-        const mod = workspaceToMod(workspace);
-        const level = mod.level || { id: 1, width: 800, height: 600, wall: { thickness: 64 }, coins: [] };
-        const saveId = resolveSaveLevelId(level);
-        level.id = saveId;
-        syncSetupBlockId(saveId);
-        rememberEditTarget(saveId, c.path + '/' + saveId + '.json');
-        const file = String(saveId) + '.json';
-        const fullPath = c.path + '/' + file;
-        const bodyText = JSON.stringify(level, null, 4) + '\n';
-        setStatus('Saving ' + fullPath + ' to GitHub…');
-        let sha = null;
-        try {
-          const existing = await ghApi(
-            '/repos/' + encodeURIComponent(c.owner) + '/' + encodeURIComponent(c.repo)
-            + '/contents/' + fullPath.split('/').map(encodeURIComponent).join('/')
-            + '?ref=' + encodeURIComponent(c.branch)
-          );
-          if (existing && existing.sha) sha = existing.sha;
-        } catch (_) { /* new file */ }
-        const name = (document.getElementById('modName').value || 'level').trim();
-        const payload = {
-          message: 'editor: save level ' + saveId + ' (' + name + ')',
-          content: utf8ToBase64(bodyText),
-          branch: c.branch,
-        };
-        if (sha) payload.sha = sha;
-        const result = await ghApi(
-          '/repos/' + encodeURIComponent(c.owner) + '/' + encodeURIComponent(c.repo)
-          + '/contents/' + fullPath.split('/').map(encodeURIComponent).join('/'),
-          { method: 'PUT', body: payload }
-        );
-        const commit = result && result.commit && result.commit.sha
-          ? result.commit.sha.slice(0, 7) : 'ok';
-        document.getElementById('io').value = bodyText;
-        setStatus('Committed ' + fullPath + ' @ ' + commit + ' on ' + c.branch + ' (level id ' + saveId + ').', 'ok');
-        document.getElementById('btnGitList').click();
-      } catch (e) {
-        setStatus('Git save failed: ' + e.message, 'err');
-      }
-    };
-
-    document.getElementById('btnGitList').onclick = async function () {
-      try {
-        const c = readGitCfg();
-        setStatus('Listing ' + c.path + '…');
-        const data = await ghApi(
-          '/repos/' + encodeURIComponent(c.owner) + '/' + encodeURIComponent(c.repo)
-          + '/contents/' + c.path.split('/').map(encodeURIComponent).join('/')
-          + '?ref=' + encodeURIComponent(c.branch)
-        );
-        const sel = document.getElementById('gitFileList');
-        sel.innerHTML = '';
-        const files = (Array.isArray(data) ? data : []).filter(function (f) {
-          return f.type === 'file' && /\.json$/i.test(f.name);
-        });
-        if (!files.length) {
-          sel.innerHTML = '<option value="">(no .json files)</option>';
-          setStatus('No JSON levels in ' + c.path + '.', 'err');
-          return;
-        }
-        files.sort(function (a, b) {
-          return a.name.localeCompare(b.name, undefined, { numeric: true });
-        });
-        files.forEach(function (f) {
-          const opt = document.createElement('option');
-          opt.value = f.path || (c.path + '/' + f.name);
-          opt.textContent = f.name;
-          sel.appendChild(opt);
-        });
-        setStatus('Found ' + files.length + ' level file(s) on ' + c.branch + '.', 'ok');
-      } catch (e) {
-        setStatus('Git list failed: ' + e.message, 'err');
-      }
-    };
-
-    document.getElementById('btnGitLoad').onclick = async function () {
-      try {
-        const c = readGitCfg();
-        const sel = document.getElementById('gitFileList');
-        const fullPath = (sel.value || '').trim();
-        if (!fullPath) {
-          setStatus('List levels first, then pick a file.', 'err');
-          return;
-        }
-        setStatus('Loading ' + fullPath + ' from GitHub…');
-        const data = await ghApi(
-          '/repos/' + encodeURIComponent(c.owner) + '/' + encodeURIComponent(c.repo)
-          + '/contents/' + fullPath.split('/').map(encodeURIComponent).join('/')
-          + '?ref=' + encodeURIComponent(c.branch)
-        );
-        if (!data || !data.content) throw new Error('Empty file response');
-        const text = base64ToUtf8(data.content);
-        const parsed = JSON.parse(text);
-        if (isLevelJson(parsed)) {
-          const forcedId = parseLevelIdFromPath(fullPath);
-          importModIntoEditor(levelJsonToMod(parsed, forcedId), 'Loaded from Git ' + fullPath, fullPath);
-        } else if (parsed.schemaVersion === 1) {
-          importModIntoEditor(parsed, 'Loaded ModConfig from Git ' + fullPath, fullPath);
-        } else {
-          throw new Error('Not a level or ModConfig JSON');
-        }
-        document.getElementById('io').value = text;
-      } catch (e) {
-        setStatus('Git load failed: ' + e.message, 'err');
-      }
-    };
-
-    document.getElementById('btnGitHistory').onclick = async function () {
-      try {
-        const c = readGitCfg();
-        const sel = document.getElementById('gitFileList');
-        let fullPath = (sel.value || '').trim();
-        if (!fullPath) {
-          const mod = workspaceToMod(workspace);
-          fullPath = c.path + '/' + levelFileName(mod.level);
-        }
-        setStatus('Fetching history for ' + fullPath + '…');
-        const commits = await ghApi(
-          '/repos/' + encodeURIComponent(c.owner) + '/' + encodeURIComponent(c.repo)
-          + '/commits?sha=' + encodeURIComponent(c.branch)
-          + '&path=' + encodeURIComponent(fullPath)
-          + '&per_page=8'
-        );
-        if (!Array.isArray(commits) || !commits.length) {
-          setStatus('No commits found for ' + fullPath + '.', 'err');
-          return;
-        }
-        const lines = commits.map(function (cm) {
-          const sha = (cm.sha || '').slice(0, 7);
-          const msg = (cm.commit && cm.commit.message || '').split('\n')[0];
-          const when = cm.commit && cm.commit.author && cm.commit.author.date
-            ? cm.commit.author.date.slice(0, 10) : '';
-          return sha + '  ' + when + '  ' + msg;
-        });
-        document.getElementById('io').value = lines.join('\n');
-        setStatus('History: ' + commits.length + ' commit(s) for ' + fullPath + '.', 'ok');
-      } catch (e) {
-        setStatus('Git history failed: ' + e.message, 'err');
-      }
-    };
-
-    /* ── n8n Cloud: Add Meme pipeline ── */
-    function restoreN8nCfg() {
-      try {
-        const raw = localStorage.getItem(N8N_CFG_KEY);
-        if (!raw) return;
-        const c = JSON.parse(raw);
-        if (c.webhook) document.getElementById('n8nWebhook').value = c.webhook;
-        if (c.secret) document.getElementById('n8nSecret').value = c.secret;
-        if (c.memeId) document.getElementById('memeIdInput').value = c.memeId;
-        if (c.behavior) document.getElementById('memeBehavior').value = c.behavior;
-      } catch (_) {}
-    }
-    function persistN8nCfg() {
-      try {
-        localStorage.setItem(N8N_CFG_KEY, JSON.stringify({
-          webhook: (document.getElementById('n8nWebhook').value || '').trim(),
-          secret: (document.getElementById('n8nSecret').value || '').trim(),
-          memeId: (document.getElementById('memeIdInput').value || '').trim(),
-          behavior: document.getElementById('memeBehavior').value || 'NoneBehavior',
-        }));
-      } catch (_) {}
-    }
-    restoreN8nCfg();
-    ['n8nWebhook', 'n8nSecret', 'memeIdInput', 'memeBehavior'].forEach(function (id) {
-      document.getElementById(id).addEventListener('change', persistN8nCfg);
-    });
-    document.getElementById('btnMemeToggle').onclick = function () {
-      const bar = document.getElementById('memeBar');
-      bar.open = !bar.open;
-      if (bar.open) bar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    };
-    document.getElementById('btnRefreshMemes').onclick = function () {
-      loadCdnCatalog();
-      setStatus('Refreshing CDN meme catalog…');
-    };
-
-    function applyMemeIdToPlace(id) {
-      const tops = workspace.getTopBlocks(true);
-      let target = null;
-      for (const t of tops) {
-        if (t.type === 'level_place' && t.getFieldValue('KIND') !== 'striker') { target = t; break; }
-      }
-      if (!target) {
-        target = workspace.newBlock('level_place');
-        target.initSvg(); target.render(); target.moveBy(420, 300);
-        target.setFieldValue('target', 'KIND');
-      }
-      target.setFieldValue(String(id), 'MEME');
-      scheduleLive();
-    }
-
-    function fileToBase64(file) {
-      return new Promise(function (resolve, reject) {
-        const reader = new FileReader();
-        reader.onload = function () {
-          const s = String(reader.result || '');
-          const i = s.indexOf('base64,');
-          resolve(i >= 0 ? s.slice(i + 7) : s);
-        };
-        reader.onerror = function () { reject(new Error('File read failed')); };
-        reader.readAsDataURL(file);
-      });
-    }
-
-    function readMemeForm() {
-      let memeId = (document.getElementById('memeIdInput').value || '').trim().toLowerCase();
-      memeId = memeId.replace(/[^a-z0-9_\-]/g, '_');
-      const behavior = document.getElementById('memeBehavior').value || 'NoneBehavior';
-      const fileInput = document.getElementById('memeFile');
-      const file = fileInput.files && fileInput.files[0];
-      return { memeId: memeId, behavior: behavior, file: file };
-    }
-
-    async function ghUpsertFile(c, fullPath, contentBase64, message) {
-      let sha = null;
-      try {
-        const existing = await ghApi(
-          '/repos/' + encodeURIComponent(c.owner) + '/' + encodeURIComponent(c.repo)
-          + '/contents/' + fullPath.split('/').map(encodeURIComponent).join('/')
-          + '?ref=' + encodeURIComponent(c.branch)
-        );
-        if (existing && existing.sha) sha = existing.sha;
-      } catch (_) {}
-      const payload = { message: message, content: contentBase64, branch: c.branch };
-      if (sha) payload.sha = sha;
-      return ghApi(
-        '/repos/' + encodeURIComponent(c.owner) + '/' + encodeURIComponent(c.repo)
-        + '/contents/' + fullPath.split('/').map(encodeURIComponent).join('/'),
-        { method: 'PUT', body: payload }
-      );
-    }
-
-    async function ghGetJsonFile(c, fullPath, fallback) {
-      try {
-        const data = await ghApi(
-          '/repos/' + encodeURIComponent(c.owner) + '/' + encodeURIComponent(c.repo)
-          + '/contents/' + fullPath.split('/').map(encodeURIComponent).join('/')
-          + '?ref=' + encodeURIComponent(c.branch)
-        );
-        if (!data || !data.content) return fallback;
-        return JSON.parse(base64ToUtf8(data.content));
-      } catch (_) {
-        return fallback;
-      }
-    }
-
-    async function commitMemeToGit(memeId, behavior, file) {
-      const c = readGitCfg();
-      if (!c.token) throw new Error('Open Git bar and paste GitHub PAT first');
-      if (!c.owner || !c.repo) throw new Error('Set Git owner/repo');
-      const ext = (file.type || '').indexOf('jpeg') >= 0 || (file.type || '').indexOf('jpg') >= 0 ? 'jpg' : 'png';
-      const imageBase64 = await fileToBase64(file);
-      const texPath = 'cdn/textures/' + memeId + '.' + ext;
-      const memePath = 'cdn/memes/' + memeId + '.json';
-      const indexPath = 'cdn/memes/index.json';
-      const manifestPath = 'cdn/manifest.json';
-      const hashTag = 'editor-' + memeId + '-' + Date.now().toString(36);
-      const texRel = 'textures/' + memeId + '.' + ext;
-      const memeJson = {
-        id: memeId,
-        behavior: behavior,
-        behaviors: [behavior],
-        radius: 32,
-        textures: { default: texRel, idle: texRel, aim: texRel, shot: texRel, hitted: texRel },
-      };
-      await ghUpsertFile(c, texPath, imageBase64, 'editor: add texture ' + memeId);
-      await ghUpsertFile(c, memePath, utf8ToBase64(JSON.stringify(memeJson, null, 2) + '\n'), 'editor: add meme ' + memeId);
-      let indexObj = await ghGetJsonFile(c, indexPath, { memes: [] });
-      if (Array.isArray(indexObj)) indexObj = { memes: indexObj };
-      if (!indexObj || typeof indexObj !== 'object') indexObj = { memes: [] };
-      if (!Array.isArray(indexObj.memes)) indexObj.memes = [];
-      const brief = {
-        id: memeId, behavior: behavior, behaviors: [behavior], radius: 32,
-        textures: { default: texRel, idle: texRel },
-      };
-      const mi = indexObj.memes.findIndex(function (m) { return m && m.id === memeId; });
-      if (mi >= 0) indexObj.memes[mi] = brief; else indexObj.memes.push(brief);
-      await ghUpsertFile(c, indexPath, utf8ToBase64(JSON.stringify(indexObj, null, 2) + '\n'), 'editor: update meme index (' + memeId + ')');
-      let manifest = await ghGetJsonFile(c, manifestPath, { version: 1, baseUrl: '', memeConfig: 'memes/index.json', items: [] });
-      if (!manifest.items) manifest.items = [];
-      function upsertItem(filename, kind) {
-        const i = manifest.items.findIndex(function (it) { return it && it.filename === filename; });
-        const row = { filename: filename, hash: hashTag, kind: kind };
-        if (i >= 0) manifest.items[i] = Object.assign({}, manifest.items[i], row);
-        else manifest.items.push(row);
-      }
-      upsertItem('memes/index.json', 'meme');
-      upsertItem('memes/' + memeId + '.json', 'meme');
-      upsertItem(texRel, 'texture');
-      manifest.version = Number(manifest.version || 0) + 1;
-      if (!manifest.memeConfig) manifest.memeConfig = 'memes/index.json';
-      await ghUpsertFile(c, manifestPath, utf8ToBase64(JSON.stringify(manifest, null, 2) + '\n'), 'editor: bump CDN manifest for ' + memeId);
-      return { ok: true, memeId: memeId, paths: { texture: texPath, meme: memePath }, branch: c.branch, hash: hashTag };
-    }
-
-    document.getElementById('btnAddMemeGit').onclick = async function () {
-      persistN8nCfg();
-      const form = readMemeForm();
-      if (!form.memeId) { setStatus('Enter memeId (e.g. cool_cat).', 'err'); return; }
-      if (!form.file) { setStatus('Choose a PNG/JPEG image.', 'err'); return; }
-      try {
-        setStatus('Committing meme "' + form.memeId + '" via GitHub…');
-        const ext = (form.file.type || '').indexOf('jpeg') >= 0 || (form.file.type || '').indexOf('jpg') >= 0 ? 'jpg' : 'png';
-        const data = await commitMemeToGit(form.memeId, form.behavior, form.file);
-        // Prefer raw.githubusercontent immediately (jsDelivr lags); also keep local blob for preview
-        const rawUrl = githubRawTextureUrl(data.memeId, ext);
-        const blobUrl = URL.createObjectURL(form.file);
-        rememberMemeId(data.memeId, rawUrl);
-        memeAtlas[data.memeId] = new Image();
-        memeAtlas[data.memeId].src = blobUrl;
-        applyMemeIdToPlace(data.memeId);
-        document.getElementById('io').value = JSON.stringify(data, null, 2);
-        setStatus('Saved meme "' + data.memeId + '" to Git (' + data.branch + '). Catalog may lag on jsDelivr; id is kept locally.', 'ok');
-        setTimeout(function () { loadCdnCatalog(); }, 2000);
-      } catch (e) {
-        setStatus('Git Add Meme failed: ' + e.message, 'err');
-      }
-    };
-
-    document.getElementById('btnAddMemeN8n').onclick = async function () {
-      persistN8nCfg();
-      const url = (document.getElementById('n8nWebhook').value || '').trim();
-      const secret = (document.getElementById('n8nSecret').value || '').trim();
-      const form = readMemeForm();
-      if (!url) { setStatus('Paste n8n Production webhook URL first (must include /webhook/).', 'err'); return; }
-      if (url.indexOf('/workflow/') >= 0) {
-        setStatus('That is the workflow page URL. Use Webhook → Production URL (/webhook/…).', 'err');
-        return;
-      }
-      if (url.indexOf('/webhook') < 0) {
-        setStatus('Webhook URL must contain /webhook/ — copy Production URL from the Webhook node.', 'err');
-        return;
-      }
-      if (!form.memeId) { setStatus('Enter memeId (e.g. cool_cat).', 'err'); return; }
-      if (!form.file) { setStatus('Choose a PNG/JPEG image.', 'err'); return; }
-      try {
-        setStatus('Uploading ' + form.memeId + ' via n8n…');
-        const imageBase64 = await fileToBase64(form.file);
-        /* form-urlencoded: n8n puts fields on body.*, no CORS preflight */
-        const formBody = new URLSearchParams();
-        formBody.set('memeId', form.memeId);
-        formBody.set('id', form.memeId);
-        formBody.set('behavior', form.behavior);
-        formBody.set('mime', form.file.type || 'image/png');
-        formBody.set('radius', '32');
-        formBody.set('imageBase64', imageBase64);
-        if (secret) formBody.set('secret', secret);
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-          body: formBody.toString(),
-        });
-        let data = null;
-        const rawText = await res.text();
-        try { data = JSON.parse(rawText); } catch (_) { data = null; }
-        if (!res.ok || (data && data.ok === false)) {
-          const err = (data && data.error) || rawText || ('HTTP ' + res.status);
-          throw new Error(err);
-        }
-        const id = (data && data.memeId) || form.memeId;
-        rememberMemeId(id, memeCdnTextureUrl(id));
-        applyMemeIdToPlace(id);
-        document.getElementById('io').value = data ? JSON.stringify(data, null, 2) : rawText;
-        setStatus('n8n committed meme "' + id + '" — catalog may lag ~1–5 min on jsDelivr.', 'ok');
-        setTimeout(function () { loadCdnCatalog(); }, 2000);
-      } catch (e) {
-        const msg = e.message || String(e);
-        if (/failed to fetch|networkerror|load failed/i.test(msg)) {
-          setStatus('n8n still unreachable — Publish ON? Full /webhook/ URL? Repo Config githubToken set? Then retry.', 'err');
-        } else {
-          setStatus('n8n Add Meme failed: ' + msg, 'err');
-        }
-      }
     };
   </script>
 </body>

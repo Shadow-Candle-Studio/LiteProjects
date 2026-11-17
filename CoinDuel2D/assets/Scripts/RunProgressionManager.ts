@@ -77,7 +77,6 @@ export class RunProgressionManager extends Component {
     public findShooter(coinGroup: Node | null): Node | null {
         if (!coinGroup) return null;
         for (const child of coinGroup.children) {
-            if (!child.active) continue;
             const ctrl = child.getComponent(CoinController);
             if (ctrl?.allowedOperation) return child;
         }

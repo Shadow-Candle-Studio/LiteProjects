@@ -36,7 +36,7 @@ export class UIFail extends Component {
         }
         if (this.btnRetry) {
             const retryLabel = this.btnRetry.getComponentInChildren(Label);
-            if (retryLabel) retryLabel.string = I18n.t('fail_retry_level');
+            if (retryLabel) retryLabel.string = '重試本關';
             this.btnRetry.on(Button.EventType.CLICK, () => {
                 this.close();
                 if (this.onBtnRetryClick) this.onBtnRetryClick();
