@@ -13,7 +13,6 @@ import { BehaviorBase } from './Behaviors/BehaviorBase';
 import './Behaviors/FreezeBehavior';
 import './Behaviors/FlashStepBehavior';
 import './Behaviors/KnockbackBehavior';
-import { MemeLoader } from './Meme/MemeLoader';
 import { AssetSyncManager } from './Meme/AssetSyncManager';
 import { RunProgressionManager } from './RunProgressionManager';
 import { FailureAnalysisManager } from './FailureAnalysisManager';
@@ -135,6 +134,19 @@ export class GameLogic extends Component {
     private _worldStats: WorldStatsDisplay | null = null;
     /** Geometry Dash 式節奏音高。只有完全沒打中才回到 1。 */
     private _rhythmPitch = 1;
+
+    /** 炸彈爆炸洗牌尚未完成時，暫停「全部靜止」判定，避免提前結算。 */
+    private _shufflePending = false;
+    /** 等待連鎖炸彈：上一顆爆炸動畫播完 + 0.2 秒前，不觸發下一顆。 */
+    private _bombChainHold = false;
+    /** 用於取消尚未執行的洗牌 / 連鎖（例如立即開始新一回合）。 */
+    private _shuffleToken = 0;
+    /** 爆炸洗牌延遲（爆炸環覆蓋桌面所需時間）。 */
+    private static readonly _BOMB_SHUFFLE_DELAY = 0.5;
+    /** 連續炸彈之間的間隔（上一段爆炸動畫結束後）。 */
+    private static readonly _BOMB_CHAIN_DELAY = 0.2;
+    /** 爆炸動畫時長兜底（Explosion.prefab 的 bomb.anim 約 1.283 秒）。 */
+    private static readonly _BOMB_FX_DURATION = 1.3;
 
     /** 场上所有道具节点（障碍物 + 陷阱），关卡开始时统一清理 */
     private _props: Node[] = [];
@@ -384,7 +396,8 @@ export class GameLogic extends Component {
         if (!this.coinGroup) return 0;
         let count = 0;
         for (const child of this.coinGroup.children) {
-            if (child.getComponent(CoinController)) count++;
+            // 掉出桌面后被隐藏的硬币不再计入剩余硬币
+            if (child.active && child.getComponent(CoinController)) count++;
         }
         return count;
     }
@@ -412,6 +425,12 @@ export class GameLogic extends Component {
         this._bindModInterpreter();
     }
 
+    /**
+     * GameLogicInterpreter caches the host in onLoad(). When the component is
+     * added at runtime (addComponent after the scene loaded) Cocos does NOT call
+     * onLoad, so the host stays null and every behavior pipeline silently no-ops.
+     * Binding explicitly makes the interpreter work regardless of when it exists.
+     */
     private _bindModInterpreter(): void {
         this._mod = GameLogicInterpreter.getOrCreate();
         const host: ModRuntimeHost = {
@@ -468,11 +487,11 @@ export class GameLogic extends Component {
         this._ensureManagers();
         this._run?.beginRun(this.aimLineFactor);
         this._worldStats?.ensure(this.coinGroup, this.tableHeight);
-        MemeLoader.checkAndDownload();
         const sync = this.getComponent(AssetSyncManager) ?? this.addComponent(AssetSyncManager);
         sync.sync(() => {
             const remoteMod = sync.getMod();
-            if (remoteMod) this._mod?.load(remoteMod);
+            // Do not apply Scratch level from CDN mods during normal Ladder/campaign play
+            if (remoteMod) this._mod?.load(remoteMod, false);
             this._mod?.onGameStart();
         });
         this._mod?.onGameStart();
@@ -710,23 +729,24 @@ export class GameLogic extends Component {
             console.warn('[Meme] 尚未設定 coinPrefab');
             return null;
         }
-        const meme = MemeLoader.getLoadedMemes().find((item) => item.id === memeId);
+        const sync = this.getComponent(AssetSyncManager) ?? AssetSyncManager.instance;
+        const meme = sync?.getMeme(memeId) ?? null;
         if (!meme) {
             console.warn('[Meme] 找不到，改用預設硬幣:', memeId);
             return this.spawnCoinAt(this.coinPrefab, x, y);
         }
+        const primary = meme.behaviors?.[0] || meme.behavior || undefined;
         const node = this.spawnCoinAt(
             this.coinPrefab,
             x,
             y,
-            meme.radius > 0 ? meme.radius : undefined,
-            meme.behavior || undefined,
+            meme.radius && meme.radius > 0 ? meme.radius : undefined,
+            primary,
         );
-        MemeLoader.applySprite(memeId, (frame) => {
-            if (!frame || !node.isValid) return;
-            const sprite = CoinController.getCoinSprite(node);
-            if (sprite) sprite.spriteFrame = frame;
-        });
+        for (const id of meme.behaviors ?? []) {
+            if (id && id !== primary) this.attachCoinBehavior(node, id);
+        }
+        sync?.applyMemeToCoin(node, memeId);
         return node;
     }
 
@@ -871,11 +891,6 @@ export class GameLogic extends Component {
 
         this._mod?.tick(deltaTime);
 
-        // 1. 持续监测坠落（在任意状态下均可坠落）
-        this.checkCoinFalls();
-
-        this._mod?.tick(deltaTime);
-
         // 1. 桌面边界反弹（含缺口侧边）
         // 必须先夹回墙内再判定坠落：墙本身没有物理碰撞体，全靠这里做位置约束。
         // 顺序反了的话，某一帧物理冲过墙外沿就会被误判成「掉进缺口」。
@@ -911,7 +926,7 @@ export class GameLogic extends Component {
                 ctrl.allowedOperation = allowed;
                 ctrl.showIndicator(allowed);
             }
-            this._run?.attachAura(this.coinGroup, this._pendingLockedCoin);
+            this._run?.attachAura(this.coinGroup, next);
             this._captureShot();
             this._pendingLockedCoin = null;
         }
@@ -1164,7 +1179,12 @@ export class GameLogic extends Component {
             body.linearVelocity = new Vec2(0, 0);
             body.angularVelocity = 0;
         }
-        this._mod?.onCoinFall({ coin, x: coin.position.x, y: coin.position.y });
+        const x = coin.position.x;
+        const y = coin.position.y;
+        // 立刻移出画面，避免硬币停在缺口/墙外看起来像卡住。
+        // 不直接 destroy：倒流/教程重试需要按快照把它恢复回来。
+        coin.active = false;
+        this._mod?.onCoinFall({ coin, x, y });
     }
 
     /** 被 CoinController 调用：记录当前弹射的硬币 */
@@ -1277,19 +1297,34 @@ export class GameLogic extends Component {
             }
         }
 
-        // 执行爆炸物理效果
+        // 沒有動畫可等待時按固定時長兜底，避免連鎖永遠卡住
+        if (hasNextBomb) {
+            this.scheduleOnce(releaseChain, GameLogic._BOMB_FX_DURATION);
+        }
+
+        // 音效立即播放
         SoundManager.instance?.playExplosion();
-        Bomb.applyExplosionAt(pos, {
-            pushRadius: this.bombPushRadius,
-            pushForce: this.bombPushForce,
-            coinGroup: this.coinGroup,
-            props: this._props,
-            muds: this._muds,
-            mudPushFactor: this.bombMudPushFactor,
-            tableWidth: this.tableWidth,
-            tableHeight: this.tableHeight,
-            wallThickness: this.wallThickness,
-        });
+
+        // 洗牌延迟到爆炸环覆盖桌面时执行，避免看到硬币瞬移。
+        // _shufflePending 会让 isAllCoinsStopped() 暂时返回 false，阻止提前结算。
+        this._shufflePending = true;
+        this._bombChainHold = hasNextBomb;
+        this.scheduleOnce(() => {
+            if (token !== this._shuffleToken) return;
+            Bomb.applyExplosionAt(pos, {
+                pushRadius: this.bombPushRadius,
+                pushForce: this.bombPushForce,
+                coinGroup: this.coinGroup,
+                props: this._props,
+                muds: this._muds,
+                mudPushFactor: this.bombMudPushFactor,
+                tableWidth: this.tableWidth,
+                tableHeight: this.tableHeight,
+                wallThickness: this.wallThickness,
+                exclude: bombCoin,
+            });
+            this._shufflePending = false;
+        }, GameLogic._BOMB_SHUFFLE_DELAY);
 
         // 移除炸弹硬币。若下一發鎖的就是這顆炸彈，先解開，避免鎖到已銷毀的節點。
         const idx = this._bombCoins.indexOf(bombCoin);
@@ -1298,7 +1333,7 @@ export class GameLogic extends Component {
         bombCoin.removeFromParent();
         bombCoin.destroy();
 
-        // 保留這次合法命中，回到 ANIMATING 等被推開的硬幣再次靜止。
+        // 保留這次合法命中，回到 ANIMATING 等洗牌與其它炸彈連鎖完成。
         this.coinFallCount = 0;
         this._activeShotCoin = null;
         if (lastHitWasBomb) this._lastHitCoin = null;
@@ -1363,6 +1398,10 @@ export class GameLogic extends Component {
 
         // 失敗不開結算面板：點一下就把這一拍還原。
         if (this.coinFallCount > 0) {
+            if (this.failImmediately) {
+                this._handleGameOver();
+                return;
+            }
             const fallen = this._foulCoin ?? this._activeShotCoin;
             this._failHints?.explainFall(
                 this.coinGroup,
@@ -1376,6 +1415,10 @@ export class GameLogic extends Component {
 
         switch (this.coinHitCount) {
             case 0: {
+                if (this.failImmediately) {
+                    this._handleGameOver();
+                    return;
+                }
                 const shot = this._activeShotCoin;
                 this._failHints?.explain(this.coinGroup, shot?.position.x ?? 0, shot?.position.y ?? 0, 0, null, shot);
                 this._armTapRestart();
@@ -1398,8 +1441,14 @@ export class GameLogic extends Component {
                         return;
                     }
 
-                    this._lockedCoin = this._lastHitCoin;
-                    this._continueWithLockedCoin();
+                    if (this._lastHitCoin) {
+                        this._lockedCoin = this._lastHitCoin;
+                        this._continueWithLockedCoin();
+                    } else {
+                        // 炸彈連鎖等沒有「被撞中的硬幣」：回到可自由選擇的等待狀態
+                        console.log('[Game] no hit coin after explosion; unlocking all coins');
+                        this.waitingPlayerOperation();
+                    }
                 };
 
                 const shotCoin = this._activeShotCoin;
@@ -1417,6 +1466,10 @@ export class GameLogic extends Component {
             }
 
             default: {
+                if (this.failImmediately) {
+                    this._handleGameOver();
+                    return;
+                }
                 const hem = this.hitEffectManager;
                 const coin = this._foulCoin;
                 const shot = this._activeShotCoin;
@@ -1515,6 +1568,13 @@ export class GameLogic extends Component {
      */
     public startTimeReverse(): void {
         if (this.currentPhase === GamePhase.REVERSING) return;
+        // 取消尚未執行的炸彈洗牌 / 連鎖，避免倒流過程中硬幣又被重排
+        this._shuffleToken++;
+        this._shufflePending = false;
+        this._bombChainHold = false;
+        // 玩家可能剛看到失誤提示就立刻點擊回退；Tween.stopAll() 會停掉提示的淡出，
+        // 必須先主動清除，否則提示會殘留在畫面上。
+        this._failHints?.clear();
         Tween.stopAll();
         this.hitEffectManager?.cancelFoulReplay();
         this._disarmTapRestart();
@@ -1525,6 +1585,8 @@ export class GameLogic extends Component {
         this._rewindFrom = [];
         for (const snap of this._shotSnapshot) {
             if (!snap.node.isValid) continue;
+            // 掉落后被隐藏的硬币在倒流开始时重新显示，随插值一起飞回原位
+            snap.node.active = true;
             this._rewindFrom.push({
                 node: snap.node,
                 x: snap.node.position.x,
@@ -1559,6 +1621,7 @@ export class GameLogic extends Component {
         if (PhysicsSystem2D.instance) PhysicsSystem2D.instance.enable = true;
         for (const item of this._rewindFrom) {
             if (!item.node.isValid) continue;
+            item.node.active = true;
             item.node.setPosition(item.toX, item.toY, 0);
             const body = item.node.getComponent(RigidBody2D);
             if (body) {
@@ -1608,15 +1671,14 @@ export class GameLogic extends Component {
                 shooter: ctrl.allowedOperation,
             });
         }
-        this._awaitingTapRestart = true;
-        this._tapArmedAt = Date.now();
-        input.on(Input.EventType.TOUCH_END, this._onTapRestart, this);
-        input.on(Input.EventType.MOUSE_UP, this._onTapRestart, this);
     }
 
     /** 游戏结束处理（整關放棄才走這裡；一般失誤改走 instantRestart） */
     private _handleGameOver(): void {
         console.log(">>> 游戏结束 <<<");
+        this._shuffleToken++;
+        this._shufflePending = false;
+        this._bombChainHold = false;
         this._disarmTapRestart();
         this._combo = 0;
         this._restoreSpeed();
@@ -1752,6 +1814,9 @@ export class GameLogic extends Component {
 
     // 允许用户操作状态
     public waitingPlayerOperation(){
+        this._shuffleToken++;
+        this._shufflePending = false;
+        this._bombChainHold = false;
         this._disarmTapRestart();
         this._restoreSpeed();
         this.hitEffectManager?.stopTracking();

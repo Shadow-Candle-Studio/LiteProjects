@@ -1,4 +1,4 @@
-import { _decorator, assetManager, AudioSource, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip, Color, director, Label, sys } from 'cc';
+import { _decorator, assetManager, AudioSource, Component, instantiate, Node, Prefab, Input, input, KeyCode, EventKeyboard, UITransform, CircleCollider2D, resources, SpriteFrame, AudioClip, Color, director, Label } from 'cc';
 import { BombCoinMarker } from '../BombCoinMarker';
 import { I18n } from '../I18n';
 import { RoundManager } from '../RoundManager';
@@ -14,7 +14,12 @@ import { DataProvider } from '../DataProvider';
 import { HitEffectManager } from '../HitEffectManager';
 import { Leaderboard } from '../Leaderboard';
 import { TutorialManager, TutorialStep } from '../TutorialManager';
+import { getStage, isTutorialStage } from '../Campaign/CampaignConfig';
+import { CampaignProgress } from '../Campaign/CampaignProgress';
+import { CdnLevelSource } from '../Campaign/CdnLevelSource';
 import { AssetSyncManager } from '../Meme/AssetSyncManager';
+import { ModAutoBoot } from '../Mod/ModAutoBoot';
+import { DEFAULT_CDN_MANIFEST_URL } from '../Meme/CdnConfig';
 
 const { ccclass, property } = _decorator;
 
@@ -23,19 +28,7 @@ export enum GameMode{
     Ladder, // 天梯模式（随机关卡）
 }
 
-/** 统一教程配置：key 为关卡索引（0-based），intro 和 drag 步骤可混排 */
-const TUTORIAL_CONFIG: Record<number, TutorialStep[]> = {
-    // 暂时关闭教程
-    // 0: [
-    //     { type: 'drag', hintKey: 'tutorial_step_1', sourceCoinIndex: 0, targetCoinIndex: 1 },
-    //     { type: 'drag', hintKey: 'tutorial_step_2', sourceCoinIndex: 1, targetCoinIndex: 2, isFinal: true },
-    // ],
-    // 1: [
-    //     // 第二关：block/mud 介绍由 _buildTutorialSteps 动态插入在拖拽步骤之前
-    //     { type: 'drag', hintKey: 'tutorial_step_1', sourceCoinIndex: 0, targetCoinIndex: 1 },
-    //     { type: 'drag', hintKey: 'tutorial_step_2', sourceCoinIndex: 1, targetCoinIndex: 2, isFinal: true },
-    // ],
-};
+/** Beginner tutorial for the first 4 campaign stages now lives in Campaign/CampaignConfig.ts. */
 
 @ccclass('GameScene')
 export class GameScene extends Component {
@@ -96,6 +89,8 @@ export class GameScene extends Component {
         this.level = 1;
         this.uiManager.setLevel(this.level);
         this.gameLogic.coinPrefab = this.coinPrefab;
+        // 天梯模式：任何失敗擊打在物理停止後直接彈出失敗面板
+        this.gameLogic.failImmediately = GameScene.mode === GameMode.Ladder;
         this.gameLogic.score = 0;
         this.uiManager.setScore(0);
 
@@ -124,30 +119,37 @@ export class GameScene extends Component {
                     this._applyGameConfig();
                 }
 
-                // 关卡选择 / Scratch COINMOD1 传入的配置
-                let levelData = LevelManager.getCurrent();
-                if (!levelData) {
-                    // Fallback: active Scratch mod in localStorage
-                    try {
-                        const raw = sys.localStorage?.getItem('CoinDuel:activeMod')
-                            ?? (typeof localStorage !== 'undefined' ? localStorage.getItem('CoinDuel:activeMod') : null);
-                        if (raw) {
-                            const mod = JSON.parse(raw);
-                            if (mod?.level && Array.isArray(mod.level.coins)) {
-                                LevelManager.setScratchLevel(mod.level);
-                                levelData = mod.level;
-                            }
-                        }
-                    } catch { /* ignore */ }
-                }
-                if (levelData) {
-                    this._levelFiles = LevelManager.getLevelFiles();
-                    this._levelIndex = LevelManager.getLevelIndex();
-                    this._initFromLevel(levelData);
-                } else {
-                    LevelManager.clear();
-                    this.startNewRound();
-                }
+                // Ensure AssetSync exists early for ModAutoBoot CDN sync
+                const sync = this.gameLogic.getComponent(AssetSyncManager)
+                    ?? this.gameLogic.addComponent(AssetSyncManager);
+                // Absolute CDN only — never leave relative/empty for itch builds.
+                sync.manifestUrl = DEFAULT_CDN_MANIFEST_URL;
+
+                // CDN sync + optional Scratch from explicit ?mod= / ?modUrl= only
+                ModAutoBoot.prepare(sync, (_bootErr, mod) => {
+                    // Ladder is always random rounds — never Scratch / campaign / tutorial
+                    if (GameScene.mode === GameMode.Ladder) {
+                        LevelManager.clear();
+                        this.tutorialManager?.skipTutorial();
+                        this.startNewRound();
+                        return;
+                    }
+
+                    let levelData = LevelManager.getCurrent();
+                    const explicitMod = ModAutoBoot.hasExplicitModQuery();
+                    if (!levelData && explicitMod && mod?.level && Array.isArray(mod.level.coins)) {
+                        LevelManager.setScratchLevel(mod.level as never);
+                        levelData = LevelManager.getCurrent();
+                    }
+                    if (levelData) {
+                        this._levelFiles = LevelManager.getLevelFiles();
+                        this._levelIndex = LevelManager.getLevelIndex();
+                        this._initFromLevel(levelData);
+                    } else {
+                        LevelManager.clear();
+                        this.startNewRound();
+                    }
+                });
             });
         });
 
@@ -216,6 +218,16 @@ export class GameScene extends Component {
             };
             // 重试
             this.uiManager.uiFail.onBtnRetryClick = () => {
+                this.uiManager.closeAllOverlays();
+                this.uiManager.showPlayingHUD();
+                if (GameScene.mode === GameMode.Ladder) {
+                    // 天梯模式失败：重新从第一关开始
+                    this.level = 1;
+                    this.uiManager.setLevel(1);
+                    LevelManager.clear();
+                    this.startNewRound();
+                    return;
+                }
                 const levelData = LevelManager.getCurrent();
                 if (levelData) {
                     this._initFromLevel(levelData);
@@ -517,7 +529,9 @@ export class GameScene extends Component {
                 spawnedCoins.push(node ?? this.gameLogic.spawnCoinAt(this.coinPrefab, item.x, item.y));
             }
         }
-        if (this._levelIndex === 0 && spawnedCoins.length > 0) {
+        if (this._levelIndex === 0 && spawnedCoins.length > 0
+            && GameScene.mode === GameMode.Ladder) {
+            // Ladder only: keep the legacy freeze demo coin.
             this.gameLogic.attachCoinBehavior(spawnedCoins[spawnedCoins.length - 1], 'FreezeBehavior');
         }
 
@@ -527,6 +541,7 @@ export class GameScene extends Component {
         // 更新 UI 关卡显示 + 恢复游玩 HUD（避免 Win/Fail 残留）
         this.uiManager.setLevel(this._levelIndex + 1);
         this.uiManager.setScore(0);
+        this.onGameStart();
 
         // Campaign only: guided tutorial on stages 1–4 (+ block/mud intro). Never in Ladder.
         if (GameScene.mode === GameMode.Level && this._levelIndex >= 0 && this.tutorialManager
@@ -552,6 +567,7 @@ export class GameScene extends Component {
         // Scratch solo pack has no next file level
         if (LevelManager.isScratchPack()) {
             this.gameLogic.enabled = false;
+            this.uiManager.prepareEndGameOverlay('win');
             this.uiManager.uiWin.show(this.level, this.gameLogic.score, 0);
             this.uiManager.uiWin.setNextEnabled(false);
             return;
