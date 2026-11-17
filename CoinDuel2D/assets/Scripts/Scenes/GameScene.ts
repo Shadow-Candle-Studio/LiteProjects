@@ -171,7 +171,8 @@ export class GameScene extends Component {
         if (this.uiManager.uiWin) {
             // 下一关
             this.uiManager.uiWin.onBtnNextClick = () => {
-                this.uiManager.uiWin.close();
+                this.uiManager.closeAllOverlays();
+                this.uiManager.showPlayingHUD();
                 if (GameScene.mode === GameMode.Level) {
                     // 关卡模式：加载下一关
                     this._loadNextLevel();
@@ -182,22 +183,26 @@ export class GameScene extends Component {
                     this.startNewRound();
                 }
             };
-            // 返回首页
+            // 返回：关卡模式→选关；天梯→主菜单（与 Fail 一致）
             this.uiManager.uiWin.onBtnHomeClick = () => {
-                this.uiManager.uiWin.close();
-                LevelManager.clear();
-                director.loadScene('levels');
+                this.uiManager.closeAllOverlays();
+                if (GameScene.mode === GameMode.Ladder) {
+                    director.loadScene('main');
+                } else {
+                    LevelManager.clear();
+                    director.loadScene('levels');
+                }
             };
         }
 
         // 绑定 Fail 面板回调
         if (this.uiManager.uiFail) {
-            // 返回关卡选择
+            // 返回关卡选择 / 主菜单
             this.uiManager.uiFail.onBtnHomeClick = () => {
-                this.uiManager.uiFail.close();
+                this.uiManager.closeAllOverlays();
                 if (GameScene.mode === GameMode.Ladder) {
                     director.loadScene('main');
-                }else if (GameScene.mode === GameMode.Level){
+                } else {
                     LevelManager.clear();
                     director.loadScene('levels');
                 }
@@ -251,14 +256,16 @@ export class GameScene extends Component {
         // }
 
         this.gameLogic.onGameOver = (duration: number) => {
-            this.uiManager.uiLevelPanel.active = false;
-            this.uiManager.uiScorePanel.active = false;
-            this.uiManager.buttonBack.node.active = false;
-
+            this.uiManager.prepareEndGameOverlay('fail');
             const uiFail = this.uiManager.uiFail;
             const currentLevel = this._levelIndex >= 0 ? this._levelIndex + 1 : this.level;
             if (uiFail) {
-                uiFail.show(currentLevel, this.gameLogic.score, duration);
+                uiFail.show(
+                    currentLevel,
+                    this.gameLogic.score,
+                    duration,
+                    I18n.t(GameScene.mode === GameMode.Ladder ? 'ladder_restart' : 'fail_retry_level'),
+                );
             }
         };
 
@@ -270,17 +277,29 @@ export class GameScene extends Component {
         };
 
         this.gameLogic.onGameWin = (duration: number) => {
-            // 关卡模式：标记当前关卡 Passed，自动解锁下一关
+            // 关卡模式：记录星级并解锁下一关
             if (GameScene.mode == GameMode.Level && this._levelIndex >= 0) {
-                LevelManager.markLevelPassed(this._levelIndex);
+                const stageId = this._levelIndex + 1;
+                const earned = CampaignProgress.recordClear(stageId, this.gameLogic.score);
+                if (!LevelManager.isScratchPack()) {
+                    CampaignProgress.applyToLevelManager();
+                }
+                console.log('[Campaign] stage', stageId, 'cleared, stars=', earned);
             }
+            this.uiManager.prepareEndGameOverlay('win');
             const uiWin = this.uiManager.uiWin;
             const currentLevel = this._levelIndex >= 0 ? this._levelIndex + 1 : this.level;
             if (uiWin) {
                 uiWin.show(currentLevel, this.gameLogic.score, duration);
-                // 最后一关时禁用下一关按钮
-                const isLastLevel = this._levelIndex >= 0 && this._levelIndex >= this._levelFiles.length - 1;
-                uiWin.setNextEnabled(!isLastLevel);
+                // Ladder: always allow next round. Campaign: only when another stage exists.
+                // Scratch solo pack: no next stage.
+                if (GameScene.mode === GameMode.Ladder) {
+                    uiWin.setNextEnabled(true);
+                } else if (LevelManager.isScratchPack()) {
+                    uiWin.setNextEnabled(false);
+                } else {
+                    uiWin.setNextEnabled(LevelManager.hasNextLevel());
+                }
             }
         };
 
@@ -317,9 +336,10 @@ export class GameScene extends Component {
     }
 
     private onGameStart(){
-        this.uiManager.uiLevelPanel.active = true;
-        this.uiManager.uiScorePanel.active = true;
-        this.uiManager.buttonBack.node.active = true;
+        this.uiManager.showPlayingHUD();
+        if (this.tutorialManager) {
+            this.tutorialManager.gameOver = false;
+        }
     }
 
     // 开始新的一局（天梯模式）
@@ -400,11 +420,19 @@ export class GameScene extends Component {
             this._applyCoinConfig(this.coinId);
         }
         this.onGameStart();
+        // Ladder: never show beginner tutorial / skip button
+        this.tutorialManager?.skipTutorial();
     }
 
-    /** 构建当前关卡的统一教程步骤：静态配置 + 动态道具介绍 */
+    /** 构建当前关卡的统一教程步骤：数据驱动（CampaignConfig）+ 动态道具介绍 */
     private _buildTutorialSteps(data: LevelData): TutorialStep[] {
         const steps: TutorialStep[] = [];
+
+        const stage = getStage(this._levelIndex + 1);
+        if (!stage?.tutorial) return steps;
+
+        // Goal banner first: "这里要做什么"
+        steps.push({ type: 'intro', hintKey: stage.tutorial.introKey, x: 0, y: 0, radius: 0 });
 
         // 动态生成 block/mud 介绍步骤（从关卡数据提取位置和大小）
         for (const item of data.coins) {
@@ -415,10 +443,15 @@ export class GameScene extends Component {
             }
         }
 
-        // 追加静态配置的拖拽步骤
-        const staticSteps = TUTORIAL_CONFIG[this._levelIndex];
-        if (staticSteps) {
-            steps.push(...staticSteps);
+        // 数据驱动拖拽步骤
+        for (const drag of stage.tutorial.drags) {
+            steps.push({
+                type: 'drag',
+                hintKey: drag.hintKey,
+                sourceCoinIndex: drag.source,
+                targetCoinIndex: drag.target,
+                isFinal: drag.final === true,
+            });
         }
 
         return steps;
@@ -491,12 +524,14 @@ export class GameScene extends Component {
         this.gameLogic.beginLevel();
         this.gameLogic.waitingPlayerOperation();
 
-        // 更新 UI 关卡显示
+        // 更新 UI 关卡显示 + 恢复游玩 HUD（避免 Win/Fail 残留）
         this.uiManager.setLevel(this._levelIndex + 1);
         this.uiManager.setScore(0);
 
-        // 闯关模式 → 统一教程入口（intro 和 drag 步骤可混排）
-        if (this._levelIndex >= 0 && this.tutorialManager) {
+        // Campaign only: guided tutorial on stages 1–4 (+ block/mud intro). Never in Ladder.
+        if (GameScene.mode === GameMode.Level && this._levelIndex >= 0 && this.tutorialManager
+            && isTutorialStage(this._levelIndex + 1)) {
+            this.tutorialManager.skipTutorial();
             this.tutorialManager.gameLogic = this.gameLogic;
             this.tutorialManager.uiManager = this.uiManager;
             this.gameLogic.tutorialManager = this.tutorialManager;
@@ -524,20 +559,32 @@ export class GameScene extends Component {
         this._levelIndex++;
         if (this._levelIndex < this._levelFiles.length) {
             const levelFile = this._levelFiles[this._levelIndex];
-            const path = 'levels/' + levelFile.replace('.json', '');
-            DataProvider.loadJson(path, (err, data) => {
-                if (err) {
-                    console.error(`Failed to load next level ${path}:`, err);
-                    return;
-                }
-                const levelData = data as LevelData;
+            const stageId = this._levelIndex + 1;
+
+            const go = (levelData: LevelData) => {
                 LevelManager.setCurrent(levelData);
                 this._initFromLevel(levelData);
+            };
+
+            // CDN-first so Next Stage picks up editor saves without a rebuild.
+            CdnLevelSource.load(stageId, (remote) => {
+                if (remote) {
+                    go(remote);
+                    return;
+                }
+                const path = LevelManager.toDataPath(levelFile);
+                DataProvider.loadJson(path, (err, data) => {
+                    if (err) {
+                        console.error(`Failed to load next level ${path}:`, err);
+                        return;
+                    }
+                    go(data as LevelData);
+                });
             });
         } else {
             // 最后一关通关，显示最终胜利
             this.gameLogic.enabled = false;
-            //this.uiManager.uiwin.show(this._levelFiles.length, this.gameLogic.score, 0);
+            this.uiManager.prepareEndGameOverlay('win');
             this.uiManager.uiWin.show(this.level, this.gameLogic.score, 0);
             this.uiManager.uiWin.setNextEnabled(false);
         }

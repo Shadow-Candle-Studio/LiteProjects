@@ -2,47 +2,311 @@
 <html>
 <head>
   <meta charset="utf-8">
-
-  <title>Cocos Creator | <%= projectName %></title>
-
-  <!--http://www.html5rocks.com/en/mobile/mobifying/-->
+  <title>CoinDuel2D</title>
   <meta name="viewport"
         content="width=device-width,user-scalable=no,initial-scale=1,minimum-scale=1,maximum-scale=1,minimal-ui=true"/>
-
-  <!--https://developer.apple.com/library/safari/documentation/AppleApplications/Reference/SafariHTMLRef/Articles/MetaTags.html-->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="format-detection" content="telephone=no">
-
-  <!-- force webkit on 360 -->
   <meta name="renderer" content="webkit"/>
   <meta name="force-rendering" content="webkit"/>
-  <!-- force edge on IE -->
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
-  <meta name="msapplication-tap-highlight" content="no">
-
-  <!-- force full screen on some browser -->
+  <meta name="msapplication-tap-highlight" content="no"/>
   <meta name="full-screen" content="yes"/>
   <meta name="x5-fullscreen" content="true"/>
   <meta name="360-fullscreen" content="true"/>
-
-  <!--fix fireball/issues/3568 -->
-  <!--<meta name="browsermode" content="application">-->
-  <meta name="x5-page-mode" content="app">
-
-  <!--<link rel="apple-touch-icon" href=".png" />-->
-  <!--<link rel="apple-touch-icon-precomposed" href=".png" />-->
-
-  <link rel="stylesheet" type="text/css" href="<%= cssUrl %>"/>
-
+  <meta name="x5-page-mode" content="app"/>
+  <link rel="stylesheet" type="text/css" href="style.css"/>
+  <style>
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      background: #111; overflow: hidden;
+      font-family: Segoe UI, Roboto, sans-serif;
+    }
+    #GameDiv, #Cocos3dGameContainer, #GameCanvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+      min-width: 320px;
+      min-height: 240px;
+    }
+    #bootOverlay {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+      background: #141414; color: #eee; gap: 14px; text-align: center;
+      padding-bottom: 12vh;
+    }
+    #bootOverlay .title {
+      position: absolute; top: 18vh; left: 0; right: 0;
+      font-size: 28px; font-weight: 800; letter-spacing: 0.04em;
+    }
+    #bootOverlay button {
+      appearance: none; border: 0; border-radius: 999px;
+      padding: 14px 28px; font-size: 18px; font-weight: 700;
+      background: #5ec8ff; color: #102030; cursor: pointer;
+    }
+    #bootErr { color: #ff8a8a; max-width: 90%; font-size: 12px; white-space: pre-wrap; display: none; }
+  </style>
 </head>
 <body>
-  <div id="GameDiv" cc_exact_fit_screen="true">
-      <div id="Cocos3dGameContainer">
-        <canvas id="GameCanvas" oncontextmenu="event.preventDefault()" tabindex="99"></canvas>
-      </div>
+  <div id="bootOverlay">
+    <div class="title">CoinDuel2D</div>
+    <div id="bootMsg">Loading…</div>
+    <button id="bootBtn" type="button" style="display:none">Retry</button>
+    <div id="bootErr"></div>
+  </div>
+
+  <!-- itch iframe: exact-fit often stays 0x0, so force a minimum size -->
+  <div id="GameDiv" cc_exact_fit_screen="false" style="width:100%;height:100%;min-width:320px;min-height:240px;">
+    <div id="Cocos3dGameContainer" style="width:100%;height:100%;min-width:320px;min-height:240px;">
+      <canvas id="GameCanvas" width="1280" height="720" oncontextmenu="event.preventDefault()" tabindex="99"></canvas>
     </div>
-  <%- include(cocosTemplate, {}) %>
+  </div>
+
+  <script src="src/polyfills.bundle.js" charset="utf-8"></script>
+  <script src="src/system.bundle.js" charset="utf-8"></script>
+  <script>
+    // Cocos measures this canvas during game.init(). If styles have not been
+    // applied yet the element can measure 0x0, and init() then never settles —
+    // the classic "stuck on Engine init" inside an itch iframe.
+    (function () {
+      try {
+        var c = document.getElementById('GameCanvas');
+        var host = document.getElementById('GameDiv') || document.body;
+        var r = host.getBoundingClientRect();
+        var w = Math.max(r.width || 0, window.innerWidth || 0, 640) | 0;
+        var h = Math.max(r.height || 0, window.innerHeight || 0, 360) | 0;
+        c.setAttribute('width', w);
+        c.setAttribute('height', h);
+        c.style.width = w + 'px';
+        c.style.height = h + 'px';
+      } catch (_) {}
+    })();
+  </script>
+  <script>
+    // The stock build ships src/import-map.json with
+    //     { "imports": { "cc": "./../cocos-js/cc.js" } }
+    // That ".." escapes the game folder. itch.io serves every upload from a
+    // nested path, so the relative form 404s and SystemJS rejects with
+    // "Error: cc". Emit an absolute mapping computed from the document base,
+    // which is correct at any depth.
+    (function () {
+      var abs;
+      try {
+        abs = new URL('cocos-js/cc.js', document.baseURI).href;
+      } catch (e) {
+        abs = './cocos-js/cc.js';
+      }
+      window.__ccImportUrl = abs;
+      document.write(
+        '<script type="systemjs-importmap">' +
+        JSON.stringify({ imports: { cc: abs } }).replace(/</g, '\\u003c') +
+        '<\/script>'
+      );
+    })();
+  </script>
+  <script>
+    (function () {
+      var overlay = document.getElementById('bootOverlay');
+      var msg = document.getElementById('bootMsg');
+      var errBox = document.getElementById('bootErr');
+      var btn = document.getElementById('bootBtn');
+      var canvas = document.getElementById('GameCanvas');
+      var started = false;
+
+      /** Mirror boot state to the parent frame (works even when the iframe is
+       *  cross-origin, e.g. itch's html.itch.zone embed). */
+      function report(t) {
+        try { console.log('[boot]', t); } catch (_) {}
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ __coinduelBoot: String(t) }, '*');
+          }
+        } catch (_) {}
+      }
+
+      function setMsg(t) {
+        msg.textContent = t;
+        report(t);
+      }
+
+      function ensureCanvasSize() {
+        try {
+          var host = document.getElementById('GameDiv') || document.body;
+          var rect = host.getBoundingClientRect();
+          // Inside a small itch iframe the host can measure 0, and Cocos then
+          // never finishes game.init(). Prefer any non-zero measurement and only
+          // fall back to a fixed size as a last resort.
+          var w = Math.max(rect.width || 0, window.innerWidth || 0, 1) | 0;
+          var h = Math.max(rect.height || 0, window.innerHeight || 0, 1) | 0;
+          if (w < 32) w = 640;
+          if (h < 32) h = 360;
+          canvas.style.width = w + 'px';
+          canvas.style.height = h + 'px';
+          canvas.width = w;
+          canvas.height = h;
+          if (host.style) {
+            host.style.minWidth = w + 'px';
+            host.style.minHeight = h + 'px';
+          }
+        } catch (_) {}
+      }
+
+      function showErr(e) {
+        var text = (e && (e.stack || e.message || String(e))) || 'Unknown boot error';
+        report('FAIL ' + text);
+        errBox.style.display = 'block';
+        errBox.textContent = text;
+        setMsg('Failed to start · build 2026-11-09u');
+        btn.style.display = 'inline-block';
+        btn.textContent = 'Retry';
+        overlay.style.display = 'flex';
+        started = false;
+      }
+
+      function hideOverlay() {
+        try {
+          overlay.style.setProperty('display', 'none', 'important');
+          overlay.style.visibility = 'hidden';
+          overlay.style.pointerEvents = 'none';
+          if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        } catch (_) {
+          overlay.style.display = 'none';
+        }
+        // The Play button can overlap the menu's 闯关 button, so the same click
+        // that dismissed the overlay could reach the canvas. Cover it briefly.
+        var shield = document.createElement('div');
+        shield.id = 'inputShield';
+        shield.style.cssText = 'position:fixed;inset:0;z-index:9998;background:transparent;';
+        var swallow = function (e) { e.stopPropagation(); e.preventDefault(); };
+        var types = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'click',
+          'touchstart', 'touchend', 'touchmove', 'wheel'];
+        types.forEach(function (t) {
+          shield.addEventListener(t, swallow, { capture: true, passive: false });
+        });
+        document.body.appendChild(shield);
+        setTimeout(function () {
+          if (shield.parentNode) shield.parentNode.removeChild(shield);
+        }, 700);
+        report('overlay removed');
+      }
+
+      window.addEventListener('error', function (e) {
+        report('window.error ' + (e.message || ''));
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        report('unhandled ' + ((e.reason && (e.reason.message || e.reason)) || ''));
+      });
+
+      /** Poll until a real scene is live, then reveal the game. */
+      function watchScene(engine, tries) {
+        var scene = null;
+        var inited = false;
+        try {
+          // Resolve the director through the game instance: the module handle
+          // returned by System.import('cc') may not expose the live director.
+          var game = engine.game || (engine.default && engine.default.game);
+          inited = !!(game && game._inited);
+          var director = (game && game.director) || engine.director;
+          scene = director && director.getScene ? director.getScene() : null;
+        } catch (_) {}
+        if (scene && scene.children && scene.children.length > 0) {
+          // The scene Canvas uses a full-stretch Widget, so the engine's design
+          // resolution is ignored and the world grows taller than 1280x720 in a
+          // portrait iframe. Re-apply the design size with SHOW_ALL so the whole
+          // menu always fits instead of being pushed off screen.
+          try {
+            if (engine.view && engine.view.setDesignResolutionSize) {
+              engine.view.setDesignResolutionSize(1280, 720, 2 /* SHOW_ALL */);
+            }
+          } catch (_) {}
+          setMsg('Ready: ' + (scene.name || 'scene'));
+          hideOverlay();
+          return;
+        }
+        if (tries > 200) {
+          showErr(new Error(
+            'Main scene failed to load (engine inited=' + inited + '). '
+            + 'Try "Open in new window" on itch.'
+          ));
+          return;
+        }
+        if (tries === 13) {
+          // ~2s and still nothing attached: ask for the launch scene once.
+          try {
+            var g = engine.game || (engine.default && engine.default.game);
+            var dir = (g && g.director) || engine.director;
+            if (g && g._inited && dir) dir.loadScene('main');
+          } catch (_) {}
+        }
+        setTimeout(function () { watchScene(engine, tries + 1); }, 150);
+      }
+
+      function boot() {
+        if (started) return;
+        started = true;
+        setMsg('Loading… · build 2026-11-09u');
+        btn.style.display = 'none';
+        errBox.style.display = 'none';
+        ensureCanvasSize();
+
+        try {
+          if (window.System && System.importmap && window.__ccImportUrl) {
+            System.importmap({ imports: { cc: window.__ccImportUrl } });
+          }
+          report('cc -> ' + window.__ccImportUrl);
+        } catch (e) {
+          report('importmap override failed: ' + e.message);
+        }
+
+        System.import('./application.js').then(function (mod) {
+          setMsg('Engine init… · build 2026-11-09u');
+          var application = new mod.Application();
+          return System.import('cc').then(function (engine) {
+            application.init(engine);
+            ensureCanvasSize();
+            report('engine ready');
+
+            // Never await application.start(): inside itch's iframe the canvas
+            // can start 0x0 and that promise may never settle.
+            try {
+              application.start().then(function () {
+                report('application.start resolved');
+                ensureCanvasSize();
+              }).catch(function (e) {
+                report('application.start rejected: ' + e);
+              });
+            } catch (e) {
+              report('application.start threw: ' + e);
+            }
+
+            watchScene(engine, 0);
+          });
+        }).catch(showErr);
+      }
+
+      btn.addEventListener('click', boot);
+
+      // Auto-boot. itch.io always embeds the game in a cross-origin iframe, so
+      // a "Play" gate here is just an extra click that users read as the game
+      // failing to load. Start immediately; only show a Retry button on error.
+      function autoBoot() {
+        try { boot(); } catch (e) { showErr(e); }
+      }
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        setTimeout(autoBoot, 0);
+      } else {
+        window.addEventListener('DOMContentLoaded', function () { setTimeout(autoBoot, 0); });
+      }
+      // Safety net: if the overlay is still on screen after 20s, surface Retry.
+      setTimeout(function () {
+        if (overlay.parentNode) showErr(new Error('Boot timed out after 20s.'));
+      }, 20000);
+
+      window.addEventListener('resize', ensureCanvasSize);
+      ensureCanvasSize();
+    })();
+  </script>
 </body>
 </html>

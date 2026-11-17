@@ -102,6 +102,16 @@ export class GameLogic extends Component {
     private get currentPhase(): GamePhase {
         return this._currentPhase;
     }
+
+    /** 供 CoinController 判断是否处于可操作阶段（教程自救用）。 */
+    public get isWaitingPlayer(): boolean {
+        return this._currentPhase === GamePhase.WAITING_PLAYER;
+    }
+
+    /** 是否已指定下一發唯一可操作的硬幣（鏡頭還原期間）。 */
+    public get hasPendingShooter(): boolean {
+        return !!this._pendingLockedCoin || !!this._lockedCoin;
+    }
     public coinHitCount: number = 0;
     public coinFallCount: number = 0;
     private _activeShotCoin: Node | null = null;
@@ -163,6 +173,12 @@ export class GameLogic extends Component {
     // ── 教程管理器 ──
     /** 教程管理器引用（由 GameScene 注入，可为 null） */
     public tutorialManager: TutorialManager | null = null;
+
+    /**
+     * 天梯模式：任何失敗的擊打（空揮 / 掉落 / 撞多枚）在物理停止後
+     * 直接結算失敗面板，不進入點擊倒流流程。
+     */
+    public failImmediately: boolean = false;
 
     /** 教程模式下是否允许拖动这枚硬币 */
     public canLaunchCoin(coin: Node): boolean {
@@ -858,8 +874,15 @@ export class GameLogic extends Component {
         // 1. 持续监测坠落（在任意状态下均可坠落）
         this.checkCoinFalls();
 
-        // 2. 桌面边界反弹（含缺口侧边）
+        this._mod?.tick(deltaTime);
+
+        // 1. 桌面边界反弹（含缺口侧边）
+        // 必须先夹回墙内再判定坠落：墙本身没有物理碰撞体，全靠这里做位置约束。
+        // 顺序反了的话，某一帧物理冲过墙外沿就会被误判成「掉进缺口」。
         this._applyWallBounce();
+
+        // 2. 持续监测坠落（在任意状态下均可坠落）
+        this.checkCoinFalls();
 
         // 2.5 泥潭摩擦：硬币中心在泥潭区域内时提高阻尼
         this._applyMudFriction();
@@ -877,13 +900,16 @@ export class GameLogic extends Component {
 
         // 5. 空闲提示：由 TutorialManager 处理
 
-        // 5. 摄像机还原后，启用待命的下一次击打
+        // 5. 摄像机还原后，只启用被击中的那一枚硬币作为下一发起手
         if (this._pendingLockedCoin && this.hitEffectManager?.isCameraAtRest) {
-            console.log('[Game] enabling pending locked coin:', this._pendingLockedCoin.name);
-            const ctrl = this._pendingLockedCoin.getComponent(CoinController);
-            if (ctrl) {
-                ctrl.allowedOperation = true;
-                ctrl.showIndicator(true);
+            const next = this._pendingLockedCoin;
+            console.log('[Game] enabling pending locked coin:', next.name);
+            for (const coin of this.coinGroup.children) {
+                const ctrl = coin.getComponent(CoinController);
+                if (!ctrl) continue;
+                const allowed = coin === next;
+                ctrl.allowedOperation = allowed;
+                ctrl.showIndicator(allowed);
             }
             this._run?.attachAura(this.coinGroup, this._pendingLockedCoin);
             this._captureShot();
@@ -931,7 +957,12 @@ export class GameLogic extends Component {
 
     // 检查所有硬币是否都停下了
     private isAllCoinsStopped(): boolean {
+        // 炸彈洗牌 / 連鎖等待中：即使速度為 0 也不能結算
+        if (this._shufflePending || this._bombChainHold) return false;
         for (let coin of this.coinGroup.children) {
+            // 掉落后被隐藏的硬币刚体会被禁用，速度永远不会再衰减；
+            // 如果继续参与判定，游戏会永远停在“未静止”而无法操作。
+            if (!coin.active) continue;
             let rb = coin.getComponent(RigidBody2D);
             if (rb && rb.linearVelocity.length() > this.speedThreshold) {
                 return false; // 只要有一个还在动，就不算静止
@@ -951,6 +982,12 @@ export class GameLogic extends Component {
         for (const coin of this.coinGroup.children) {
             const rb = coin.getComponent(RigidBody2D);
             if (!rb) continue;
+            // 掉落后已隐藏的硬币不再参与墙壁约束
+            if (!coin.active) continue;
+
+            // 正在被打飞出场外的硬币由特效接管位置，别把它拉回桌内。
+            const knockCtrl = coin.getComponent(CoinController);
+            if (knockCtrl && knockCtrl.isKnockingOut) continue;
 
             const pos = coin.position;
             const vel = rb.linearVelocity;
@@ -958,39 +995,50 @@ export class GameLogic extends Component {
             let newY = pos.y;
             let newVx = vel.x;
             let newVy = vel.y;
+            /** 速度被反弹（播放音效 / 通知 mod） */
             let bounced = false;
+            /** 只是位置被夹回墙内：硬币已越界但速度朝内，不该每次都没收速度 */
+            let clamped = false;
 
             // 检查硬币当前是否处于某面墙的缺口范围内
             const inGap = (wallSide: number, alongPos: number): boolean =>
                 this.gaps.some(g => g.side === wallSide && Math.abs(alongPos - g.center) < hg);
 
-            // 右墙反弹（缺口处跳过）
-            if (pos.x > halfW && vel.x > 0) {
+            // 注意：墙本身只有 Sprite，没有物理碰撞体，位置约束全靠这里完成。
+            // 所以位置夹回必须是「无条件的」——只要越界就拉回，不能等速度朝外才处理。
+            // 否则硬币被别的硬币挤到墙外、速度又被解算器改成朝内时，
+            // 它会一直留在墙外（墙上看不到缺口），直到被判成掉落。
+            //
+            // 例外：已经穿过缺口、飞离桌面外沿的硬币不能再被拉回来（那等于反悔一次合法掉落）。
+            // 封闭桌面（没有缺口）则不受此限，任何距离都夹回墙内。
+            const closedTable = this.gaps.length === 0;
+            const withinWallBand = (v: number) => Math.abs(v) <= hw + this.coinRadius;
+
+            if (pos.x > halfW && (closedTable || withinWallBand(pos.x))) {
                 if (!inGap(1, pos.y)) {
                     newX = halfW;
-                    newVx = -vel.x * 0.7;
-                    bounced = true;
+                    clamped = true;
+                    if (vel.x > 0) { newVx = -vel.x * 0.7; bounced = true; }
                 }
-            } else if (pos.x < -halfW && vel.x < 0) {
+            } else if (pos.x < -halfW && (closedTable || withinWallBand(pos.x))) {
                 if (!inGap(3, pos.y)) {
                     newX = -halfW;
-                    newVx = -vel.x * 0.7;
-                    bounced = true;
+                    clamped = true;
+                    if (vel.x < 0) { newVx = -vel.x * 0.7; bounced = true; }
                 }
             }
 
-            // 上墙反弹（缺口处跳过）
-            if (pos.y > halfH && vel.y > 0) {
+            if (pos.y > halfH && (closedTable || withinWallBand(pos.y))) {
                 if (!inGap(0, pos.x)) {
                     newY = halfH;
-                    newVy = -vel.y * 0.7;
-                    bounced = true;
+                    clamped = true;
+                    if (vel.y > 0) { newVy = -vel.y * 0.7; bounced = true; }
                 }
-            } else if (pos.y < -halfH && vel.y < 0) {
+            } else if (pos.y < -halfH && (closedTable || withinWallBand(pos.y))) {
                 if (!inGap(2, pos.x)) {
                     newY = -halfH;
-                    newVy = -vel.y * 0.7;
-                    bounced = true;
+                    clamped = true;
+                    if (vel.y < 0) { newVy = -vel.y * 0.7; bounced = true; }
                 }
             }
 
@@ -1000,15 +1048,19 @@ export class GameLogic extends Component {
                 if (this._checkGapSideBounce(pos, vel, hw, hh, hg, out)) {
                     newX = out.x; newY = out.y;
                     newVx = out.vx; newVy = out.vy;
+                    clamped = true;
                     bounced = true;
                 }
+            }
+
+            if (clamped) {
+                coin.setPosition(newX, newY, 0);
+                rb.linearVelocity = new Vec2(newVx, newVy);
             }
 
             if (bounced) {
                 // 撞到墙 → 恢复速度
                 this._restoreSpeed();
-                coin.setPosition(newX, newY, 0);
-                rb.linearVelocity = new Vec2(newVx, newVy);
                 // 硬币与墙碰撞音效
                 SoundManager.instance?.playCollisionWall();
                 this._mod?.onCushionBounce({
@@ -1068,15 +1120,33 @@ export class GameLogic extends Component {
         const hw = this.tableWidth / 2;
         const hh = this.tableHeight / 2;
 
+        // 桌上没有缺口就没有可以掉下去的洞：这种情况下硬币绝不应该被判为掉落。
+        // 新手教程的关卡（1~4 关）都是 gaps=[] 的封闭桌面，
+        // 以前这里只要硬币越过桌面外沿就判定掉落，于是被挤到墙外的硬币
+        // 会报「硬币掉出桌面了」，而玩家看到的墙上根本没有洞。
+        const canFall = this.gaps.length > 0;
+
         for (let i = this.coinGroup.children.length - 1; i >= 0; i--) {
             const coin = this.coinGroup.children[i];
-            const pos = coin.position;
+
+            // 只有真正能掉落的实体才参与判定。coinGroup 里还挂着
+            // RunAura / DragArrow / WorldStats 等装饰节点，它们没有刚体，
+            // 不该被当成硬币计数或算成掉落。
+            if (!coin.getComponent(RigidBody2D)) continue;
+
+            // 已因掉落而隐藏的硬币不再重复判定
+            if (!coin.active) continue;
 
             // 正在被打飞出界的硬币不判为掉落（由打飞特效自行处理）
             const ctrl = coin.getComponent(CoinController);
             if (ctrl && ctrl.isKnockingOut) continue;
 
-            // 硬币中点离开桌面范围 → 掉落
+            if (!canFall) continue;
+
+            // 硬币中点越过桌面外沿 → 掉落。
+            // _applyWallBounce 已在前面把「撞墙但没缺口」的硬币夹回墙内，
+            // 所以走到这里还在墙外的，一定是真的从缺口飞出去了。
+            const pos = coin.position;
             if (Math.abs(pos.x) > hw || Math.abs(pos.y) > hh) {
                 this.onCoinFall(coin);
             }
@@ -1125,33 +1195,85 @@ export class GameLogic extends Component {
     /** 查找已激活（被撞击过）的炸弹硬币 */
     private _findActivatedBombCoin(): Node | null {
         for (const coin of this._bombCoins) {
-            if (!coin || !coin.isValid) continue;
+            if (!coin || !coin.isValid || !coin.active) continue;
             const marker = coin.getComponent(BombCoinMarker);
             if (marker && marker.activated) return coin;
         }
         return null;
     }
 
-    /** 触发炸弹硬币爆炸：在硬币位置执行与道具炸弹一致的爆炸效果 */
+    /** 触发炸弹硬币爆炸：动画覆盖全桌面，并在遮盖期间完成硬币洗牌 */
     public triggerBombCoinExplosion(bombCoin: Node): void {
         const pos = bombCoin.worldPosition;
 
-        // 在炸弹硬币位置实例化爆炸动画（仅视觉，禁用 Bomb 组件避免重复爆炸）
+        // 連鎖：把場上其餘炸彈標記為待引爆。
+        // 爆炸已改為洗牌、不再靠衝擊推撞，必須主動標記才能保持連環爆炸。
+        for (const other of this._bombCoins) {
+            if (!other || !other.isValid || other === bombCoin || !other.active) continue;
+            const marker = other.getComponent(BombCoinMarker);
+            if (marker) marker.activated = true;
+        }
+        const hasNextBomb = this._bombCoins.some((coin) =>
+            !!coin && coin.isValid && coin !== bombCoin && coin.active
+            && !!coin.getComponent(BombCoinMarker)?.activated,
+        );
+
+        const token = ++this._shuffleToken;
+        let chainReleased = false;
+        // 爆炸動畫播完後再等 0.2 秒，才允許下一顆炸彈爆炸
+        const releaseChain = () => {
+            if (chainReleased) return;
+            chainReleased = true;
+            this.scheduleOnce(() => {
+                if (token === this._shuffleToken) this._bombChainHold = false;
+            }, GameLogic._BOMB_CHAIN_DELAY);
+        };
+
+        // 爆炸动画以炸弹为中心，半径动态计算到最远桌角，保证覆盖整个桌面
         if (this.explosionPrefab) {
             const fxNode = instantiate(this.explosionPrefab);
             this.addChildToWorld(fxNode);
-            fxNode.setWorldPosition(pos);
-            const bombComp = fxNode.getComponent(Bomb);
-            if (bombComp) {
-                bombComp.enabled = false; // 禁用逻辑，仅播放动画
-                // 手动播放动画，动画结束后自动销毁节点
-                const anim = fxNode.getComponent(AnimationComponent);
-                if (anim) {
-                    anim.on(AnimationComponent.EventType.FINISHED, () => {
-                        if (fxNode.isValid) fxNode.destroy();
-                    });
-                    anim.play();
+
+            const groupWorld = this.coinGroup?.worldPosition;
+            const localX = pos.x - (groupWorld?.x ?? 0);
+            const localY = pos.y - (groupWorld?.y ?? 0);
+            const halfW = this.tableWidth / 2;
+            const halfH = this.tableHeight / 2;
+
+            // 从炸弹位置到四个桌角的最远距离
+            let blastRadius = 0;
+            for (const cornerX of [-halfW, halfW]) {
+                for (const cornerY of [-halfH, halfH]) {
+                    blastRadius = Math.max(
+                        blastRadius,
+                        Math.hypot(cornerX - localX, cornerY - localY),
+                    );
                 }
+            }
+            if (blastRadius <= 0) {
+                blastRadius = Math.hypot(halfW, halfH);
+            }
+
+            // Explosion.prefab 基础 128px，动画环最大放大 4 倍；
+            // 圆环最大半径 = 128 * 4 * scale / 2。
+            const baseSize = 128;
+            const peakChildScale = 4;
+            const coverScale = (blastRadius * 1.15 * 2) / (baseSize * peakChildScale);
+
+            fxNode.setScale(coverScale, coverScale, 1);
+            // 爆炸中心保持在炸弹位置
+            fxNode.setWorldPosition(pos);
+
+            const bombComp = fxNode.getComponent(Bomb);
+            if (bombComp) bombComp.enabled = false; // 禁用逻辑，仅播放动画
+
+            const anim = fxNode.getComponent(AnimationComponent);
+            if (anim) {
+                anim.on(AnimationComponent.EventType.FINISHED, () => {
+                    if (fxNode.isValid) fxNode.destroy();
+                    releaseChain();
+                });
+                anim.play();
             }
         }
 
@@ -1191,7 +1313,8 @@ export class GameLogic extends Component {
         // ── 教程模式 ──
         if (this.tutorialManager?.isActive()) {
             if (!this.tutorialManager.onTurnSettled()) {
-                return; // 教程已处理失败（重置位置）
+                // 教程已处理失败：位置已还原，操作权由 TutorialManager 还回（waitingPlayerOperation）
+                return;
             }
             // 教程成功 → 播放打飞特效，跳过游戏结束/胜利判定
             this._awardSuccess();
@@ -1207,8 +1330,14 @@ export class GameLogic extends Component {
                 }
 
                 // 锁定被撞硬币为下一发起手子弹
-                this._lockedCoin = this._lastHitCoin;
-                this._continueWithLockedCoin();
+                if (this._lastHitCoin) {
+                    this._lockedCoin = this._lastHitCoin;
+                    this._continueWithLockedCoin();
+                } else {
+                    // 炸彈連鎖等沒有「被撞中的硬幣」：回到可自由選擇的等待狀態
+                    console.log('[Game] no hit coin after explosion; unlocking all coins');
+                    this.waitingPlayerOperation();
+                }
             };
 
             const shotCoin = this._activeShotCoin;
@@ -1262,7 +1391,7 @@ export class GameLogic extends Component {
 
                     let coinCount = 0;
                     for (const child of this.coinGroup.children) {
-                        if (child.getComponent(CoinController)) coinCount++;
+                        if (child.active && child.getComponent(CoinController)) coinCount++;
                     }
                     if (coinCount <= 1) {
                         this._handleGameWin();
@@ -1479,6 +1608,10 @@ export class GameLogic extends Component {
                 shooter: ctrl.allowedOperation,
             });
         }
+        this._awaitingTapRestart = true;
+        this._tapArmedAt = Date.now();
+        input.on(Input.EventType.TOUCH_END, this._onTapRestart, this);
+        input.on(Input.EventType.MOUSE_UP, this._onTapRestart, this);
     }
 
     /** 游戏结束处理（整關放棄才走這裡；一般失誤改走 instantRestart） */
@@ -1503,6 +1636,9 @@ export class GameLogic extends Component {
     /** 游戏胜利（桌面仅剩 1 枚硬币） */
     private _handleGameWin(): void {
         console.log(">>> 游戏胜利 <<<");
+        this._shuffleToken++;
+        this._shufflePending = false;
+        this._bombChainHold = false;
         this._restoreSpeed();
         this.hitEffectManager?.stopTracking();
         this._pendingLockedCoin = null;
@@ -1599,6 +1735,9 @@ export class GameLogic extends Component {
 
     /** 进入物理模拟阶段 */
     public startSimulation() {
+        this._shuffleToken++;
+        this._shufflePending = false;
+        this._bombChainHold = false;
         this.currentPhase = GamePhase.ANIMATING;
         this.coinHitCount = 0;
         this.coinFallCount = 0;

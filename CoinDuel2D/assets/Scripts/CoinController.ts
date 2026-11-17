@@ -35,6 +35,8 @@ interface CoinAppearanceAssets {
 export class CoinController extends Component {
     public static showArrow: boolean = false;
     private static _anyDragging: boolean = false;
+    /** 所有存活实例，用来判断静态拖拽锁是否真的还有人在用。 */
+    private static _live: Set<CoinController> = new Set();
     private static _lastWorldPos: Vec2 = new Vec2();
     /** 从 config.json 读取的 source_color */
     public static sourceColor: Color = Color.YELLOW;
@@ -362,11 +364,26 @@ export class CoinController extends Component {
 
         // 节点触摸事件（TOUCH_START/MOVE/END 在同一节点上，Touch 会 capture 后续事件到同一节点）
         this.node.on(Node.EventType.TOUCH_START, this._onPointerDown, this);
+        CoinController._live.add(this);
     }
 
     onDestroy() {
+        CoinController._live.delete(this);
+        // 若销毁时正在拖拽，释放全局锁，避免下一关所有硬币都拖不动
+        if (this._isDragging) {
+            this._isDragging = false;
+            CoinController._anyDragging = false;
+        }
         this.node.off(Node.EventType.TOUCH_START, this._onPointerDown, this);
         this._unregisterGlobalEvents();
+    }
+
+    /** 是否真的还有实例处在拖拽状态（用于校验静态锁）。 */
+    private static _anyInstanceDragging(): boolean {
+        for (const ctrl of CoinController._live) {
+            if (ctrl?.isValid && ctrl._isDragging) return true;
+        }
+        return false;
     }
 
     public showIndicator(show: boolean): void {
@@ -415,14 +432,42 @@ export class CoinController extends Component {
     }
 
     private _onPointerDown(event: EventTouch): void {
-        if (!this._allowedOperation) return;
+        if (!this._allowedOperation) {
+            // 出手后 GameLogic 会锁住全部硬币，只解锁「被击中的下一枚」。
+            // 只有尚未指定下一枚时，才允许在 WAITING_PLAYER 阶段自救解锁；
+            // 否则玩家可以绕过锁定，拖动其他硬币。
+            const gl = this._gameLogic;
+            const waiting = gl?.isWaitingPlayer === true;
+            const hasNextShooter = gl?.hasPendingShooter === true;
+            if (waiting && !hasNextShooter) {
+                console.warn('[CoinController] allowedOperation=false while waiting — unlocking', this.node.name);
+                this._allowedOperation = true;
+            } else {
+                console.log(
+                    '[CoinController] tap ignored, allowedOperation=false, waiting=',
+                    waiting,
+                    'hasNextShooter=',
+                    hasNextShooter,
+                );
+                return;
+            }
+        }
         // 教程模式：验证是否允许拖动这枚硬币
         if (!this._gameLogic?.canLaunchCoin(this.node)) {
             console.log('[Coin] drag blocked by tutorial:', this.node.name);
             return;
         }
         // 已经有硬币在拖拽中，不再响应（防止 Cocos Creator 在鼠标经过其他节点时误触 MOUSE_DOWN）
-        if (CoinController._anyDragging) return;
+        if (CoinController._anyDragging) {
+            // 防御：static 标志可能因窗口失焦 / 场景切换而永久残留，
+            // 导致所有硬币再也拖不动。没有任何实例在拖拽时自动恢复。
+            if (!CoinController._anyInstanceDragging()) {
+                console.warn('[CoinController] 清理残留的全局拖拽锁');
+                CoinController._anyDragging = false;
+            } else {
+                return;
+            }
+        }
 
         // 防御：如果之前拖拽未正常结束（如鼠标移出窗口），先清理
         if (this._isDragging) {
@@ -466,6 +511,10 @@ export class CoinController extends Component {
                 if (ctrl) ctrl.showTargetable(true);
             }
         }
+
+        // 拖拽一开始就隐藏目标箭头：玩家已经出手，箭头会干扰瞄准。
+        // （失败后由 TutorialManager 重新指回目标）
+        this._gameLogic?.tutorialManager?.hideTargetGuide();
 
         // 冻结物理，防止拖拽期间受物理影响
         if (this._rigidBody) {

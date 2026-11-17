@@ -1,0 +1,112 @@
+{
+  "memes": [
+    {
+      "id": "demo_freeze",
+      "behavior": "FreezeBehavior",
+      "behaviors": [
+        "FreezeBehavior"
+      ],
+      "radius": 32,
+      "textures": {
+        "default": "textures/demo_freeze.png",
+        "idle": "textures/demo_freeze.png"
+      }
+    },
+    {
+      "id": "demo_flash",
+      "behavior": "FlashStepBehavior",
+      "behaviors": [
+        "FlashStepBehavior"
+      ],
+      "radius": 32,
+      "textures": {
+        "default": "textures/demo_flash.png",
+        "idle": "textures/demo_flash.png"
+      }
+    },
+    {
+      "id": "meme_01",
+      "behavior": "NoneBehavior",
+      "behaviors": [
+        "NoneBehavior"
+      ],
+      "radius": 32,
+      "textures": {
+        "default": "textures/meme_01.png",
+        "idle": "textures/meme_01.png"
+      }
+    },
+    {
+      "id": "meme_02",
+      "behavior": "NoneBehavior",
+      "behaviors": [
+        "NoneBehavior"
+      ],
+      "radius": 32,
+      "textures": {
+        "default": "textures/meme_02.png",
+        "idle": "textures/meme_02.png"
+      }
+    },
+    {
+      "id": "doge",
+      "behavior": "NoneBehavior",
+      "behaviors": [
+        "NoneBehavior"
+      ],
+      "radius": 32,
+      "textures": {
+        "default": "textures/doge.png",
+        "idle": "textures/doge.png"
+      }
+    },
+    {
+      "id": "frog",
+      "behavior": "NoneBehavior",
+      "behaviors": [
+        "NoneBehavior"
+      ],
+      "radius": 32,
+      "textures": {
+        "default": "textures/frog.png",
+        "idle": "textures/frog.png"
+      }
+    },
+    {
+      "id": "blocker",
+      "behavior": "BlockerBehavior",
+      "behaviors": [
+        "BlockerBehavior"
+      ],
+      "radius": 32,
+      "textures": {
+        "default": "textures/blocker.png",
+        "idle": "textures/blocker.png"
+      }
+    },
+    {
+      "id": "mud",
+      "behavior": "MudBehavior",
+      "behaviors": [
+        "MudBehavior"
+      ],
+      "radius": 32,
+      "textures": {
+        "default": "textures/mud.png",
+        "idle": "textures/mud.png"
+      }
+    },
+    {
+      "id": "bomb",
+      "behavior": "BombBehavior",
+      "behaviors": [
+        "BombBehavior"
+      ],
+      "radius": 32,
+      "textures": {
+        "default": "textures/bomb.png",
+        "idle": "textures/bomb.png"
+      }
+    }
+  ]
+}

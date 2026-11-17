@@ -2,9 +2,7 @@
     "id": 2,
     "width": 800,
     "height": 600,
-    "wall": {
-        "thickness": 64
-    },
+    "wall": { "thickness": 64 },
     "coins": [
         {
             "type": "coin",

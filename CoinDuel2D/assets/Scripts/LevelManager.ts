@@ -4,6 +4,12 @@ import { LevelData, LevelState } from './LevelData';
  * 跨场景传递关卡数据的静态管理器
  */
 export class LevelManager {
+    /** 關卡檔名 → DataProvider 路徑（兼容 `1.json` 與 `levels/1.json`）。 */
+    static toDataPath(file: string): string {
+        const clean = file.replace(/\.json$/i, '');
+        return clean.indexOf('levels/') === 0 ? clean : 'levels/' + clean;
+    }
+
     private static _current: LevelData | null = null;
     /** levels.json 中的文件列表 */
     private static _levelFiles: string[] = [];
@@ -64,6 +70,13 @@ export class LevelManager {
     /** 获取指定关卡的状态 */
     static getLevelState(index: number): LevelState {
         return LevelManager._levelStates[index] ?? LevelState.Locked;
+    }
+
+    /** 直接设置指定关卡状态（供战役进度 / 存档恢复使用） */
+    static setLevelState(index: number, state: LevelState): void {
+        if (index >= 0 && index < LevelManager._levelStates.length) {
+            LevelManager._levelStates[index] = state;
+        }
     }
 
     /** 标记指定关卡为 Passed，并自动解锁下一关 */

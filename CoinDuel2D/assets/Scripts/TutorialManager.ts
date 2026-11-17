@@ -25,7 +25,7 @@ export interface DragTutorialStep {
     type: 'drag';
     /** 提示文字的 i18n key */
     hintKey: string;
-    /** 要求拖动的硬币索引（coinGroup.children 中的序号，教程开始时解析为 Node 引用） */
+    /** 要求拖动的硬币索引（coinGroup 中带刚体的硬币节点序号） */
     sourceCoinIndex: number;
     /** 要求击打的目标硬币索引 */
     targetCoinIndex: number;
@@ -72,10 +72,12 @@ export class TutorialManager extends Component {
     private _active: boolean = false;
     private _steps: ResolvedStep[] = [];
     private _currentStepIndex: number = 0;
-    private _coinSnapshots: { node: Node; x: number; y: number }[] = [];
+    private _coinSnapshots: { node: Node; x: number; y: number; active: boolean }[] = [];
     private _hitTargetThisTurn: boolean = false;
     private _foulCount: number = 0;
     private _wasLastStep: boolean = false;
+    /** 本次拖拽实际使用的硬币（可能不是教程指定的那枚）。 */
+    private _draggedCoin: Node | null = null;
 
     // ── 介绍步骤自动推进延迟 ──
     private _introAutoDelay: number = 4;
@@ -93,25 +95,47 @@ export class TutorialManager extends Component {
 
     // ── 教程生命周期 ──
 
+    /**
+     * 只取真正的硬币节点：coinGroup 下带 RigidBody2D 的子节点。
+     * 这样会过滤掉光环、拖拽线等纯装饰节点。
+     */
+    private _getRealCoins(): Node[] {
+        const all = this.gameLogic?.coinGroup?.children ?? [];
+        return all.filter((node) => !!node && node.isValid && !!node.getComponent(RigidBody2D));
+    }
+
     /** 统一教程入口：按顺序执行介绍/拖拽步骤，可混排 */
     public startTutorial(steps: TutorialStep[]): void {
         this._active = true;
         this._currentStepIndex = 0;
 
         // 解析拖拽步骤索引为 Node 引用（硬币销毁后索引会变，必须用引用）
-        const coins = this.gameLogic?.coinGroup?.children ?? [];
-        this._steps = steps.map(s => {
+        const coins = this._getRealCoins();
+        const lastIndex = Math.max(0, coins.length - 1);
+        const resolved: ResolvedStep[] = [];
+        for (const s of steps) {
             if (s.type === 'intro') {
-                return { type: 'intro', hintKey: s.hintKey, x: s.x, y: s.y, radius: s.radius };
+                resolved.push({ type: 'intro', hintKey: s.hintKey, x: s.x, y: s.y, radius: s.radius });
+                continue;
             }
-            return {
+            // 关卡硬币数量与配置不一致时，夹紧索引而不是让教程卡死
+            const source = coins[Math.min(Math.max(0, s.sourceCoinIndex), lastIndex)];
+            const target = coins[Math.min(Math.max(0, s.targetCoinIndex), lastIndex)];
+            if (!source || !target || source === target) continue;
+            resolved.push({
                 type: 'drag',
                 hintKey: s.hintKey,
-                sourceCoin: coins[s.sourceCoinIndex],
-                targetCoin: coins[s.targetCoinIndex],
+                sourceCoin: source,
+                targetCoin: target,
                 isFinal: s.isFinal ?? false,
-            };
-        });
+            });
+        }
+        this._steps = resolved;
+
+        if (this._steps.length === 0) {
+            this.skipTutorial();
+            return;
+        }
 
         this._bindSkipButton();
         this._showSkipButton();
@@ -163,18 +187,23 @@ export class TutorialManager extends Component {
      */
     public onCoinDragStart(coin: Node): boolean {
         if (!this._active) return true;
-        // 介绍步骤中不允许拖动
-        const step = this._steps[this._currentStepIndex];
-        if (!step || step.type !== 'drag') return false;
 
-        if (coin !== step.sourceCoin) {
-            // 不是当前步骤指定的硬币 → 不响应
+        const step = this._steps[this._currentStepIndex];
+
+        // 介紹步驟尚未指定可操作的硬幣
+        if (!step || step.type !== 'drag') {
+            console.log('[Tutorial] drag blocked during intro step');
             return false;
         }
 
-        // 正确的硬币 → 隐藏手势提示和目标指示器，允许拖动
+        // 拖拽步驟只允許操作提示中的來源硬幣
+        if (coin !== step.sourceCoin) {
+            console.log('[Tutorial] drag blocked: only', step.sourceCoin?.name, 'is allowed');
+            return false;
+        }
+
+        this._draggedCoin = coin;
         this._hideGestureHint();
-        this._hideTargetIndicator();
         this._hitTargetThisTurn = false;
         this._snapshotPositions();
         return true;
@@ -185,14 +214,23 @@ export class TutorialManager extends Component {
         // 快照已在 onCoinDragStart 中记录
     }
 
-    /** 硬币碰撞时调用，验证是否击中目标 */
-    public onCoinHit(hitCoin: Node): void {
+    /** 隐藏目标指示箭头（CoinController 拖拽开始时调用，避免干扰瞄准）。 */
+    public hideTargetGuide(): void {
+        this._hideTargetIndicator();
+    }
+
+    /** 硬币碰撞时调用，验证是否击中目标 */    public onCoinHit(hitCoin: Node): void {
         if (!this._active) return;
         const step = this._steps[this._currentStepIndex];
         if (!step || step.type !== 'drag') return;
 
+        // 目标硬币被撞到 → 记录（用引用比对，硬币被打飞后索引会变）
         if (hitCoin === step.targetCoin) {
             this._hitTargetThisTurn = true;
+            console.log('[Tutorial] target hit:', hitCoin.name);
+        } else {
+            console.log('[Tutorial] hit a different coin:', hitCoin.name,
+                '(target was', step.targetCoin?.name + ')');
         }
     }
 
@@ -208,8 +246,12 @@ export class TutorialManager extends Component {
         const hitCount = this.gameLogic?.coinHitCount ?? 0;
         const fallCount = this.gameLogic?.coinFallCount ?? 0;
 
-        if (this._hitTargetThisTurn && fallCount == 0 && hitCount == 1) {
-            // ✅ 正确击中目标 → 继续正常结算（a 硬币被打飞消失）
+        // 教程要求必须命中当前步骤指定的目标硬币，且没有硬币掉出桌面。
+        // 否则按出手前的快照还原这一发，让玩家重试当前步骤。
+        const hitTarget = this._hitTargetThisTurn;
+
+        if (hitTarget && fallCount === 0) {
+            // ✅ 撞到了硬币 → 继续正常结算（出手硬币被打飞消失）
             this._foulCount = 0;
             // 在推进索引之前，记录当前步是否为最终步
             this._wasLastStep = step.isFinal;
@@ -232,12 +274,23 @@ export class TutorialManager extends Component {
             this._restorePositions();
             this._foulCount++;
 
+            // 关键：出手时 GameLogic 已把所有硬币锁住（_setCoinsInteraction(false)）。
+            // 教程接管了本回合的结算，必须自己把操作权还回去，否则玩家再也拖不动任何硬币。
+            this.gameLogic?.waitingPlayerOperation();
+
             if (fallCount > 0) {
                 this._showHint('tutorial_foul_fall');
-            } else if (hitCount >= 2) {
-                this._showHint('tutorial_foul_multi_hit');
+            } else if (hitCount > 0) {
+                // 撞到了别的硬币，没有按教程指定的顺序击打
+                this._showHint('tutorial_wrong_target');
             } else {
+                // 没撞到任何硬币（空挥）
                 this._showHint('tutorial_miss');
+            }
+
+            // 失败后立刻把箭头指回目标，别让玩家在 2 秒空窗里看不到该打哪儿
+            if (step.targetCoin?.isValid) {
+                this._showTargetIndicator(step.targetCoin);
             }
 
             // 2秒后重新显示原始提示和手势
@@ -276,11 +329,15 @@ export class TutorialManager extends Component {
 
     /** 开始介绍步骤：显示指示器 + 文字，自动/点击推进 */
     private _beginIntroStep(step: IntroStep): void {
-        // 显示目标指示器
+        // 显示目标指示器（radius <= 0 表示纯文字目标说明，不显示指示器）
         const indicator = this.uiManager?.targetIndicator;
         if (indicator) {
-            indicator.node.setPosition(step.x, step.y, 0);
-            indicator.open(step.radius);
+            if (step.radius > 0) {
+                indicator.node.setPosition(step.x, step.y, 0);
+                indicator.open(step.radius);
+            } else {
+                indicator.close();
+            }
         }
 
         // 显示提示文字
@@ -297,7 +354,16 @@ export class TutorialManager extends Component {
     /** 开始拖拽步骤：高亮硬币 + 显示手势提示 + 目标指示器 */
     private _beginDragStep(step: ResolvedDragStep): void {
         const { sourceCoin, targetCoin } = step;
-        if (!sourceCoin || !sourceCoin.isValid || !targetCoin || !targetCoin.isValid) return;
+        // 硬币已在上一击被打飞（例如教程中途状态丢失）→ 跳过该步，避免教程卡死
+        if (!sourceCoin || !sourceCoin.isValid || !targetCoin || !targetCoin.isValid) {
+            if (this._currentStepIndex < this._steps.length - 1) {
+                this._currentStepIndex++;
+                this._beginCurrentStep();
+            } else {
+                this.skipTutorial();
+            }
+            return;
+        }
 
         // 高亮源硬币
         this._clearCoinHighlight();
@@ -362,9 +428,13 @@ export class TutorialManager extends Component {
     /** 显示目标指示器，对准目标 */
     private _showTargetIndicator(targetCoin: Node): void {
         const indicator = this.uiManager?.targetIndicator;
-        if (!indicator) return;
+        if (!indicator) {
+            console.warn('[Tutorial] targetIndicator 未绑定，无法显示箭头');
+            return;
+        }
         indicator.node.setPosition(targetCoin.position);
         indicator.open(this.gameLogic?.coinRadius ?? 32);
+        console.log('[Tutorial] indicator ->', targetCoin.name, '@', targetCoin.position.x, targetCoin.position.y);
     }
 
     /** 隐藏目标指示器 */
@@ -384,7 +454,7 @@ export class TutorialManager extends Component {
 
     /** 清除所有硬币高亮 */
     private _clearCoinHighlight(): void {
-        const coins = this.gameLogic?.coinGroup?.children ?? [];
+        const coins = this._getRealCoins();
         for (const coin of coins) {
             const ctrl = coin.getComponent(CoinController);
             if (ctrl) {
@@ -398,12 +468,14 @@ export class TutorialManager extends Component {
     /** 记录所有硬币位置快照 */
     private _snapshotPositions(): void {
         this._coinSnapshots = [];
-        const coins = this.gameLogic?.coinGroup?.children ?? [];
-        for (const coin of coins) {
+        // 只记录真正的硬币：coinGroup 下还有 RunAura / DragArrow / WorldStats 等装饰节点，
+        // 把它们一起快照并在失败时还原，会让光效/拖拽箭头被拖回旧位置。
+        for (const coin of this._getRealCoins()) {
             this._coinSnapshots.push({
                 node: coin,
                 x: coin.position.x,
                 y: coin.position.y,
+                active: coin.active,
             });
         }
     }
@@ -412,6 +484,8 @@ export class TutorialManager extends Component {
     private _restorePositions(): void {
         for (const snap of this._coinSnapshots) {
             if (snap.node && snap.node.isValid) {
+                // 掉落时被隐藏的硬币在重试时恢复显示
+                snap.node.active = snap.active;
                 snap.node.setPosition(snap.x, snap.y, 0);
                 // 清除速度
                 const rb = snap.node.getComponent(RigidBody2D);
@@ -471,10 +545,14 @@ export class TutorialManager extends Component {
 
     /** 获取手势提示方向（闲置时自动查找最近目标） */
     private _getGestureHint(): { source: Node; direction: Vec3 } | null {
-        const coins = this.gameLogic?.coinGroup?.children ?? [];
+        const coins = this._getRealCoins();
         if (coins.length < 2) return null;
 
-        const source = coins[0];
+        // 優先以目前唯一可操作的硬幣（被撞中的下一枚）作為提示來源
+        const source = coins.find((coin) => {
+            const ctrl = coin.getComponent(CoinController);
+            return ctrl?.allowedOperation === true;
+        }) ?? coins[0];
         if (!source || !source.isValid) return null;
 
         let closestTarget: Node | null = null;
