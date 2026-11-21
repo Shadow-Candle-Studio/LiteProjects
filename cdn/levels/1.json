@@ -1,42 +1,38 @@
 {
+    "id": 1,
+    "width": 800,
+    "height": 600,
     "wall": {
         "thickness": 64
     },
-    "width": 800,
-    "id": 1,
-    "height": 600,
     "coins": [
         {
-            "class": 1,
-            "y": 140,
             "type": "coin",
-            "radius": 32,
+            "class": 1,
             "x": -220,
-            "canshot": true
-        },
-        {
-            "class": 1,
-            "y": 190,
-            "type": "coin",
+            "y": 140,
+            "canshot": false,
             "radius": 32,
-            "x": 0,
-            "canshot": true
-        },
-        {
-            "x": -60,
-            "type": "coin",
             "behavior": "FreezeBehavior",
-            "y": -180,
-            "canshot": true,
-            "skin": {
-                "idle": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/coin_gold_01.png",
-                "default": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/coin_gold_01.png"
-            },
             "behaviors": [
                 "FreezeBehavior"
-            ],
+            ]
+        },
+        {
+            "type": "mud",
+            "x": 0,
+            "y": 190,
+            "shape": "circle",
             "radius": 32,
-            "memeId": "coin_gold_01"
+            "friction": 0.5
+        },
+        {
+            "type": "coin",
+            "class": 1,
+            "x": -60,
+            "y": -180,
+            "canshot": true,
+            "radius": 32
         }
     ]
 }
