@@ -11,35 +11,50 @@
             "class": 1,
             "x": -220,
             "y": 140,
-            "canshot": true,
-            "radius": 32
+            "canshot": false,
+            "radius": 32,
+            "behavior": "FreezeBehavior",
+            "behaviors": [
+                "FreezeBehavior"
+            ],
+            "skinKey": "ice",
+            "memeId": "cat",
+            "skin": {
+                "default": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/cat.png",
+                "idle": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/cat.png",
+                "aim": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/cat.png",
+                "shot": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/cat.png",
+                "hitted": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/cat.png"
+            }
         },
         {
             "type": "coin",
             "class": 1,
             "x": 0,
             "y": 190,
-            "canshot": true,
-            "radius": 32
+            "canshot": false,
+            "radius": 32,
+            "behavior": "FlashStepBehavior",
+            "behaviors": [
+                "FlashStepBehavior"
+            ],
+            "skinKey": "gold",
+            "memeId": "frog",
+            "skin": {
+                "default": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/frog.png",
+                "idle": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/frog.png",
+                "aim": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/frog.png",
+                "shot": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/frog.png",
+                "hitted": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/frog.png"
+            }
         },
         {
             "type": "coin",
+            "class": 1,
             "x": -60,
             "y": -180,
             "canshot": true,
-            "radius": 32,
-            "memeId": "maodie_cat_01",
-            "behavior": "FreezeBehavior",
-            "behaviors": [
-                "FreezeBehavior"
-            ],
-            "skin": {
-                "default": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/maodie_cat_01.png",
-                "idle": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/maodie_cat_01.png",
-                "aim": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/maodie_cat_01.png",
-                "shot": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/maodie_cat_01.png",
-                "hitted": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/maodie_cat_01.png"
-            }
+            "radius": 32
         }
     ]
 }
