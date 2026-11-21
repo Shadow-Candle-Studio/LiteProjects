@@ -1,4 +1,8 @@
 {
+    "game_coins_left": "残り: {count}",
+    "game_time_placeholder": "0:00",
+    "debug_gap_width": "ギャップ長",
+    "tutorial_great": "いいね！",
     "final_victory": "最終勝利！",
     "confirm_quit": "ゲームを終了しますか？",
     "pvp_not_supported": "対戦モードはまだサポートされていません",

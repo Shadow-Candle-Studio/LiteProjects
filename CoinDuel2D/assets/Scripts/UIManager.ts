@@ -120,7 +120,8 @@ export class UIManager extends Component {
     public setCoinsLeft(count: number): void {
         const label = this.labelCoinsLeft;
         if (!label) return;
-        label.string = `剩餘: ${count}`;
+        // Was a hardcoded Chinese template, so English players saw 剩餘: N.
+        label.string = I18n.t('game_coins_left', { count });
         const lastTwo = count > 0 && count <= 2;
         label.color = lastTwo ? new Color(255, 214, 90, 255) : new Color(255, 255, 255, 255);
         label.fontSize = lastTwo ? 28 : 24;

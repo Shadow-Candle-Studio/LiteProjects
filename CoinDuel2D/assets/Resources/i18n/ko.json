@@ -1,4 +1,8 @@
 {
+    "game_coins_left": "남음: {count}",
+    "game_time_placeholder": "0:00",
+    "debug_gap_width": "간격 길이",
+    "tutorial_great": "좋아요!",
     "final_victory": "최종 승리!",
     "confirm_quit": "게임을 종료하시겠습니까?",
     "pvp_not_supported": "대전 모드는 아직 지원되지 않습니다",

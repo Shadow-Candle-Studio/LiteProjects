@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, Vec2, Vec3, tween, Tween, Button, RigidBody2D } from 'cc';
+import { _decorator, Component, Node, Vec2, Vec3, tween, Tween, Button, RigidBody2D, Label } from 'cc';
 import { GameLogic } from './GameLogic';
 import { UIManager } from './UIManager';
 import { CoinController } from './CoinController';
@@ -523,9 +523,13 @@ export class TutorialManager extends Component {
 
     /** 显示跳过按钮 */
     private _showSkipButton(): void {
-        if (this.btnSkip) {
-            this.btnSkip.node.active = true;
-        }
+        if (!this.btnSkip) return;
+        // The label text was baked into game.scene as 「跳过教程」, so it stayed
+        // Chinese in every language. Set it from i18n each time the button is
+        // shown, which also picks up a runtime language switch.
+        const label = this.btnSkip.node.getComponentInChildren(Label);
+        if (label) label.string = I18n.t('tutorial_skip');
+        this.btnSkip.node.active = true;
     }
 
     /** 隐藏跳过按钮 */

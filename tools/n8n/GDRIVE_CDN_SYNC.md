@@ -2,9 +2,9 @@
 
 Game code keeps **one** URL forever:
 
-`https://cdn.jsdelivr.net/gh/Meyyds34555343/LiteProjects@behavior-scratch/cdn/manifest.json`
+`https://cdn.jsdelivr.net/gh/Meyyds34555343/LiteProjects@main/cdn/manifest.json`
 
-This workflow only **overwrites** files under `cdn/` on branch `behavior-scratch`. The jsDelivr link never changes.
+This workflow only **overwrites** files under `cdn/` on branch `main`. The jsDelivr link never changes.
 
 Import: [`coinduel-gdrive-cdn-sync.json`](coinduel-gdrive-cdn-sync.json)
 
@@ -51,9 +51,9 @@ Already filled for your repo:
 
 - `owner` = `Meyyds34555343`
 - `repo` = `LiteProjects`
-- `branch` = `behavior-scratch`
+- `branch` = `main`
 - `cdnPrefix` = `cdn`
-- `jsdelivrBase` = `https://cdn.jsdelivr.net/gh/Meyyds34555343/LiteProjects@behavior-scratch/cdn`
+- `jsdelivrBase` = `https://cdn.jsdelivr.net/gh/Meyyds34555343/LiteProjects@main/cdn`
 - **`githubToken`** = your PAT
 
 ### 3) Download File (Google Drive)
@@ -81,9 +81,9 @@ Produces relative paths the game already understands (`AssetManifest.items[]`):
 
 **Upsert pattern** (do not create unique paths):
 
-1. `GET /repos/{owner}/{repo}/contents/{path}?ref=behavior-scratch` → read `sha` if file exists  
+1. `GET /repos/{owner}/{repo}/contents/{path}?ref=main` → read `sha` if file exists  
 2. `PUT /repos/{owner}/{repo}/contents/{path}` with:
-   - `branch`: `behavior-scratch`
+   - `branch`: `main`
    - `content`: base64
    - `sha`: previous sha **when overwriting** (omit only for brand-new files)
    - `message`: commit message
@@ -97,9 +97,9 @@ Always target:
 
 | What | Value |
 |------|--------|
-| Game `DEFAULT_CDN_MANIFEST_URL` | `...@behavior-scratch/cdn/manifest.json` |
+| Game `DEFAULT_CDN_MANIFEST_URL` | `...@main/cdn/manifest.json` |
 | GitHub path | `cdn/manifest.json` |
-| Branch | `behavior-scratch` |
+| Branch | `main` |
 | After commit | Wait 1–5 min for jsDelivr, or open `?t=` cache-bust in AssetSync |
 
 ## Relation to “Add Meme Pic”

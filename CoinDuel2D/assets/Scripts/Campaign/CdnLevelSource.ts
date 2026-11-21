@@ -1,5 +1,5 @@
 import { LevelData } from '../LevelData';
-import { githubRawUrl } from '../Meme/CdnConfig';
+import { githubCommitUrl, githubRawAtCommit, githubRawUrl, jsdelivrUrl } from '../Meme/CdnConfig';
 import { NetworkManager } from '../NetworkManager';
 
 /**
@@ -44,18 +44,68 @@ export class CdnLevelSource {
             return;
         }
 
-        const url = githubRawUrl('cdn/levels/' + id + '.json')
-            + '?t=' + Date.now().toString(36);
-        NetworkManager.HttpGet(url, (code, body) => {
-            const level = (code === 200 && body) ? CdnLevelSource._parse(body, id) : null;
-            CdnLevelSource._cache.set(id, level);
-            if (!level) {
-                console.log('[CdnLevel] level', id, 'not on CDN (code=' + code + ') — using bundled file');
-            } else {
-                console.log('[CdnLevel] level', id, 'from CDN, objects=' + level.coins.length);
+        // Try each mirror in order, preferring whichever is FRESHEST.
+        //
+        // History: raw.githubusercontent was tried first because it reflects a
+        // commit immediately — but for this repo it got pinned to an old commit
+        // for a whole branch and ignored cache-busting query strings. jsDelivr
+        // then took the lead, but it caches for 12h (s-maxage=43200), so a level
+        // saved minutes ago still came back stale.
+        //
+        // Correct approach: ask GitHub's API which commit is current, then fetch
+        // that exact commit from raw. A pinned commit ref cannot go stale, and it
+        // has none of jsDelivr's lag.
+        const rel = 'cdn/levels/' + id + '.json';
+        const sources = [
+            // 1. exact commit from the API (no cache, no lag)
+            async (cb) => {
+                NetworkManager.HttpGet(githubCommitUrl(rel), (code, body) => {
+                    if (code !== 200 || !body) return cb(null);
+                    let sha = '';
+                    try {
+                        const list = JSON.parse(body);
+                        // the API accepts a path and returns an array of commits
+                        sha = Array.isArray(list) && list[0] ? list[0].sha : '';
+                    } catch (e) {
+                        sha = '';
+                    }
+                    if (!sha) return cb(null);
+                    NetworkManager.HttpGet(githubRawAtCommit(sha, rel), (c2, b2) => {
+                        cb(c2 === 200 && b2 ? b2 : null);
+                    });
+                });
+            },
+            // 2. jsDelivr (fast, but may lag hours)
+            (cb) => NetworkManager.HttpGet(
+                jsdelivrUrl(rel) + '?t=' + Date.now().toString(36),
+                (code, body) => cb(code === 200 && body ? body : null)),
+            // 3. raw on the branch (last resort)
+            (cb) => NetworkManager.HttpGet(
+                githubRawUrl(rel) + '?t=' + Date.now().toString(36),
+                (code, body) => cb(code === 200 && body ? body : null)),
+        ];
+
+        const tryNext = (index: number): void => {
+            if (index >= sources.length) {
+                CdnLevelSource._cache.set(id, null);
+                console.log('[CdnLevel] level', id, 'missing on all mirrors — using bundled file');
+                cb(null);
+                return;
             }
-            cb(level);
-        });
+            sources[index]((body: string | null) => {
+                const level = body ? CdnLevelSource._parse(body, id) : null;
+                if (!level) {
+                    console.log('[CdnLevel] mirror', index, 'missed level', id);
+                    tryNext(index + 1);
+                    return;
+                }
+                CdnLevelSource._cache.set(id, level);
+                console.log('[CdnLevel] level', id, 'from mirror', index, 'objects=' + level.coins.length);
+                cb(level);
+            });
+        };
+
+        tryNext(0);
     }
 
     /** Drop memoised results (e.g. after the player pulls to refresh). */

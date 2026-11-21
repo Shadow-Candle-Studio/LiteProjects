@@ -791,7 +791,28 @@ export class GameScene extends Component {
             '确定要退出吗？': 'ui_confirm_quit',
             '确定': 'ui_confirm',
             '取消': 'ui_cancel',
-        };
+            '剩余': 'game_coins_left',
+            '剩餘': 'game_coins_left',
+            '太棒了': 'tutorial_great',
+            '跳过教程': 'tutorial_skip',
+            '跳過教程': 'tutorial_skip',
+            '开始匹配': 'pvp_start_match',
+            '開始匹配': 'pvp_start_match',
+            '创建房间': 'pvp_create_room',
+            '創建房間': 'pvp_create_room',
+            '加入房间': 'pvp_join_room',
+            '加入房間': 'pvp_join_room',
+            '硬币半径': 'debug_coin_radius',
+            '硬幣半徑': 'debug_coin_radius',
+            '静止速度': 'debug_speed_threshold',
+            '靜止速度': 'debug_speed_threshold',
+            '滑动摩檫力': 'debug_coin_damping',
+            '滑動摩檫力': 'debug_coin_damping',
+            '缺口初始长度': 'debug_gap_width',
+            '缺口初始長度': 'debug_gap_width',
+            '1分20秒': 'game_time_placeholder',
+            '正在更新...pppp': 'main_check_update',
+};
 
         const walk = (node: Node) => {
             const label = node.getComponent(Label);

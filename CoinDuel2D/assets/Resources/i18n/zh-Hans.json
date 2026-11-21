@@ -1,4 +1,8 @@
 {
+    "game_coins_left": "剩余: {count}",
+    "game_time_placeholder": "0:00",
+    "debug_gap_width": "缺口初始长度",
+    "tutorial_great": "太棒了",
     "final_victory": "最终胜利！",
     "confirm_quit": "确定要退出游戏吗？",
     "pvp_not_supported": "暂不支持对战模式",

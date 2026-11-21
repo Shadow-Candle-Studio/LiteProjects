@@ -1,0 +1,707 @@
+{
+  "name": "CoinDuel — Art Pipeline (Raw Upload → QA → Approved/Rejected)",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "description": "HITL art pipeline: watch 01_Raw_Upload, resolve the asset against Google Sheets, run the Python cutout+QA+paper-cut service, then route to 02_Approved_Assets or 99_Rejected and write the verdict back to the sheet."
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodes": [
+    {
+      "id": "trig-raw-upload",
+      "name": "Drive: Raw Upload",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        -220,
+        0
+      ],
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "event": "fileCreated",
+        "folderToWatch": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "01_Raw_Upload"
+        },
+        "options": {}
+      },
+      "notes": "Watch the 01_Raw_Upload folder. Duplicate this node with event=fileUpdated if employees overwrite files instead of creating new ones."
+    },
+    {
+      "id": "cfg",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "sheetId",
+              "value": "198lNVyOj3WhcfVf92h-_9VXmcW7l1_Gv-feNxVS3UaU",
+              "type": "string"
+            },
+            {
+              "id": "c3",
+              "name": "rejectedFolderId",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "c6",
+              "name": "reprocessDone",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "c7",
+              "name": "createThemeFolder",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "c9",
+              "name": "themeFolders",
+              "value": "{\"classic\":\"\",\"bakery\":\"\",\"cyber\":\"\"}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {},
+        "includeOtherFields": true
+      },
+      "notes": "includeOtherFields=true is REQUIRED: without it this Set node replaces the item with only the Config fields, so Parse Filename never sees the Drive file name and every upload is rejected as 'invalid filename'."
+    },
+    {
+      "id": "parse-name",
+      "name": "Parse Filename",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// <asset_id>.png is the contract between the employee and the sheet.\n//\n// Robustness matters here more than elegance: different n8n versions expose the\n// Drive file name in different places, and a missing field used to surface as\n// the misleading \"filename '' is not a valid <asset_id>.png\". We now probe the\n// common locations and, if none has a name, say exactly that.\nconst raw = $input.first().json || {};\nconst bin = $input.first().binary || {};\n\nconst candidates = [\n  raw.name,\n  raw.fileName,\n  raw.title,\n  raw.file && raw.file.name,\n  raw.properties && raw.properties.name,\n  bin.data && bin.data.fileName,\n  bin.data && bin.data.fileExtension && raw.name,\n];\nconst originalName = String(candidates.find((c) => c && String(c).trim()) || '').trim();\n\nif (!originalName) {\n  return [{\n    json: {\n      valid: false,\n      problems: [\n        'the Drive trigger produced no file name field (looked for name/ fileName / title / file.name). ' +\n        'Open this node\\'s INPUT panel and check which field holds the filename.',\n      ],\n      asset_id: '',\n      originalName: '',\n      ext: '',\n      driveFileId: raw.id || raw.fileId || '',\n      mimeType: raw.mimeType || '',\n      webViewLink: raw.webViewLink || '',\n      // surface what we actually received, so the cause is obvious in the log\n      receivedKeys: Object.keys(raw),\n    },\n  }];\n}\n\n// A Drive file name never contains a path separator. If one shows up the\n// input is malformed (or deliberately hostile), so reject it outright rather\n// than silently stripping \"../\" and accepting the remainder - that would turn\n// \"../../evil.png\" into a clean \"evil.png\" and hide the problem.\nif (/[\\\\/]/.test(originalName)) {\n  return [{\n    json: {\n      valid: false,\n      problems: [\n        `filename '${originalName}' contains a path separator; ` +\n        'expected a bare <asset_id>.png',\n      ],\n      asset_id: '',\n      originalName,\n      ext: '',\n      driveFileId: raw.id || raw.fileId || '',\n      mimeType: raw.mimeType || '',\n      webViewLink: raw.webViewLink || '',\n    },\n  }];\n}\nconst base0 = originalName;\n\nconst m = base0.match(/^(.*?)(\\.[A-Za-z0-9]+)?$/);\nlet base = String(m?.[1] ?? '').trim();\nlet ext = String(m?.[2] || '').toLowerCase();\n\n// Chrome/Drive append \" (1)\", \" (2)\" on duplicate downloads. Treat that as a\n// papercut, not a rejection: strip it, and keep going.\nconst dup = base.match(/^(.*?)\\s*\\((\\d+)\\)$/);\nif (dup) base = dup[1].trim();\n\n// \".jpeg\"/\".jpg\" are fine to accept; the pipeline re-encodes to PNG.\nconst EXT_ALIASES = { '.jpeg': '.png', '.jpg': '.png', '.webp': '.webp', '.png': '.png' };\n\nconst problems = [];\nconst validSlug = /^[A-Za-z0-9][A-Za-z0-9_-]{1,63}$/.test(base);\nif (!base) {\n  problems.push(`filename '${originalName}' has no name part before the extension`);\n} else if (!validSlug) {\n  problems.push(\n    `filename '${originalName}' is not a valid <asset_id>.png ` +\n    `(letters, digits, _ and - only, no spaces)`\n  );\n}\n\nconst mappedExt = EXT_ALIASES[ext];\nif (!mappedExt) {\n  problems.push(`extension '${ext || '(none)'}' is not .png/.webp (or .jpg/.jpeg)`);\n}\n\nreturn [{\n  json: {\n    valid: problems.length === 0,\n    problems,\n    asset_id: base,\n    originalName,\n    ext: mappedExt || ext || '.png',\n    // the pipeline always writes PNG\n    needsReencode: mappedExt !== ext,\n    driveFileId: raw.id || raw.fileId || '',\n    mimeType: raw.mimeType || '',\n    webViewLink: raw.webViewLink || '',\n  },\n}];"
+      }
+    },
+    {
+      "id": "if-name-ok",
+      "name": "Filename OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "fn1",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "log-bad-name",
+      "name": "Log: Bad Filename",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// Terminal node: the file is ignored but the reason is recorded in the\n// execution log, so the cause is diagnosable without re-running.\nconst j = $json;\nconst why = (j.problems || []).join('; ');\nconsole.log(`[CoinDuel] SKIP ${j.originalName || '(no filename found)'}: ${why}`);\nif (j.receivedKeys) {\n  console.log('[CoinDuel] fields present on the trigger item:', j.receivedKeys.join(', '));\n}\nreturn [{\n  json: {\n    skipped: true,\n    filename: j.originalName || '',\n    reason: why,\n    receivedKeys: j.receivedKeys || [],\n  },\n}];"
+      }
+    },
+    {
+      "id": "sheets-tasks",
+      "name": "Sheets: Asset_Tasks",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        660,
+        -120
+      ],
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Asset_Tasks"
+        },
+        "options": {}
+      },
+      "notes": "Reads every row. row_number is returned so the final write-back is exact, no key lookups."
+    },
+    {
+      "id": "sheets-rules",
+      "name": "Sheets: Style_Rules",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        880,
+        -120
+      ],
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Style_Rules"
+        },
+        "options": {}
+      },
+      "notes": "Single source of truth for specs, prompts, fill targets and cutout flags.",
+      "executeOnce": true
+    },
+    {
+      "id": "resolve",
+      "name": "Resolve Task + Build Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -120
+      ],
+      "parameters": {
+        "jsCode": "// Join the Drive event against the two sheet tabs and produce the exact\n// argument set the Python pipeline needs. Every threshold comes from\n// Style_Rules - nothing is hardcoded here.\nconst cfg = $('Config').first().json;\nconst tasks = $('Sheets: Asset_Tasks').all().map((i) => i.json || {});\nconst rules = $('Sheets: Style_Rules').all().map((i) => i.json || {});\nconst parsed = $('Parse Filename').first().json;\n\nconst norm = (v) => String(v ?? '').trim().toLowerCase();\n// Returns NaN for blank/missing cells. A blank cell MUST NOT become 0,\n// or an empty target_fill_min silently means \"must be at least 0%\" and an\n// empty target_fill_max means \"at most 0%\" - which rejects every asset.\nconst num = (v) => {\n  if (v === undefined || v === null) return NaN;\n  const s = String(v).trim();\n  if (s === '' || s === 'undefined' || s === 'null') return NaN;\n  const n = Number(s.replace(/[^0-9.\\-]/g, ''));\n  return Number.isFinite(n) ? n : NaN;\n};\nconst bool = (v, fallback = false) => {\n  if (v === undefined || v === null || v === '') return fallback;\n  return /^(true|yes|1|y|t)$/i.test(String(v).trim());\n};\n\nconst task = tasks.find((t) => norm(t.asset_id) === norm(parsed.asset_id));\nif (!task) {\n  return [{ json: {\n    ok: false, found: false, asset_id: parsed.asset_id, driveName: parsed.originalName,\n    reason: `asset_id '${parsed.asset_id}' not found in Asset_Tasks`,\n  } }];\n}\n\nconst rule = rules.find((r) => norm(r.layer_type) === norm(task.layer_type));\nif (!rule) {\n  return [{ json: {\n    ok: false, found: false, asset_id: parsed.asset_id, driveName: parsed.originalName,\n    reason: `layer_type '${task.layer_type}' has no row in Style_Rules`,\n  } }];\n}\n\n// Idempotency: Drive triggers can re-fire, and artists re-upload by mistake.\nif (norm(task.status) === 'done' && !cfg.reprocessDone) {\n  return [{ json: {\n    ok: false, found: true, alreadyDone: true, asset_id: parsed.asset_id,\n    driveName: parsed.originalName,\n    reason: `${parsed.asset_id} is already Done - enable Config.reprocessDone to force a re-run`,\n  } }];\n}\n\n// specs looks like \"1024x1024 px, 1:1, Transparent PNG, ~78.5% fill\".\n// The resolution is authoritative for the output canvas.\nconst specs = String(task.specs || rule.specs || '');\nconst dims = specs.match(/(\\d{2,5})\\s*[x×]\\s*(\\d{2,5})/i);\nconst width = dims ? Number(dims[1]) : 0;\nconst height = dims ? Number(dims[2]) : 0;\n\n// Fill targets: dedicated columns win; otherwise parse \"73%-83%\" out of specs\n// so a sheet without those columns still behaves.\nlet fillMin = num(rule.target_fill_min);\nlet fillMax = num(rule.target_fill_max);\n\nif (!Number.isFinite(fillMin) || !Number.isFinite(fillMax)) {\n  // No usable columns -> derive from the specs text.\n  // a) \"73% to 83%\"  b) single \"~78.5% fill\" = aim at it, +/-5 points.\n  const range = specs.match(/(\\d{1,3}(?:\\.\\d+)?)\\s*%\\s*(?:to|-|–|~)\\s*(\\d{1,3}(?:\\.\\d+)?)\\s*%/i);\n  const single = specs.match(/~?\\s*(\\d{1,3}(?:\\.\\d+)?)\\s*%/);\n  if (range) {\n    fillMin = Number(range[1]) / 100;\n    fillMax = Number(range[2]) / 100;\n  } else if (single) {\n    const mid = Number(single[1]) / 100;\n    fillMin = Math.max(0, Math.round((mid - 0.05) * 1000) / 1000);\n    fillMax = Math.min(1, Math.round((mid + 0.05) * 1000) / 1000);\n  } else {\n    // Unknown: do not invent a constraint that will reject good art.\n    fillMin = 0;\n    fillMax = 1;\n  }\n}\n\nconst layer = norm(rule.layer_type);\nconst needCutout = bool(rule.need_cutout, true);\n\n// Operational flags: prefer the explicit sheet columns, fall back to the\n// sensible per-layer default so an older sheet still works.\nconst defaultPunch = layer === 'board_frame';\nconst defaultBleed = layer === 'board_surface' || layer === 'board_frame';\nconst punchHoles = bool(rule.punch_holes, defaultPunch);\nconst allowEdgeBleed = bool(rule.allow_edge_bleed, defaultBleed);\n\n// Shadow strength. A board_frame sits flush against the board and a\n// board_surface IS the board, so neither may cast a shadow onto its\n// neighbours: those default to 0. Detached props (coins, UI) get the unified\n// 0.22 ambient shadow.\nconst shadowDefault = (layer === 'board_surface' || layer === 'board_frame') ? 0 : 0.22;\nconst shadowOpacity = Number.isFinite(num(rule.shadow_opacity)) ? num(rule.shadow_opacity) : shadowDefault;\n\nreturn [{\n  json: {\n    ok: true,\n    found: true,\n    asset_id: task.asset_id,\n    driveName: parsed.originalName,\n    driveFileId: parsed.driveFileId,\n    row_number: task.row_number ?? null,\n    layer_type: task.layer_type,\n    theme: String(task.theme || 'classic').trim() || 'classic',\n    description: task.description || '',\n    prompt: task.final_prompt || '',\n    specs,\n    ref_image: task.ref_image || rule.ref_image_id || '',\n    width,\n    height,\n    fill_min: fillMin,\n    fill_max: fillMax,\n    need_cutout: needCutout,\n    punch_holes: punchHoles,\n    allow_edge_bleed: allowEdgeBleed,\n    shadow_opacity: shadowOpacity,\n  },\n}];"
+      }
+    },
+    {
+      "id": "if-known",
+      "name": "Asset Known?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        -120
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "k1",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "log-unknown",
+      "name": "Log: Unknown Asset",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        120
+      ],
+      "parameters": {
+        "jsCode": "// Terminal node. Fires when the filename has no matching Asset_Tasks row,\n// the layer_type is missing from Style_Rules, or the asset is already Done.\n// We deliberately do NOT throw: one stray file must not kill a batch run.\nconst j = $json;\nconst label = j.alreadyDone ? 'ALREADY DONE' : 'NOT FOUND';\nconsole.log(`[CoinDuel] ${label} ${j.driveName}: ${j.reason}`);\nreturn [{ json: { skipped: true, kind: label, asset_id: j.asset_id, filename: j.driveName, reason: j.reason } }];"
+      }
+    },
+    {
+      "id": "dl-raw",
+      "name": "Drive: Download Raw",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1540,
+        -240
+      ],
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.driveFileId }}"
+        },
+        "options": {
+          "binaryPropertyName": "data"
+        },
+        "resource": "file"
+      }
+    },
+    {
+      "id": "call-pipeline",
+      "name": "Pipeline: Cutout + QA + Finish (local)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        -240
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ─────────────────────────────────────────────────────────────────────────────\n// CoinDuel art pipeline — runs entirely inside n8n.\n//\n// Replaces the HTTP call to serve.py. Everything below is inlined from\n//   docs/art-core.js        (verified pixel-for-pixel against the Python original)\n//   tools/art_pipeline/png-codec.js  (PNG encode/decode using only zlib)\n//\n// No external service, no tunnel, no local Python. The only Node built-in used\n// is `zlib`, which n8n provides.\n//\n// Input : the previous node's item, carrying binary `data` (the raw upload) or\n//         a json.image_base64 string.\n// Output: the same report shape serve.py returned, plus `image_base64` on pass,\n//         so downstream nodes (QA Passed?, Base64 → Binary) work unchanged.\n// ─────────────────────────────────────────────────────────────────────────────\n\nconst zlib = require('zlib');\n\n\n// ── inline modules (UMD/CommonJS shims) ─────────────────────────────────────\nconst __core = (function () {\n  // art-core.js is UMD: it takes the CommonJS branch when `module.exports`\n  // exists. Provide that plus `self`, which its root expression references.\n  const module = { exports: {} };\n  const exports = module.exports;\n  const self = {};\n  (function () {\n/**\n * CoinDuel art pipeline - browser/Node port of coinduel_art_pipeline.py\n *\n * This is a faithful port, not a reimplementation: same constants, same maths,\n * same employee-facing messages. tools/art_pipeline/test_js_parity.js proves it\n * by running this file and the Python original over the same pixels and\n * comparing the verdicts and metrics.\n *\n * No DOM, no canvas, no dependencies - so the identical code runs in a static\n * web page and in a headless test.\n *\n * Image representation: { w, h, d } where d is Float32Array(w*h*4), RGBA 0..255.\n */\n(function (root, factory) {\n  if (typeof module === 'object' && module.exports) module.exports = factory();\n  else root.artCore = factory();\n})(typeof self !== 'undefined' ? self : this, function () {\n  'use strict';\n\n  var VERSION = '1.1.0-web';\n\n  // ---------------------------------------------------------------- tunables\n  var ALPHA_QA_THRESHOLD = 0.5;\n  var ALPHA_VISIBLE = 0.04;\n  var WHITE_CUT = 246.0;\n  var CLIP_EDGE_COVERAGE = 0.25;\n  var DEFAULT_CENTER_TOL = 0.06;\n  var MAX_PROC_SIDE = 640;\n  var HOLE_MIN_FRAC = 0.08;\n\n  // ------------------------------------------------------------------ helpers\n  function boxRadiusForSigma(sigma) {\n    if (sigma <= 0) return 0;\n    return Math.max(0, Math.round((Math.sqrt(1 + 4 * sigma * sigma) - 1) / 2));\n  }\n\n  /** Moving average along x, zero-padded - matches numpy _box1d. */\n  function boxH(src, w, h, r) {\n    if (r <= 0) return src;\n    var out = new Float32Array(w * h);\n    var win = 2 * r + 1;\n    var pre = new Float64Array(w + 1);\n    for (var y = 0; y < h; y++) {\n      var row = y * w;\n      pre[0] = 0;\n      for (var x = 0; x < w; x++) pre[x + 1] = pre[x] + src[row + x];\n      for (var x2 = 0; x2 < w; x2++) {\n        var lo = Math.max(0, x2 - r);\n        var hi = Math.min(w, x2 + r + 1);\n        out[row + x2] = (pre[hi] - pre[lo]) / win;\n      }\n    }\n    return out;\n  }\n\n  /** Moving average along y, zero-padded. */\n  function boxV(src, w, h, r) {\n    if (r <= 0) return src;\n    var out = new Float32Array(w * h);\n    var win = 2 * r + 1;\n    var pre = new Float64Array(h + 1);\n    for (var x = 0; x < w; x++) {\n      pre[0] = 0;\n      for (var y = 0; y < h; y++) pre[y + 1] = pre[y] + src[y * w + x];\n      for (var y2 = 0; y2 < h; y2++) {\n        var lo = Math.max(0, y2 - r);\n        var hi = Math.min(h, y2 + r + 1);\n        out[y2 * w + x] = (pre[hi] - pre[lo]) / win;\n      }\n    }\n    return out;\n  }\n\n  /** 3 chained box blurs ~= gaussian. Zero padding is correct for alpha. */\n  function gaussian(src, w, h, sigma) {\n    var r = boxRadiusForSigma(sigma);\n    if (r <= 0) return src;\n    var out = src;\n    for (var i = 0; i < 3; i++) {\n      out = boxH(out, w, h, r);\n      out = boxV(out, w, h, r);\n    }\n    return out;\n  }\n\n  /** out[y] = in[y-dy], zero fill (numpy roll would wrap - we must not). */\n  function shift(src, w, h, dy, dx) {\n    var out = new Float32Array(w * h);\n    for (var y = 0; y < h; y++) {\n      var sy = y - dy;\n      if (sy < 0 || sy >= h) continue;\n      for (var x = 0; x < w; x++) {\n        var sx = x - dx;\n        if (sx < 0 || sx >= w) continue;\n        out[y * w + x] = src[sy * w + sx];\n      }\n    }\n    return out;\n  }\n\n  /** 4-connected flood fill from seed through passable. */\n  function flood(seed, passable, w, h) {\n    var out = new Uint8Array(w * h);\n    var stack = new Int32Array(w * h);\n    var sp = 0;\n    for (var i = 0; i < w * h; i++) {\n      if (seed[i] && passable[i]) { out[i] = 1; stack[sp++] = i; }\n    }\n    while (sp > 0) {\n      var p = stack[--sp];\n      var x = p % w;\n      var y = (p - x) / w;\n      if (x > 0) { var a = p - 1; if (passable[a] && !out[a]) { out[a] = 1; stack[sp++] = a; } }\n      if (x < w - 1) { var b = p + 1; if (passable[b] && !out[b]) { out[b] = 1; stack[sp++] = b; } }\n      if (y > 0) { var c = p - w; if (passable[c] && !out[c]) { out[c] = 1; stack[sp++] = c; } }\n      if (y < h - 1) { var e = p + w; if (passable[e] && !out[e]) { out[e] = 1; stack[sp++] = e; } }\n    }\n    return out;\n  }\n\n  function median(values) {\n    var a = Array.prototype.slice.call(values).sort(function (p, q) { return p - q; });\n    var n = a.length;\n    if (n === 0) return 0;\n    return n % 2 ? a[(n - 1) / 2] : 0.5 * (a[n / 2 - 1] + a[n / 2]);\n  }\n\n  /**\n   * Triangle-filter resample matching PIL's geometry exactly.\n   *\n   * The Python original calls PIL `Image.resize(..., BILINEAR)`. Pillow widens\n   * the filter support when downscaling (filterscale = max(scale, 1)), so a\n   * naive 4-tap bilinear averages too few pixels and shifts the resulting fill\n   * ratio by a fraction of a percent. That is enough to flip a borderline\n   * asset, so we replicate Pillow's maths rather than approximate it.\n   */\n  function resamplePIL(src, w, h, nw, nh) {\n    function weights(dstLen, srcLen) {\n      var scale = srcLen / dstLen;\n      var fscale = scale < 1.0 ? 1.0 : scale;\n      var support = 1.0 * fscale;\n      var list = [];\n      for (var d = 0; d < dstLen; d++) {\n        var center = (d + 0.5) * scale;\n        var lo = Math.floor(center - support + 0.5);\n        var hi = Math.floor(center + support + 0.5);\n        if (lo < 0) lo = 0;\n        if (hi > srcLen) hi = srcLen;\n        var ws = [];\n        var sum = 0;\n        for (var s = lo; s < hi; s++) {\n          var t = Math.abs((s + 0.5 - center) / fscale);\n          var wt = t < 1.0 ? 1.0 - t : 0.0;\n          ws.push([s, wt]);\n          sum += wt;\n        }\n        if (sum === 0 && ws.length) { ws[0][1] = 1; sum = 1; }\n        for (var k = 0; k < ws.length; k++) ws[k][1] /= sum;\n        list.push(ws);\n      }\n      return list;\n    }\n\n    var wx = weights(nw, w);\n    var wy = weights(nh, h);\n\n    // horizontal pass\n    var tmp = new Float32Array(nw * h);\n    for (var y = 0; y < h; y++) {\n      var row = y * w;\n      for (var x = 0; x < nw; x++) {\n        var acc = 0, wl = wx[x];\n        for (var i = 0; i < wl.length; i++) acc += src[row + wl[i][0]] * wl[i][1];\n        tmp[y * nw + x] = acc;\n      }\n    }\n\n    // vertical pass\n    var out = new Float32Array(nw * nh);\n    for (var y2 = 0; y2 < nh; y2++) {\n      var wl2 = wy[y2];\n      for (var x2 = 0; x2 < nw; x2++) {\n        var acc2 = 0;\n        for (var j = 0; j < wl2.length; j++) acc2 += tmp[wl2[j][0] * nw + x2] * wl2[j][1];\n        out[y2 * nw + x2] = acc2;\n      }\n    }\n    return out;\n  }\n\n  function resizeNearest(src, w, h, nw, nh) {\n    var out = new Float32Array(nw * nh);\n    for (var y = 0; y < nh; y++) {\n      var sy = Math.min(h - 1, Math.floor((y + 0.5) * h / nh));\n      for (var x = 0; x < nw; x++) {\n        var sx = Math.min(w - 1, Math.floor((x + 0.5) * w / nw));\n        out[y * nw + x] = src[sy * w + sx];\n      }\n    }\n    return out;\n  }\n\n  /** Weighted distance from the background colour (0..255 scale). */\n  function whiteDistanceAt(d, i, bg) {\n    var r = d[i] - bg[0], g = d[i + 1] - bg[1], b = d[i + 2] - bg[2];\n    var lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;\n    var chroma2 = r * r + g * g + b * b - lum * lum;\n    var chroma = Math.sqrt(chroma2 > 0 ? chroma2 : 0);\n    return Math.sqrt(lum * lum + 1.6 * chroma * chroma);\n  }\n\n  // --------------------------------------------------------------- cutout\n  function estimateBorderColor(img) {\n    var w = img.w, h = img.h, d = img.d;\n    var band = Math.max(2, Math.round(Math.min(h, w) * 0.02));\n    var rs = [], gs = [], bs = [];\n\n    function push(x, y) {\n      var i = (y * w + x) * 4;\n      rs.push(d[i]); gs.push(d[i + 1]); bs.push(d[i + 2]);\n    }\n    for (var y = 0; y < band; y++) for (var x = 0; x < w; x++) { push(x, y); push(x, h - 1 - y); }\n    for (var x2 = 0; x2 < band; x2++) for (var y2 = 0; y2 < h; y2++) { push(x2, y2); push(w - 1 - x2, y2); }\n\n    var bg = [median(rs), median(gs), median(bs)];\n\n    var dist = new Float64Array(rs.length);\n    for (var k = 0; k < rs.length; k++) {\n      var dr = rs[k] - bg[0], dg = gs[k] - bg[1], db = bs[k] - bg[2];\n      dist[k] = Math.sqrt(dr * dr + dg * dg + db * db);\n    }\n    var within = 0;\n    for (var m = 0; m < dist.length; m++) if (dist[m] <= 18.0) within++;\n    var purity = within / dist.length;\n\n    var med = median(dist);\n    var dev = new Float64Array(dist.length);\n    for (var n = 0; n < dist.length; n++) dev[n] = Math.abs(dist[n] - med);\n    var mad = median(dev);\n    var sigma = Math.max(1.5, 1.4826 * mad);\n\n    return { bg: bg, purity: purity, sigma: sigma };\n  }\n\n  function cutout(img, punchHoles) {\n    var w = img.w, h = img.h, d = img.d;\n    var info = {\n      applied: false, method: 'none', bg_color: [], border_purity: 1,\n      noise_sigma: 0, t_lo: 0, t_hi: 0, holes_punched: false\n    };\n\n    // Some generators already hand us a real alpha channel - trust it.\n    var minA = 255, transparent = 0;\n    for (var i = 3; i < d.length; i += 4) {\n      var a = d[i];\n      if (a < minA) minA = a;\n      if (a / 255 < ALPHA_VISIBLE) transparent++;\n    }\n    var hadAlpha = minA < 0.98 * 255;\n    if (hadAlpha && transparent / (w * h) > 0.02) {\n      info.applied = true;\n      info.method = 'existing-alpha';\n      return { img: img, info: info };\n    }\n\n    var est = estimateBorderColor(img);\n    var bg = est.bg;\n    info.bg_color = [round1(bg[0]), round1(bg[1]), round1(bg[2])];\n    info.border_purity = round4(est.purity);\n    info.noise_sigma = Math.round(est.sigma * 100) / 100;\n\n    var tLo = Math.max(6.0, 3.0 * est.sigma);\n    var tHi = Math.max(22.0, 2.4 * tLo);\n    info.t_lo = Math.round(tLo * 100) / 100;\n    info.t_hi = Math.round(tHi * 100) / 100;\n\n    // --- work small for the flood, then upsample the decision --------------\n    var scale = Math.min(1.0, MAX_PROC_SIDE / Math.max(h, w));\n    var sw = Math.max(8, Math.round(w * scale));\n    var sh = Math.max(8, Math.round(h * scale));\n\n    var dFull = new Float32Array(w * h);\n    for (var p = 0, q = 0; p < d.length; p += 4, q++) dFull[q] = whiteDistanceAt(d, p, bg);\n\n    var dSmall = resamplePIL(dFull, w, h, sw, sh);\n\n    var seed = new Uint8Array(sw * sh);\n    var passable = new Uint8Array(sw * sh);\n    var gate = Math.max(tLo, tHi * 0.5);\n    for (var y = 0; y < sh; y++) {\n      for (var x = 0; x < sw; x++) {\n        var idx = y * sw + x;\n        var v = dSmall[idx];\n        passable[idx] = v <= gate ? 1 : 0;\n        var border = (y === 0 || y === sh - 1 || x === 0 || x === sw - 1);\n        seed[idx] = border && v <= tLo ? 1 : 0;\n      }\n    }\n\n    var bgSmall = flood(seed, passable, sw, sh);\n\n    if (punchHoles) {\n      var enclosed = new Uint8Array(sw * sh);\n      var enclosedCount = 0;\n      for (var j = 0; j < sw * sh; j++) {\n        if (passable[j] && !bgSmall[j]) { enclosed[j] = 1; enclosedCount++; }\n      }\n      var enclosedArea = enclosedCount / (sh * sw);\n      info.holes_punched = enclosedArea >= HOLE_MIN_FRAC;\n      if (info.holes_punched) {\n        var holes = flood(enclosed, passable, sw, sh);\n        for (var j2 = 0; j2 < sw * sh; j2++) if (holes[j2]) bgSmall[j2] = 1;\n      }\n    }\n\n    var bgProb = new Float32Array(sw * sh);\n    for (var k = 0; k < sw * sh; k++) bgProb[k] = bgSmall[k];\n    bgProb = resizeNearest(bgProb, sw, sh, w, h);\n    bgProb = gaussian(bgProb, w, h, Math.max(0.6, 0.8 * scale));\n\n    // remap so the ramp is centred on 0.5 coverage (blur flattens it)\n    for (var m = 0; m < bgProb.length; m++) {\n      var t = (bgProb[m] - 0.20) / 0.60;\n      t = t < 0 ? 0 : t > 1 ? 1 : t;\n      bgProb[m] = t * t * (3 - 2 * t);\n    }\n\n    var out = new Float32Array(d.length);\n    for (var r2 = 0; r2 < w * h; r2++) {\n      var al = 1 - bgProb[r2];\n      if (al < 0) al = 0; else if (al > 1) al = 1;\n\n      // kill stray near-white speckle the flood could not reach in the bg area\n      if (al < 0.98 && dFull[r2] < tLo * 0.6) al = 0;\n\n      var o4 = r2 * 4;\n      var rr = d[o4], gg = d[o4 + 1], bb = d[o4 + 2];\n\n      // despill the antialiased rim (kills the pinkish/grey halo)\n      if (al > 0.02 && al < 0.985) {\n        var inv = 1 - al;\n        var den = al > 0.25 ? al : 0.25;\n        rr = (rr - bg[0] * inv) / den;\n        gg = (gg - bg[1] * inv) / den;\n        bb = (bb - bg[2] * inv) / den;\n      }\n      out[o4] = clamp255(rr);\n      out[o4 + 1] = clamp255(gg);\n      out[o4 + 2] = clamp255(bb);\n      out[o4 + 3] = al * 255;\n    }\n\n    info.applied = true;\n    info.method = info.holes_punched ? 'flood-white+holes' : 'flood-white';\n    return { img: { w: w, h: h, d: out }, info: info };\n  }\n\n  // ------------------------------------------------------- metrics + QA\n  function contentMask(img, needCutout) {\n    var mask = new Uint8Array(img.w * img.h);\n    var d = img.d;\n    for (var p = 0, q = 0; q < mask.length; q++, p += 4) {\n      var a = d[p + 3] / 255;\n      if (needCutout) {\n        mask[q] = a >= ALPHA_QA_THRESHOLD ? 1 : 0;\n      } else {\n        var opaque = a > 0.5;\n        var nearWhite = Math.min(d[p], d[p + 1], d[p + 2]) >= WHITE_CUT;\n        mask[q] = opaque && !nearWhite ? 1 : 0;\n      }\n    }\n    return mask;\n  }\n\n  function measure(img, rule) {\n    var w = img.w, h = img.h;\n    var mask = contentMask(img, rule.need_cutout);\n\n    var area = 0;\n    for (var i = 0; i < mask.length; i++) area += mask[i];\n    var fill = area / (w * h);\n\n    var x0 = 0, x1 = 0, y0 = 0, y1 = 0, bw = 0, bh = 0, dx = 0, dy = 0;\n    if (area > 0) {\n      var minX = w, maxX = -1, minY = h, maxY = -1;\n      for (var y = 0; y < h; y++) {\n        var row = y * w;\n        for (var x = 0; x < w; x++) {\n          if (!mask[row + x]) continue;\n          if (x < minX) minX = x;\n          if (x > maxX) maxX = x;\n          if (y < minY) minY = y;\n          if (y > maxY) maxY = y;\n        }\n      }\n      x0 = minX; x1 = maxX; y0 = minY; y1 = maxY;\n      bw = x1 - x0 + 1;\n      bh = y1 - y0 + 1;\n      var cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;\n      dx = (cx - (w - 1) / 2) / (w / 2);\n      dy = (cy - (h - 1) / 2) / (h / 2);\n    }\n\n    function edgeMean(fn) {\n      var c = 0;\n      for (var k = 0; k < fn.length; k++) c += mask[fn[k]];\n      return c / fn.length;\n    }\n    var topCol = [], botCol = [], leftCol = [], rightCol = [];\n    for (var xx = 0; xx < w; xx++) { topCol.push(xx); botCol.push((h - 1) * w + xx); }\n    for (var yy = 0; yy < h; yy++) { leftCol.push(yy * w); rightCol.push(yy * w + w - 1); }\n\n    var coverage = {\n      top: edgeMean(topCol),\n      bottom: edgeMean(botCol),\n      left: edgeMean(leftCol),\n      right: edgeMean(rightCol)\n    };\n    var clipped = [], clippedFrac = [];\n    Object.keys(coverage).forEach(function (side) {\n      if (coverage[side] >= CLIP_EDGE_COVERAGE) {\n        clipped.push(side);\n        clippedFrac.push(side + ' (' + Math.round(coverage[side] * 100) + '%)');\n      }\n    });\n\n    var targetAspect = (rule.target_w && rule.target_h)\n      ? round4(rule.target_w / rule.target_h) : null;\n\n    return {\n      width: w,\n      height: h,\n      aspect: round4(w / h),\n      target_aspect: targetAspect,\n      fill_ratio: round4(fill),\n      fill_pct: (fill * 100).toFixed(1) + '%',\n      fill_min: rule.fill_min,\n      fill_max: rule.fill_max,\n      bbox: [x0, y0, bw, bh],\n      bbox_center_dx: round4(dx),\n      bbox_center_dy: round4(dy),\n      center_dev: round4(Math.max(Math.abs(dx), Math.abs(dy))),\n      center_tol: rule.center_tol,\n      edge_coverage: {\n        top: round4(coverage.top), bottom: round4(coverage.bottom),\n        left: round4(coverage.left), right: round4(coverage.right)\n      },\n      clipped_edges: clippedFrac,\n      solidity: (bw && bh) ? round4(area / (bw * bh)) : 0.0\n    };\n  }\n\n  function qa(metrics, rule) {\n    var fails = [], warns = [];\n\n    if (metrics.target_aspect) {\n      var ta = metrics.target_aspect;\n      if (Math.abs(metrics.aspect - ta) > ta * 0.02) {\n        fails.push('Aspect ratio ' + metrics.width + 'x' + metrics.height +\n          ' (' + metrics.aspect.toFixed(3) + ') is not ' + ta.toFixed(3) +\n          ' (+/-2%)');\n      }\n    }\n\n    var fill = metrics.fill_ratio;\n    if (fill < rule.fill_min) {\n      fails.push('Fill ratio ' + metrics.fill_pct + ' is below ' +\n        Math.round(rule.fill_min * 100) + '% minimum');\n    } else if (fill > rule.fill_max) {\n      fails.push('Fill ratio ' + metrics.fill_pct + ' is above ' +\n        Math.round(rule.fill_max * 100) + '% maximum ' +\n        '(subject touches or overflows the canvas)');\n    }\n\n    if (metrics.clipped_edges.length && !rule.allow_edge_bleed) {\n      fails.push('Subject clipped at canvas edge: ' + metrics.clipped_edges.join(', '));\n    }\n\n    if (!rule.allow_edge_bleed && metrics.center_dev > rule.center_tol) {\n      fails.push('Subject off-centre (dx=' + signed1(metrics.bbox_center_dx * 100) + '%, ' +\n        'dy=' + signed1(metrics.bbox_center_dy * 100) + '%, ' +\n        'max ' + Math.round(rule.center_tol * 100) + '%)');\n    }\n\n    if (rule.target_w && rule.target_h) {\n      if (metrics.width < rule.target_w * 0.9 || metrics.height < rule.target_h * 0.9) {\n        warns.push('Source ' + metrics.width + 'x' + metrics.height + ' is below spec ' +\n          rule.target_w + 'x' + rule.target_h + ' - upscaled, will look soft');\n      }\n    }\n    if (metrics.solidity && metrics.solidity < 0.45) {\n      warns.push('Silhouette is very thin (solidity ' + metrics.solidity.toFixed(2) + ')');\n    }\n\n    return { passed: fails.length === 0, fails: fails, warns: warns };\n  }\n\n  // ------------------------------------------------------ fit + paper-cut\n  /** Resizer hook: browsers inject a canvas Lanczos; Node falls back to bilinear. */\n  var resizer = null;\n  function setResizer(fn) { resizer = fn; }\n\n  function resizeImg(img, nw, nh) {\n    if (img.w === nw && img.h === nh) return img;\n    if (resizer) return resizer(img, nw, nh);\n    var out = new Float32Array(nw * nh * 4);\n    for (var c = 0; c < 4; c++) {\n      var plane = new Float32Array(img.w * img.h);\n      for (var p = 0, q = 0; q < plane.length; q++, p += 4) plane[q] = img.d[p + c];\n      var scaled = resamplePIL(plane, img.w, img.h, nw, nh);\n      for (var r = 0, s = 0; r < scaled.length; r++, s += 4) out[s + c] = scaled[r];\n    }\n    return { w: nw, h: nh, d: out };\n  }\n\n  function placeOnCanvas(img, w, h) {\n    var mask = contentMask(img, true);\n    var minX = img.w, maxX = -1, minY = img.h, maxY = -1;\n    for (var y = 0; y < img.h; y++) {\n      var row = y * img.w;\n      for (var x = 0; x < img.w; x++) {\n        if (!mask[row + x]) continue;\n        if (x < minX) minX = x;\n        if (x > maxX) maxX = x;\n        if (y < minY) minY = y;\n        if (y > maxY) maxY = y;\n      }\n    }\n    var out = { w: w, h: h, d: new Float32Array(w * h * 4) };\n    if (maxX < 0) return out;\n\n    var x0 = Math.max(0, minX - 2), y0 = Math.max(0, minY - 2);\n    var x1 = Math.min(img.w - 1, maxX + 2), y1 = Math.min(img.h - 1, maxY + 2);\n    var sw = x1 - x0 + 1, sh = y1 - y0 + 1;\n\n    var sub = { w: sw, h: sh, d: new Float32Array(sw * sh * 4) };\n    for (var yy = 0; yy < sh; yy++) {\n      var srcOff = ((y0 + yy) * img.w + x0) * 4;\n      sub.d.set(img.d.subarray(srcOff, srcOff + sw * 4), yy * sw * 4);\n    }\n\n    var scale = Math.min(1.0, w / sw, h / sh);\n    var nw = Math.max(1, Math.round(sw * scale));\n    var nh = Math.max(1, Math.round(sh * scale));\n    var scaled = resizeImg(sub, nw, nh);\n\n    // Composite centred. Destination starts fully transparent, so a source-over\n    // blit is just a copy - no blending maths needed.\n    var ox = Math.floor((w - nw) / 2);\n    var oy = Math.floor((h - nh) / 2);\n    for (var ry = 0; ry < nh; ry++) {\n      var dy = oy + ry;\n      if (dy < 0 || dy >= h) continue;\n      for (var rx = 0; rx < nw; rx++) {\n        var dx = ox + rx;\n        if (dx < 0 || dx >= w) continue;\n        var si = (ry * nw + rx) * 4;\n        var di = (dy * w + dx) * 4;\n        out.d[di] = scaled.d[si];\n        out.d[di + 1] = scaled.d[si + 1];\n        out.d[di + 2] = scaled.d[si + 2];\n        out.d[di + 3] = scaled.d[si + 3];\n      }\n    }\n    return out;\n  }\n\n  function papercutFinish(img, opt) {\n    var w = img.w, h = img.h;\n    var alpha = new Float32Array(w * h);\n    for (var p = 0, q = 0; q < alpha.length; q++, p += 4) alpha[q] = img.d[p + 3] / 255;\n\n    // --- inner bevel: light from top-left --------------------------------\n    var bevel = opt.bevel, gain = opt.bevel_gain;\n    var ab = gaussian(alpha, w, h, Math.max(1.0, bevel * 0.55));\n    var off = Math.max(1, Math.round(bevel * 0.5));\n    var upLeft = shift(ab, w, h, -off, -off);\n    var downRight = shift(ab, w, h, off, off);\n\n    var subject = new Float32Array(img.d.length);\n    for (var k = 0; k < w * h; k++) {\n      var rl = ab[k] - upLeft[k]; if (rl < 0) rl = 0; else if (rl > 1) rl = 1;\n      var rd = downRight[k] - ab[k]; if (rd < 0) rd = 0; else if (rd > 1) rd = 1;\n      var shade = 1 + gain * (rl - 0.85 * rd);\n      var i4 = k * 4;\n      subject[i4] = clamp255(img.d[i4] * shade);\n      subject[i4 + 1] = clamp255(img.d[i4 + 1] * shade);\n      subject[i4 + 2] = clamp255(img.d[i4 + 2] * shade);\n      subject[i4 + 3] = img.d[i4 + 3];\n    }\n\n    // --- ambient shadow: solid black, +4/+6, single opacity ---------------\n    var shadowAlpha = new Float32Array(w * h);\n    var clipFrac = 0;\n    if (opt.shadow_opacity > 0) {\n      var blurred = gaussian(alpha, w, h, opt.shadow_blur);\n      var rawMass = 0;\n      for (var s = 0; s < blurred.length; s++) {\n        blurred[s] *= opt.shadow_opacity;\n        rawMass += blurred[s];\n      }\n      shadowAlpha = shift(blurred, w, h, opt.shadow_dy, opt.shadow_dx);\n      var moved = 0;\n      for (var t = 0; t < shadowAlpha.length; t++) moved += shadowAlpha[t];\n      if (rawMass > 0) clipFrac = Math.max(0, 1 - moved / rawMass);\n    }\n\n    // --- composite shadow UNDER the subject (straight alpha) --------------\n    var out = new Float32Array(img.d.length);\n    for (var m = 0; m < w * h; m++) {\n      var sa = shadowAlpha[m];\n      if (sa < 0) sa = 0; else if (sa > 1) sa = 1;\n      var ta = subject[m * 4 + 3] / 255;\n      var oa = ta + sa * (1 - ta);\n      var o4 = m * 4;\n      if (oa <= 0) { out[o4 + 3] = 0; continue; }\n      // shadow is black, so only the subject contributes colour\n      out[o4] = subject[o4] * ta / oa;\n      out[o4 + 1] = subject[o4 + 1] * ta / oa;\n      out[o4 + 2] = subject[o4 + 2] * ta / oa;\n      out[o4 + 3] = oa * 255;\n    }\n\n    return {\n      img: { w: w, h: h, d: out },\n      info: {\n        bevel_px: bevel,\n        bevel_gain: gain,\n        shadow_offset: [opt.shadow_dx, opt.shadow_dy],\n        shadow_blur_px: opt.shadow_blur,\n        shadow_opacity: opt.shadow_opacity,\n        shadow_clipped: round4(clipFrac)\n      }\n    };\n  }\n\n  // ------------------------------------------------------------ presets\n  // Mirrors Style_Rules in the Google Sheet. Hardcoded so the page works with\n  // no Google account and no network.\n  var PRESETS = {\n    coin_token: {\n      label: '金币 / coin_token', width: 1024, height: 1024,\n      fill_min: 0.73, fill_max: 0.83, need_cutout: true,\n      punch_holes: false, allow_edge_bleed: false, shadow_opacity: 0.22\n    },\n    board_surface: {\n      label: '棋盘底 / board_surface', width: 1920, height: 1080,\n      fill_min: 0.98, fill_max: 1.00, need_cutout: false,\n      punch_holes: false, allow_edge_bleed: true, shadow_opacity: 0.0\n    },\n    board_frame: {\n      label: '棋盘框 / board_frame', width: 1920, height: 1080,\n      fill_min: 0.00, fill_max: 1.00, need_cutout: true,\n      punch_holes: true, allow_edge_bleed: true, shadow_opacity: 0.0\n    },\n    ui_element: {\n      label: '界面元素 / ui_element', width: 512, height: 512,\n      fill_min: 0.60, fill_max: 0.80, need_cutout: true,\n      punch_holes: false, allow_edge_bleed: false, shadow_opacity: 0.22\n    }\n  };\n\n  // ------------------------------------------------------------- pipeline\n  function runPipeline(img, presetKey, overrides) {\n    var t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());\n    var p = PRESETS[presetKey] || PRESETS.coin_token;\n    var opt = Object.assign({}, p, overrides || {});\n\n    var rule = {\n      need_cutout: !!opt.need_cutout,\n      fill_min: opt.fill_min,\n      fill_max: opt.fill_max,\n      target_w: opt.width,\n      target_h: opt.height,\n      center_tol: DEFAULT_CENTER_TOL,\n      allow_edge_bleed: !!opt.allow_edge_bleed\n    };\n\n    var report = {\n      ok: false,\n      asset_id: opt.asset_id || '',\n      layer_type: presetKey,\n      theme: opt.theme || 'classic',\n      status: 'Invalid',\n      error_reason: '',\n      warnings: [],\n      pipeline_version: VERSION,\n      source: { width: img.w, height: img.h }\n    };\n\n    // --- 0. aspect gate FIRST, on the untouched source -------------------\n    // Resizing before this check would normalise the aspect ratio and make the\n    // QA gate unable to ever fail it.\n    if (rule.target_w && rule.target_h) {\n      var srcAspect = img.w / img.h;\n      var tgt = rule.target_w / rule.target_h;\n      if (Math.abs(srcAspect - tgt) > tgt * 0.02) {\n        report.status = 'Retry';\n        report.error_reason = 'Aspect ratio ' + img.w + 'x' + img.h +\n          ' (' + srcAspect.toFixed(3) + ') is not ' + tgt.toFixed(3) + ' (+/-2%)';\n        report.failures = [report.error_reason];\n        report.elapsed_ms = Math.round(elapsed(t0));\n        return report;\n      }\n    }\n\n    // --- 1. cutout -------------------------------------------------------\n    var info = { applied: false, method: 'skipped (need_cutout=FALSE)' };\n    var work = img;\n    if (rule.need_cutout) {\n      var cut = cutout(img, !!opt.punch_holes);\n      work = cut.img;\n      info = cut.info;\n    }\n\n    // --- 2. QA gate on the cut-out subject -------------------------------\n    var metrics = measure(work, rule);\n    var verdict = qa(metrics, rule);\n    var warns = verdict.warns.slice();\n    if (info.applied && info.border_purity < 0.65) {\n      warns.push('Background not uniform (border purity ' +\n        Math.round(info.border_purity * 100) + '%) - cutout may have eaten part ' +\n        'of the subject or left a haze');\n    }\n\n    report.cutout = {\n      applied: info.applied, method: info.method, bg_color: info.bg_color,\n      border_purity: info.border_purity, holes_punched: info.holes_punched,\n      t_lo: info.t_lo, t_hi: info.t_hi\n    };\n    report.metrics = metrics;\n    report.warnings = warns;\n\n    if (!verdict.passed) {\n      report.status = 'Retry';\n      report.error_reason = verdict.fails.join(' | ');\n      report.failures = verdict.fails;\n      report.elapsed_ms = Math.round(elapsed(t0));\n      return report;\n    }\n\n    // --- 3. normalise to spec size, then finish --------------------------\n    var ow = rule.target_w || work.w;\n    var oh = rule.target_h || work.h;\n    var final;\n\n    if (rule.need_cutout) {\n      var placed = placeOnCanvas(work, ow, oh);\n      var fin = papercutFinish(placed, {\n        bevel: 5.0, bevel_gain: 0.20,\n        shadow_dx: 4, shadow_dy: 6, shadow_blur: 7.0,\n        shadow_opacity: opt.shadow_opacity\n      });\n      final = fin.img;\n      report.finish = fin.info;\n    } else {\n      // full-bleed layers get no shadow/bevel - a board surface must tile\n      final = resizeImg(work, ow, oh);\n      report.finish = { applied: false, reason: 'need_cutout=FALSE (full-bleed layer)' };\n    }\n\n    report.ok = true;\n    report.status = 'Done';\n    report.error_reason = '';\n    report.output_size = { width: final.w, height: final.h };\n    report.metrics_final = measure(final, rule);\n    report.elapsed_ms = Math.round(elapsed(t0));\n    report.image = final;\n    return report;\n  }\n\n  // ------------------------------------------------------------- utilities\n  function clamp255(v) { return v < 0 ? 0 : v > 255 ? 255 : v; }\n  function round1(v) { return Math.round(v * 10) / 10; }\n  function round4(v) { return Math.round(v * 10000) / 10000; }\n  function signed1(v) { return (v >= 0 ? '+' : '') + v.toFixed(1); }\n  function elapsed(t0) {\n    var now = (typeof performance !== 'undefined' ? performance.now() : Date.now());\n    return now - t0;\n  }\n\n  return {\n    VERSION: VERSION,\n    PRESETS: PRESETS,\n    setResizer: setResizer,\n    runPipeline: runPipeline,\n    measure: measure,\n    cutout: cutout,\n    qa: qa,\n    papercutFinish: papercutFinish,\n    // exposed for the parity test\n    _internals: { gaussian: gaussian, shift: shift, flood: flood, median: median, estimateBorderColor: estimateBorderColor }\n  };\n});\n\n  }).call(self);\n  return module.exports;\n})();\n\nconst { decodePng, encodePng } = (function () {\n  const module = { exports: {} };\n  const exports = module.exports;\n  const require = (name) => {\n    if (name === 'zlib') return zlib;\n    throw new Error('unsupported require in sandbox: ' + name);\n  };\n  (function () {\n/**\n * Pure-JS PNG codec using only Node built-ins (zlib).\n *\n * Why: the art pipeline currently needs a Python service because browsers have\n * Canvas and n8n Code nodes do not. But Canvas is only used for decode/encode —\n * the actual image maths in docs/art-core.js is already plain Float32Array work.\n * If PNG can be read and written with zlib alone, the whole pipeline can run\n * inside an n8n Code node and the Python service becomes unnecessary.\n *\n * Scope: 8-bit RGB/RGBA, non-interlaced (what image generators emit).\n */\n'use strict';\n\nconst zlib = require('zlib');\n\n// ------------------------------------------------------------------ decode\nfunction decodePng(buf) {\n  if (buf.readUInt32BE(0) !== 0x89504e47) throw new Error('not a PNG');\n\n  let off = 8;\n  let w = 0, h = 0, bitDepth = 0, colorType = 0, interlace = 0;\n  const idat = [];\n\n  while (off < buf.length) {\n    const len = buf.readUInt32BE(off);\n    const type = buf.toString('ascii', off + 4, off + 8);\n    const data = buf.subarray(off + 8, off + 8 + len);\n\n    if (type === 'IHDR') {\n      w = data.readUInt32BE(0);\n      h = data.readUInt32BE(4);\n      bitDepth = data[8];\n      colorType = data[9];\n      interlace = data[12];\n    } else if (type === 'IDAT') {\n      idat.push(data);\n    } else if (type === 'IEND') {\n      break;\n    }\n    off += 12 + len;\n  }\n\n  if (bitDepth !== 8) throw new Error('bit depth ' + bitDepth + ' unsupported');\n  if (interlace !== 0) throw new Error('interlaced PNG unsupported');\n\n  const channels = colorType === 6 ? 4 : colorType === 2 ? 3 : 0;\n  if (!channels) throw new Error('colour type ' + colorType + ' unsupported');\n\n  const raw = zlib.inflateSync(Buffer.concat(idat));\n  const stride = w * channels;\n  const out = new Uint8Array(w * h * stride);\n  let pos = 0;\n\n  for (let y = 0; y < h; y++) {\n    const filter = raw[pos++];\n    const row = raw.subarray(pos, pos + stride);\n    pos += stride;\n    const base = y * stride;\n    const prev = base - stride;\n\n    for (let x = 0; x < stride; x++) {\n      const a = x >= channels ? out[base + x - channels] : 0;\n      const b = y > 0 ? out[prev + x] : 0;\n      const c = y > 0 && x >= channels ? out[prev + x - channels] : 0;\n      let v = row[x];\n      switch (filter) {\n        case 0: break;\n        case 1: v += a; break;\n        case 2: v += b; break;\n        case 3: v += (a + b) >> 1; break;\n        case 4: {\n          const p = a + b - c;\n          const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);\n          v += (pa <= pb && pa <= pc) ? a : (pb <= pc ? b : c);\n          break;\n        }\n        default: throw new Error('bad filter ' + filter);\n      }\n      out[base + x] = v & 0xff;\n    }\n  }\n\n  // normalise to straight RGBA Float32\n  const d = new Float32Array(w * h * 4);\n  for (let i = 0, s = 0, t = 0; i < w * h; i++, s += channels, t += 4) {\n    d[t] = out[s];\n    d[t + 1] = out[s + 1];\n    d[t + 2] = out[s + 2];\n    d[t + 3] = channels === 4 ? out[s + 3] : 255;\n  }\n  return { w, h, d };\n}\n\n// ------------------------------------------------------------------ encode\nconst CRC_TABLE = (() => {\n  const t = new Int32Array(256);\n  for (let n = 0; n < 256; n++) {\n    let c = n;\n    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);\n    t[n] = c;\n  }\n  return t;\n})();\n\nfunction crc32(buf) {\n  let c = 0xffffffff;\n  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);\n  return (c ^ 0xffffffff) >>> 0;\n}\n\nfunction chunk(type, data) {\n  const len = Buffer.alloc(4);\n  len.writeUInt32BE(data.length, 0);\n  const typeBuf = Buffer.from(type, 'ascii');\n  const body = Buffer.concat([typeBuf, data]);\n  const crc = Buffer.alloc(4);\n  crc.writeUInt32BE(crc32(body), 0);\n  return Buffer.concat([len, body, crc]);\n}\n\n/** Encode an RGBA image to PNG. Uses filter 1 (Sub) which compresses well on flat art. */\nfunction encodePng(img) {\n  const { w, h, d } = img;\n  const stride = w * 4;\n  const raw = Buffer.alloc((stride + 1) * h);\n\n  for (let y = 0; y < h; y++) {\n    const rowStart = y * (stride + 1);\n    raw[rowStart] = 1; // Sub filter\n    for (let x = 0; x < stride; x++) {\n      const src = (y * w) * 4 + x;\n      const left = x >= 4 ? (d[src - 4] | 0) : 0;\n      const v = (d[src] | 0);\n      raw[rowStart + 1 + x] = (v - left) & 0xff;\n    }\n  }\n\n  const ihdr = Buffer.alloc(13);\n  ihdr.writeUInt32BE(w, 0);\n  ihdr.writeUInt32BE(h, 4);\n  ihdr[8] = 8;   // bit depth\n  ihdr[9] = 6;   // colour type RGBA\n  ihdr[10] = 0;  // compression\n  ihdr[11] = 0;  // filter\n  ihdr[12] = 0;  // interlace\n\n  return Buffer.concat([\n    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),\n    chunk('IHDR', ihdr),\n    chunk('IDAT', zlib.deflateSync(raw, { level: 9 })),\n    chunk('IEND', Buffer.alloc(0)),\n  ]);\n}\n\nmodule.exports = { decodePng, encodePng };\n\n  }).call({});\n  return module.exports;\n})();\n\n// ── read the incoming image ────────────────────────────────────────────────\nfunction readInput() {\n  const item = $input.first();\n  const j = item.json || {};\n  const bin = item.binary || {};\n\n  // Preferred: real binary from the Drive download.\n  if (bin.data && bin.data.data) {\n    return Buffer.from(bin.data.data, 'base64');\n  }\n  // Fallback: a base64 string prepared by the previous node.\n  let s = String(j.image_base64 || '');\n  if (!s) throw new Error('No image: neither binary.data nor json.image_base64 is present');\n  if (s.indexOf('base64,') >= 0) s = s.split('base64,').pop();\n  return Buffer.from(s.replace(/\\s/g, ''), 'base64');\n}\n\n/**\n * Find the resolved task parameters.\n *\n * Cannot hardcode a node name: n8n appends `1` when a workflow is pasted into a\n * copy of itself, so the same JSON must work as `Resolve Task + Build Params`\n * and `Resolve Task + Build Params1`. Probe both, then fall back to scanning the\n * run data for an object that looks like resolved params.\n */\nfunction findParams() {\n  const candidates = [\n    'Resolve Task + Build Params',\n    'Resolve Task + Build Params1',\n  ];\n\n  for (const name of candidates) {\n    try {\n      const j = $(name).first().json;\n      if (j && j.asset_id && j.layer_type) return j;\n    } catch (e) {\n      // node not present under that name; keep looking\n    }\n  }\n\n  // Last resort: scan every item seen so far for the right shape.\n  try {\n    const all = $input.all();\n    for (const it of all) {\n      const j = it.json || {};\n      if (j.asset_id && j.layer_type && typeof j.fill_min === 'number') return j;\n    }\n  } catch (e) { /* ignore */ }\n\n  throw new Error(\n    'Cannot find resolved task params. Expected a node named ' +\n    '\"Resolve Task + Build Params\" (or \"...1\") producing asset_id + layer_type.'\n  );\n}\n\nconst pngBuffer = readInput();\nconst img = decodePng(pngBuffer);\n\n// ── parameters come from the same source serve.py used ─────────────────────\nconst params = findParams();\nconst presetKey = params.layer_type || 'coin_token';\nif (!__core.PRESETS[presetKey]) {\n  throw new Error('unknown layer_type: ' + presetKey);\n}\n\nconst report = __core.runPipeline(img, presetKey, {\n  asset_id: params.asset_id,\n  theme: params.theme,\n  fill_min: params.fill_min,\n  fill_max: params.fill_max,\n  width: params.width,\n  height: params.height,\n  need_cutout: params.need_cutout,\n  punch_holes: params.punch_holes,\n  allow_edge_bleed: params.allow_edge_bleed,\n  shadow_opacity: params.shadow_opacity,\n});\n\n// ── shape it like the old HTTP response ───────────────────────────────────\nconst out = {\n  ok: report.status === 'Done',\n  asset_id: report.asset_id,\n  layer_type: report.layer_type,\n  theme: report.theme,\n  status: report.status,\n  error_reason: report.error_reason || '',\n  warnings: report.warnings || [],\n  metrics: report.metrics,\n  cutout: report.cutout,\n  finish: report.finish,\n  pipeline_version: report.pipeline_version || __core.VERSION,\n  elapsed_ms: report.elapsed_ms,\n};\n\nif (report.status === 'Done' && report.image) {\n  out.output_base64 = encodePng(report.image).toString('base64');\n  out.output_size = { width: report.image.w, height: report.image.h };\n}\n\nreturn [{ json: out }];\n"
+      },
+      "notes": "Cutout + QA + paper-cut finish, running entirely inside n8n. Inlines docs/art-core.js (verified against the Python original) plus a zlib-only PNG codec, so no local service, tunnel or Python is needed. Returns the same JSON shape serve.py did: status / error_reason / metrics / output_base64 on pass."
+    },
+    {
+      "id": "if-pass",
+      "name": "QA Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        -240
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "p1",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "Done",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b64-to-bin",
+      "name": "Base64 → Binary",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        2200,
+        -360
+      ],
+      "parameters": {
+        "operation": "toBinary",
+        "sourceProperty": "output_base64",
+        "options": {
+          "fileName": "={{ $('Resolve Task + Build Params').first().json.asset_id }}.png",
+          "mimeType": "image/png"
+        }
+      }
+    },
+    {
+      "id": "up-approved",
+      "name": "Drive: Upload Approved",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2420,
+        -360
+      ],
+      "parameters": {
+        "operation": "upload",
+        "inputDataFieldName": "data",
+        "name": "={{ $('Resolve Task + Build Params').first().json.asset_id }}.png",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Resolve Theme Folder ID').first().json.themeFolderId }}"
+        },
+        "options": {},
+        "resource": "file"
+      },
+      "notes": "Folder id comes from Config.themeFolders via the Resolve Theme Folder ID node. Files keep the <asset_id>.png name so the path is stable."
+    },
+    {
+      "id": "sheets-done",
+      "name": "Sheets: Mark Done",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2640,
+        -360
+      ],
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Asset_Tasks"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "asset_id"
+          ],
+          "value": {
+            "asset_id": "={{ $('Resolve Task + Build Params').first().json.asset_id }}",
+            "status": "Done",
+            "error_reason": "",
+            "output_url": "={{ $json.webViewLink }}"
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "move-rejected",
+      "name": "Drive: Move to Rejected",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        2200,
+        -120
+      ],
+      "parameters": {
+        "operation": "move",
+        "fileId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Resolve Task + Build Params').first().json.driveFileId }}"
+        },
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Config').first().json.rejectedFolderId }}"
+        },
+        "options": {},
+        "resource": "file"
+      }
+    },
+    {
+      "id": "sheets-retry",
+      "name": "Sheets: Mark Retry",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2420,
+        -120
+      ],
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Config').first().json.sheetId }}"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Asset_Tasks"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "asset_id"
+          ],
+          "value": {
+            "asset_id": "={{ $('Resolve Task + Build Params').first().json.asset_id }}",
+            "status": "Retry",
+            "error_reason": "={{ $('Pipeline: Cutout + QA + Finish (local)').first().json.error_reason }}",
+            "output_url": ""
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "stamp-theme",
+      "name": "Resolve Theme Folder ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        -400
+      ],
+      "parameters": {
+        "jsCode": "// Resolve the Drive folder id for this asset's theme, without searching Drive.\n//\n// We deliberately do NOT use a Google Drive \"search folder\" node: that\n// operation does not exist in every n8n build (some only offer Create /\n// Delete / Share under the Folder resource), so the node fails to configure\n// with a red \"!\" and the workflow cannot run.\n//\n// Instead Config.themeFolders holds an explicit map:\n//   {\"classic\":\"1AbC...\",\"bakery\":\"1DeF...\",\"cyber\":\"1GhI...\"}\n// Deterministic, one fewer API call, and the failure mode is a clear message\n// telling you exactly which folder id to paste in.\nconst report = $('Pipeline: Cutout + QA + Finish (local)').first().json;\nconst cfg = $('Config').first().json;\nconst theme = String($('Resolve Task + Build Params').first().json.theme || '').trim();\n\nlet map = {};\ntry {\n  map = JSON.parse(String(cfg.themeFolders || '{}'));\n} catch {\n  throw new Error('Config.themeFolders is not valid JSON. Expected {\"classic\":\"<folderId>\", ...}');\n}\n\n// case-insensitive lookup so \"Classic\" and \"classic\" both work\nconst key = Object.keys(map).find((k) => k.trim().toLowerCase() === theme.toLowerCase());\nconst folderId = key ? String(map[key] || '').trim() : '';\n\nif (!folderId) {\n  throw new Error(\n    `No Drive folder id configured for theme '${theme}'. ` +\n    `Open Config -> themeFolders and set the id for that key, e.g. ` +\n    `{\"classic\":\"1AbC...\",\"bakery\":\"1DeF...\"}. ` +\n    `The id is the part after /folders/ in the Drive folder URL.`\n  );\n}\n\nreturn [{ json: { ...report, themeFolderId: folderId, themeFolderName: theme } }];"
+      }
+    },
+    {
+      "id": "raw-to-b64",
+      "name": "Raw to Base64",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1650,
+        -240
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// n8n Cloud does NOT hold binary data inline - $binary.data.data is\n// undefined there, so JSON.stringify silently drops image_base64 and the\n// service answers \"image_base64 is required\". Convert once, explicitly.\n//\n// getBinaryDataBuffer is the supported cross-version helper and works in\n// both \"Run Once for All Items\" and per-item mode.\nconst buf = await this.helpers.getBinaryDataBuffer(0, 'data');\nreturn { json: { image_base64: buf.toString('base64') } };\n"
+      },
+      "notes": "Converts the downloaded binary into raw base64. Required on n8n Cloud, where binary data is offloaded to object storage and $binary.data.data is undefined. serve.py accepts the value without a data: prefix."
+    }
+  ],
+  "connections": {
+    "Drive: Raw Upload": {
+      "main": [
+        [
+          {
+            "node": "Parse Filename",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Filename OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Filename": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filename OK?": {
+      "main": [
+        [
+          {
+            "node": "Sheets: Asset_Tasks",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log: Bad Filename",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sheets: Asset_Tasks": {
+      "main": [
+        [
+          {
+            "node": "Sheets: Style_Rules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sheets: Style_Rules": {
+      "main": [
+        [
+          {
+            "node": "Resolve Task + Build Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Task + Build Params": {
+      "main": [
+        [
+          {
+            "node": "Asset Known?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Asset Known?": {
+      "main": [
+        [
+          {
+            "node": "Drive: Download Raw",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log: Unknown Asset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: Download Raw": {
+      "main": [
+        [
+          {
+            "node": "Raw to Base64",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pipeline: Cutout + QA + Finish (local)": {
+      "main": [
+        [
+          {
+            "node": "QA Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QA Passed?": {
+      "main": [
+        [
+          {
+            "node": "Resolve Theme Folder ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Drive: Move to Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Base64 → Binary": {
+      "main": [
+        [
+          {
+            "node": "Drive: Upload Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: Upload Approved": {
+      "main": [
+        [
+          {
+            "node": "Sheets: Mark Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive: Move to Rejected": {
+      "main": [
+        [
+          {
+            "node": "Sheets: Mark Retry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Theme Folder ID": {
+      "main": [
+        [
+          {
+            "node": "Base64 → Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Raw to Base64": {
+      "main": [
+        [
+          {
+            "node": "Pipeline: Cutout + QA + Finish (local)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,243 @@
+{
+  "name": "CoinDuel — Save Level (webhook → GitHub)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "coinduel-save-level",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "wh-save-level",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-200, 300],
+      "webhookId": "coinduel-save-level",
+      "notes": "POST { levelId, levelJson, secret? }. Editor calls this instead of holding a GitHub token."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "a1", "name": "owner", "value": "Shadow-Candle-Studio", "type": "string" },
+            { "id": "a2", "name": "repo", "value": "LiteProjects", "type": "string" },
+            { "id": "a3", "name": "branch", "value": "main", "type": "string" },
+            { "id": "a4", "name": "levelsPath", "value": "cdn/levels", "type": "string" },
+            { "id": "a5", "name": "webhookSecret", "value": "", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cfg",
+      "name": "Repo Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [20, 300],
+      "notes": "Branch is `main` — the branch the game reads from."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate + normalise an incoming level save.\n// Keeps all shape-checking here so the HTTP nodes stay dumb.\n\nconst cfg = $('Repo Config').first().json;\nconst wh = $('Webhook').first().json;\n\nfunction parseMaybe(v) {\n  if (v == null) return null;\n  if (typeof v === 'string') {\n    const s = v.trim();\n    if (!s) return null;\n    try { return JSON.parse(s); } catch { return null; }\n  }\n  if (typeof v === 'object') return v;\n  return null;\n}\n\nconst root = wh || {};\nconst body = parseMaybe(root.body) || parseMaybe(root.data) || root.body || root;\n\n// --- optional shared secret (same header the meme flow uses) --------------\nconst secret = String(cfg.webhookSecret || '').trim();\nif (secret) {\n  const headers = root.headers || {};\n  const got = String(headers['x-coinduel-secret'] || headers['X-Coinduel-Secret'] || body.secret || '');\n  if (got !== secret) {\n    return [{ json: { ok: false, statusCode: 401, error: 'Unauthorized (bad secret)' } }];\n  }\n}\n\n// --- level id ---------------------------------------------------------\nconst levelId = Number(body.levelId);\nif (!Number.isFinite(levelId) || levelId < 1 || levelId > 99999) {\n  return [{ json: { ok: false, statusCode: 400, error: 'levelId must be a positive integer' } }];\n}\n\n// --- level body -------------------------------------------------------\nlet level = parseMaybe(body.levelJson) || parseMaybe(body.level);\nif (!level) {\n  return [{ json: { ok: false, statusCode: 400, error: 'levelJson required (object or JSON string)' } }];\n}\n\n// Shape gate: a level has numeric id/width/height, a wall, and a coins array.\n// A ModConfig bundle also has `level` but carries schemaVersion — reject it so\n// the editor cannot accidentally clobber a stage with a whole mod.\nif (level.schemaVersion != null) {\n  return [{ json: { ok: false, statusCode: 400, error: 'levelJson looks like a ModConfig (schemaVersion present), not a level' } }];\n}\nif (typeof level.width !== 'number' || typeof level.height !== 'number') {\n  return [{ json: { ok: false, statusCode: 400, error: 'levelJson missing numeric width/height' } }];\n}\nif (!Array.isArray(level.coins)) {\n  return [{ json: { ok: false, statusCode: 400, error: 'levelJson missing coins[]' } }];\n}\nif (!level.wall || typeof level.wall.thickness !== 'number') {\n  level.wall = { thickness: 64 };\n}\nlevel.id = levelId;\n\nconst path = cfg.levelsPath + '/' + levelId + '.json';\nconst bodyText = JSON.stringify(level, null, 4) + '\\n';\n\nreturn [{\n  json: {\n    ok: true,\n    levelId,\n    owner: cfg.owner,\n    repo: cfg.repo,\n    branch: cfg.branch,\n    path,\n    contentBase64: Buffer.from(bodyText, 'utf8').toString('base64'),\n    coins: level.coins.length,\n    commitMessage: 'editor: save level ' + levelId + ' (' + level.coins.length + ' coins)',\n  },\n}];"
+      },
+      "id": "validate",
+      "name": "Validate Level",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-ok",
+      "name": "Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.github.com/repos/{{ $json.owner }}/{{ $json.repo }}/contents/{{ $json.path.split('/').map(encodeURIComponent).join('/') }}?ref={{ $json.branch }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "options": {
+          "response": {
+            "response": { "neverError": true, "responseFormat": "json" }
+          }
+        }
+      },
+      "id": "get-sha",
+      "name": "Get Current File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 200],
+      "notes": "Needed to overwrite an existing file: GitHub's PUT requires the current blob sha."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge the validation payload with the sha of any existing file.\n// 404 means \"new level\" — the PUT works without a sha then.\n\nconst base = $('Validate Level').first().json;\nconst res = $input.first().json || {};\nconst status = Number(res.statusCode || 0);\n\nlet sha = null;\nif (status === 200 && res.sha) {\n  sha = res.sha;\n} else if (status === 404) {\n  sha = null;\n} else if (status !== 200 && status !== 404) {\n  return [{ json: {\n    ok: false,\n    statusCode: 502,\n    error: 'GitHub GET failed (' + status + '): ' + String((res && res.message) || 'no message'),\n  } }];\n}\n\nreturn [{ json: Object.assign({}, base, { sha }) }];"
+      },
+      "id": "merge-sha",
+      "name": "Merge SHA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": { "type": "boolean", "operation": "true", "singleValue": true }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-ready",
+      "name": "Ready to Commit?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.github.com/repos/{{ $json.owner }}/{{ $json.repo }}/contents/{{ $json.path.split('/').map(encodeURIComponent).join('/') }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ message: $json.commitMessage, content: $json.contentBase64, branch: $json.branch, ...($json.sha ? { sha: $json.sha } : {}) }) }}",
+        "options": {
+          "response": {
+            "response": { "neverError": true, "responseFormat": "json" }
+          }
+        }
+      },
+      "id": "commit",
+      "name": "Commit Level",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Turn the GitHub PUT response into the shape the editor expects.\nconst put = $input.first().json || {};\nconst base = $('Merge SHA').first().json;\nconst status = Number(put.statusCode || 0);\n\nif (status === 200 || status === 201) {\n  const commit = put && put.commit && put.commit.sha ? put.commit.sha : '';\n  return [{ json: {\n    ok: true,\n    statusCode: 200,\n    levelId: base.levelId,\n    path: base.path,\n    coins: base.coins,\n    commit: commit ? commit.slice(0, 7) : 'ok',\n    commitFull: commit,\n    url: (put.content && put.content.html_url) || '',\n  } }];\n}\n\nreturn [{ json: {\n  ok: false,\n  statusCode: 502,\n  error: 'GitHub PUT failed (' + status + '): ' + String((put && put.message) || 'no message'),\n} }];"
+      },
+      "id": "summarize",
+      "name": "Summarize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 120]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              { "name": "Access-Control-Allow-Origin", "value": "*" },
+              { "name": "Access-Control-Allow-Headers", "value": "Content-Type, X-Coinduel-Secret" },
+              { "name": "Access-Control-Allow-Methods", "value": "POST, OPTIONS" }
+            ]
+          }
+        }
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1800, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Single exit for every failure path (bad input, GitHub error).\nconst j = $json || {};\nreturn [{ json: {\n  ok: false,\n  statusCode: Number(j.statusCode || 400),\n  error: String(j.error || 'unknown error'),\n} }];"
+      },
+      "id": "error",
+      "name": "Error Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 340]
+    },
+    {
+      "parameters": {
+        "content": "## Save Level webhook\n\nLets the Blockly editor write **`cdn/levels/{id}.json`** without ever holding a GitHub token.\n\n**Why this exists:** friends editing levels should not each need a personal PAT. The token lives once, here, in the `GitHub - LiteProjects` credential.\n\n### Endpoint\n`POST {n8n}/webhook/coinduel-save-level`\n\n### Body\n```json\n{\n  \"levelId\": 1,\n  \"levelJson\": { \"id\": 1, \"width\": 800, \"height\": 600, \"wall\": {\"thickness\":64}, \"coins\": [] }\n}\n```\n`levelJson` may be an object or a JSON string.\n\n### Response\n```json\n{ \"ok\": true, \"commit\": \"a1b2c3d\", \"levelId\": 1, \"path\": \"cdn/levels/1.json\", \"coins\": 4 }\n```\n\n### Setup\n1. Attach the **GitHub** credential to both HTTP nodes (`Get Current File`, `Commit Level`).\n2. Set branch in **Repo Config** (`main` = what the game reads).\n3. Optional: fill `webhookSecret`, then the editor must send the same value.\n4. **Activate** the workflow, then copy the **Production** URL.\n\n### Notes\n- Rejects payloads with `schemaVersion` so a whole ModConfig cannot overwrite a stage.\n- Creates or overwrites — the sha fetch makes both cases work.\n- The game reads levels from raw.githubusercontent, so changes appear on the next page refresh (seconds, no rebuild).",
+        "height": 620,
+        "width": 460,
+        "color": 5
+      },
+      "id": "sticky",
+      "name": "Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -220]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Repo Config", "type": "main", "index": 0 }]]
+    },
+    "Repo Config": {
+      "main": [[{ "node": "Validate Level", "type": "main", "index": 0 }]]
+    },
+    "Validate Level": {
+      "main": [[{ "node": "Valid?", "type": "main", "index": 0 }]]
+    },
+    "Valid?": {
+      "main": [
+        [{ "node": "Get Current File", "type": "main", "index": 0 }],
+        [{ "node": "Error Payload", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Current File": {
+      "main": [[{ "node": "Merge SHA", "type": "main", "index": 0 }]]
+    },
+    "Merge SHA": {
+      "main": [[{ "node": "Ready to Commit?", "type": "main", "index": 0 }]]
+    },
+    "Ready to Commit?": {
+      "main": [
+        [{ "node": "Commit Level", "type": "main", "index": 0 }],
+        [{ "node": "Error Payload", "type": "main", "index": 0 }]
+      ]
+    },
+    "Commit Level": {
+      "main": [[{ "node": "Summarize", "type": "main", "index": 0 }]]
+    },
+    "Summarize": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    },
+    "Error Payload": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "description": "Webhook that lets the Blockly editor save levels to GitHub without exposing a token to browsers."
+  }
+}
