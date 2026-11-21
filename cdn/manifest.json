@@ -1,12 +1,12 @@
 {
-  "version": 23,
+  "version": 24,
   "baseUrl": "",
   "memeConfig": "memes/index.json",
   "levelConfig": "levels/demo_behavior.json",
   "items": [
     {
       "filename": "memes/index.json",
-      "hash": "art-maodie_cat_01-mwqm54nq",
+      "hash": "art-maodie_cat_02-mwqon5pm",
       "kind": "meme"
     },
     {
@@ -255,6 +255,18 @@
       "hash": "art-maodie_cat_01-mwqm54nq",
       "kind": "texture",
       "url": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/maodie_cat_01.png",
+      "theme": "classic"
+    },
+    {
+      "filename": "memes/maodie_cat_02.json",
+      "hash": "art-maodie_cat_02-mwqon5pm",
+      "kind": "meme"
+    },
+    {
+      "filename": "textures/maodie_cat_02.png",
+      "hash": "art-maodie_cat_02-mwqon5pm",
+      "kind": "texture",
+      "url": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/maodie_cat_02.png",
       "theme": "classic"
     }
   ]
