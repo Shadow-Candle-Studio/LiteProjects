@@ -1256,7 +1256,16 @@
           Blockly.serialization.workspaces.load(JSON.parse(saved), workspace);
           scheduleLive();
           setStatus('Restored autosaved workspace.', 'ok');
+          return;
         }
+
+        // Nothing to restore: open a real level instead of an empty canvas, so
+        // what the editor shows always matches what the game is playing. The
+        // last-edited level is remembered; level 1 is the default.
+        const remembered = Number(localStorage.getItem('CoinDuel:lastLevelId'));
+        const bootLevel = Number.isFinite(remembered) && remembered >= 1 ? remembered : 1;
+        setStatus('Opening level ' + bootLevel + '…');
+        loadCdnLevel(bootLevel);
       } catch (_) {}
     })();
 
@@ -1559,7 +1568,10 @@
       const filePath = 'cdn/levels/' + n + '.json';
       // Mark the workspace as user-owned from here on: the autosave restore on
       // page load must not fight an explicit Load.
-      try { localStorage.setItem('CoinDuel:workspaceTouched', '1'); } catch (_) {}
+      try {
+        localStorage.setItem('CoinDuel:workspaceTouched', '1');
+        localStorage.setItem('CoinDuel:lastLevelId', String(n));
+      } catch (_) {}
       setStatus('Loading Level ' + n + ' from GitHub…');
       fetchRepoJson(filePath).then(function (level) {
         importModIntoEditor(levelJsonToMod(level, n), 'Loaded Level ' + n, filePath);
