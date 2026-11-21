@@ -227,7 +227,7 @@
 
     <p class="git-hint">
       儲存會建立真實的 Git commit（例如 <code>cdn/levels/1.json</code>）。
-      遊戲從 CDN 讀關卡，commit 後<strong>重新整理遊戲頁即生效</strong>（數秒，不需重建）。
+      遊戲從 raw.githubusercontent 讀關卡，commit 後<strong>重新整理遊戲頁即生效</strong>（數秒，不需重建）。
       Token 只存在這個瀏覽器。<br>
       需要細粒度 PAT（Contents Read/Write）：
       <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub → Settings → PAT</a>。
@@ -280,7 +280,16 @@
 
   <script>
     /* ── Web-first endpoints (match CdnConfig / shipstatic runtime) ── */
-    const CDN_MANIFEST = 'https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/manifest.json';
+    /**
+     * Manifest URL used by the editor.
+     *
+     * Was jsDelivr, but that caches a branch for 12h — so a meme published
+     * minutes ago never appeared in the catalog picker and its texture was never
+     * preloaded, even though the files were already on GitHub. raw.githubusercontent
+     * reflects the newest commit (the ?t= cache-buster in `bust()` handles the
+     * browser side).
+     */
+    const CDN_MANIFEST = 'https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/manifest.json';
 
     /**
      * Default save endpoint. Baked in so contributors do not have to paste a
@@ -685,6 +694,27 @@
     let memeAtlas = {};
     window.__cdnMemeIds = [];
 
+    /**
+     * Load every catalog texture into `memeAtlas` so the preview can draw real
+     * art. Entries are keyed by memeId; a missing/failed image simply stays
+     * absent and the preview falls back to a coloured circle.
+     */
+    function preloadMemeAtlas(idSet) {
+      Object.keys(idSet).forEach(function (id) {
+        const url = idSet[id];
+        if (!url) return;
+        const existing = memeAtlas[id];
+        // Already loaded from this session's upload (blob URL) — keep it.
+        if (existing && existing.src) return;
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function () { scheduleLive(); };
+        img.onerror = function () { delete memeAtlas[id]; };
+        img.src = url;
+        memeAtlas[id] = img;
+      });
+    }
+
     function frictionToDamping(friction) { return Math.max(0.05, friction * 6); }
 
     function resetSimFromMod(mod) {
@@ -796,7 +826,15 @@
             else if ((item.behaviors || [])[0]) { label = String(item.behaviors[0]).replace('Behavior',''); kind = label.toLowerCase(); }
             else { label = 'target'; kind = 'target'; }
           }
-          coins.push({ x: +item.x || 0, y: +item.y || 0, label: label, kind: kind, memeId: item.memeId ? String(item.memeId) : undefined });
+          coins.push({
+            x: +item.x || 0,
+            y: +item.y || 0,
+            label: label,
+            kind: kind,
+            memeId: item.memeId ? String(item.memeId) : undefined,
+            // carry the radius so the preview draws at the right size
+            radius: Number(item.radius) || 32,
+          });
         }
       }
       for (const pipe of (mod && mod.pipelines) || []) {
@@ -887,16 +925,20 @@
       });
       for (const c of bodies) {
         const img = c.memeId && memeAtlas[c.memeId];
-        if (img) {
-          try { ctx.drawImage(img, c.x - 16, -c.y - 16, 32, 32); } catch (_) {}
+        // Draw at the coin's actual radius so the preview matches the game.
+        // Was a hardcoded 32x32 box, which made every coin look the same size
+        // and hid the difference between a small token and a large prop.
+        const r = Math.max(6, Number(c.radius) || 14);
+        if (img && img.complete && img.naturalWidth > 0) {
+          try { ctx.drawImage(img, c.x - r, -c.y - r, r * 2, r * 2); } catch (_) {}
         } else {
-          ctx.beginPath(); ctx.arc(c.x, -c.y, 14, 0, Math.PI * 2);
+          ctx.beginPath(); ctx.arc(c.x, -c.y, r, 0, Math.PI * 2);
           ctx.fillStyle = (c.kind === 'striker' || c.label === 'striker') ? '#ffe082'
             : c.kind === 'freeze' ? '#81d4fa' : c.kind === 'flash' ? '#aed581' : c.kind === 'bomb' ? '#ef5350' : '#eceff1';
           ctx.fill();
           ctx.strokeStyle = '#263238'; ctx.lineWidth = 2; ctx.stroke();
         }
-        if (c.label) { ctx.fillStyle = '#fffde7'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(c.label, c.x, -c.y - 20); }
+        if (c.label) { ctx.fillStyle = '#fffde7'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(c.label, c.x, -c.y - r - 6); }
       }
       if (simDragging && simDragFrom && simDragTo) {
         ctx.strokeStyle = '#5ec8ff'; ctx.lineWidth = 3;
@@ -1123,6 +1165,12 @@
           });
           if (!ids.length) el.textContent = 'CDN catalog empty — check manifest.';
           else setStatus('CDN memes loaded: ' + ids.join(', '), 'ok');
+
+          // Preload every texture so the live preview can draw the actual art
+          // instead of a coloured circle. Without this, atlas entries only exist
+          // for memes uploaded in this session (blob URLs), so a coin added via
+          // n8n/Drive showed up as a plain disc in the preview.
+          preloadMemeAtlas(idSet);
         }
 
         // 1) Texture-only uploads (Google Drive path) count as known memeIds
@@ -1414,20 +1462,60 @@
     }
 
     /** Fetch a repo file from raw GitHub, falling back to jsDelivr if raw fails. */
+    /**
+     * Fetch a repo file, preferring the newest commit.
+     *
+     * Branch-based refs (raw and jsDelivr) get cached, and raw can keep serving
+     * an old body for a branch without ever 404-ing — so a plain "try raw, fall
+     * back to jsDelivr" would happily load a stale level. Ask the API for the
+     * current commit touching this path, then read that exact commit: a pinned
+     * SHA cannot go stale.
+     */
     function fetchRepoJson(relPath) {
       const bust = '?t=' + Date.now().toString(36);
-      return fetch(rawRepoBase() + relPath + bust, { cache: 'no-store' })
-        .then(function (r) {
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          return r.json();
-        })
-        .catch(function () {
-          const base = CDN_MANIFEST.replace(/\/[^/]*$/, '/');
-          return fetch(base + relPath.replace(/^cdn\//, '') + bust).then(function (r) {
+      const c = readGitCfg();
+      const owner = c.owner || 'Shadow-Candle-Studio';
+      const repo = c.repo || 'LiteProjects';
+      const branch = c.branch || 'main';
+
+      const atCommit = function () {
+        const apiUrl = 'https://api.github.com/repos/' + encodeURIComponent(owner)
+          + '/' + encodeURIComponent(repo) + '/commits?path='
+          + encodeURIComponent(relPath) + '&sha=' + encodeURIComponent(branch)
+          + '&per_page=1';
+        return fetch(apiUrl, { cache: 'no-store' })
+          .then(function (r) {
+            if (!r.ok) throw new Error('commit list HTTP ' + r.status);
+            return r.json();
+          })
+          .then(function (list) {
+            const sha = Array.isArray(list) && list[0] && list[0].sha;
+            if (!sha) throw new Error('no commit for ' + relPath);
+            const url = 'https://raw.githubusercontent.com/' + owner + '/'
+              + repo + '/' + sha + '/' + relPath + bust;
+            return fetch(url, { cache: 'no-store' }).then(function (r) {
+              if (!r.ok) throw new Error('raw@commit HTTP ' + r.status);
+              return r.json();
+            });
+          });
+      };
+
+      return atCommit().catch(function () {
+        // Fall back to branch refs; better something than nothing.
+        return fetch(rawRepoBase() + relPath + bust, { cache: 'no-store' })
+          .then(function (r) {
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
+          })
+          .catch(function () {
+            const base = CDN_MANIFEST.replace(/\/[^/]*$/, '/');
+            return fetch(base + relPath.replace(/^cdn\//, '') + bust, { cache: 'no-store' })
+              .then(function (r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+              });
           });
-        });
+      });
     }
 
     function loadCdnLevel(id) {
