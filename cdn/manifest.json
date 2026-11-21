@@ -1,12 +1,12 @@
 {
-  "version": 22,
+  "version": 23,
   "baseUrl": "",
   "memeConfig": "memes/index.json",
   "levelConfig": "levels/demo_behavior.json",
   "items": [
     {
       "filename": "memes/index.json",
-      "hash": "art-coin_gold_01-mwq4axy6",
+      "hash": "art-maodie_cat_01-mwqm54nq",
       "kind": "meme"
     },
     {
@@ -243,6 +243,18 @@
       "hash": "art-coin_gold_01-mwq4axy6",
       "kind": "texture",
       "url": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/coin_gold_01.png",
+      "theme": "classic"
+    },
+    {
+      "filename": "memes/maodie_cat_01.json",
+      "hash": "art-maodie_cat_01-mwqm54nq",
+      "kind": "meme"
+    },
+    {
+      "filename": "textures/maodie_cat_01.png",
+      "hash": "art-maodie_cat_01-mwqm54nq",
+      "kind": "texture",
+      "url": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/maodie_cat_01.png",
       "theme": "classic"
     }
   ]
