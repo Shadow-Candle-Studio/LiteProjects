@@ -1115,6 +1115,40 @@
         + '/cdn/textures/' + encodeURIComponent(memeId) + '.' + (ext || 'png');
     }
 
+    /**
+     * Pick the place block a meme should be applied to.
+     *
+     * Previously this always took the first non-striker block, so clicking frog
+     * and then cat overwrote the same block and the first choice appeared to
+     * vanish. Now:
+     *   1. a block the user has selected wins (that is the obvious intent),
+     *   2. otherwise the last placed block,
+     *   3. otherwise a new one is created.
+     *
+     * `striker` is no longer excluded: a striker can legitimately carry a meme
+     * skin (level 1 does exactly that).
+     */
+    function pickPlaceBlock(createIfMissing) {
+      const selected = (Blockly.getSelected && Blockly.getSelected());
+      if (selected) {
+        let b = selected;
+        // walk up in case a field of a child block is focused
+        while (b && b.type !== 'level_place') b = b.getParent && b.getParent();
+        if (b && b.type === 'level_place') return b;
+      }
+      const places = workspace.getTopBlocks(true).filter(function (t) {
+        return t.type === 'level_place';
+      });
+      if (places.length) return places[places.length - 1];
+      if (!createIfMissing) return null;
+      const target = workspace.newBlock('level_place');
+      target.initSvg();
+      target.render();
+      target.moveBy(420, 300);
+      target.setFieldValue('target', 'KIND');
+      return target;
+    }
+
     function addMemeCatalogButton(el, id, texUrl) {
       id = String(id);
       const btn = document.createElement('button');
@@ -1122,19 +1156,10 @@
       btn.textContent = id;
       btn.style.cssText = 'margin:2px;padding:2px 6px;font-size:0.7rem;';
       btn.onclick = function () {
-        const tops = workspace.getTopBlocks(true);
-        let target = null;
-        for (const t of tops) {
-          if (t.type === 'level_place' && t.getFieldValue('KIND') !== 'striker') { target = t; break; }
-        }
-        if (!target) {
-          target = workspace.newBlock('level_place');
-          target.initSvg(); target.render(); target.moveBy(420, 300);
-          target.setFieldValue('target', 'KIND');
-        }
+        const target = pickPlaceBlock(true);
         target.setFieldValue(id, 'MEME');
         scheduleLive();
-        setStatus('Applied memeId ' + id + ' to a place block.', 'ok');
+        setStatus('Applied memeId ' + id + ' to the selected place block.', 'ok');
       };
       el.appendChild(btn);
       rememberMemeId(id, texUrl);
@@ -2139,16 +2164,10 @@
     };
 
     function applyMemeIdToPlace(id) {
-      const tops = workspace.getTopBlocks(true);
-      let target = null;
-      for (const t of tops) {
-        if (t.type === 'level_place' && t.getFieldValue('KIND') !== 'striker') { target = t; break; }
-      }
-      if (!target) {
-        target = workspace.newBlock('level_place');
-        target.initSvg(); target.render(); target.moveBy(420, 300);
-        target.setFieldValue('target', 'KIND');
-      }
+      // Same target selection as the catalog buttons, so "Add Meme → Git" and
+      // clicking a catalog entry behave identically.
+      const target = pickPlaceBlock(true);
+      if (!target) return;
       target.setFieldValue(String(id), 'MEME');
       scheduleLive();
     }
