@@ -94,6 +94,52 @@
     #gitBar input.git-token { min-width: 220px; flex: 1; }
     #gitBar .git-hint { font-size: 0.72rem; color: var(--muted); line-height: 1.4; }
     #gitBar a { color: var(--accent); }
+
+    /* quick-save row: the one control used 95% of the time */
+    .git-quick {
+      display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+      flex-wrap: wrap;
+    }
+    .git-quick-btn {
+      font-size: 0.95rem; font-weight: 700; padding: 10px 22px;
+      border-radius: 10px; letter-spacing: 0.02em;
+    }
+    .git-quick-btn[disabled] { opacity: 0.5; cursor: progress; }
+    .git-state {
+      font-size: 0.76rem; color: var(--muted); flex: 1; min-width: 140px;
+    }
+    .git-state.ok { color: #57c98a; }
+    .git-state.err { color: #e2695c; }
+    .git-cfg-btn {
+      font-size: 0.78rem; padding: 6px 12px; border-radius: 8px;
+      background: transparent; border: 1px solid var(--line); color: var(--muted);
+    }
+    .git-cfg-btn:hover { color: var(--text); border-color: var(--accent); }
+    .git-play-link {
+      display: inline-block; margin-top: 6px; padding: 7px 14px; border-radius: 8px;
+      background: rgba(87, 201, 138, .14); border: 1px solid rgba(87, 201, 138, .45);
+      color: #7fe0a8 !important; font-weight: 650; font-size: 0.82rem;
+      text-decoration: none;
+    }
+    .git-play-link:hover { background: rgba(87, 201, 138, .24); }
+    #gitCfg[hidden] { display: none; }
+
+    /* save-mode switch: webhook (no token) vs direct PAT */
+    .git-mode {
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      padding: 0 14px 10px; font-size: 0.78rem; color: var(--muted);
+    }
+    .git-mode label {
+      display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    }
+    .git-mode input[type="radio"] { accent-color: var(--accent); cursor: pointer; }
+    .git-mode input.git-wh {
+      flex: 1; min-width: 260px;
+      background: #0f131a; border: 1px solid var(--line); color: var(--text);
+      border-radius: 8px; padding: 6px 10px; font: inherit;
+    }
+    .git-mode input.git-wh[hidden] { display: none; }
+    .git-mode[hidden] { display: none; }
     #memeBar {
       border-top: 1px solid var(--line); background: #171d28; padding: 8px 14px;
       display: grid; gap: 8px;
@@ -138,27 +184,53 @@
       <button id="btnClear">Clear</button>
       <button id="btnGitToggle" title="GitHub version control" class="primary">Git</button>
       <button id="btnMemeToggle" title="n8n meme pipeline" class="primary">Meme</button>
+      <a href="./art-checker.html" style="display:inline-flex;align-items:center;gap:5px;
+         padding:6px 12px;border-radius:7px;background:#2e6b4f;color:#dff5e8;
+         font-size:0.82rem;font-weight:600;text-decoration:none;border:1px solid #3d8a66;"
+         title="拖入生成的 PNG，自動去背、質檢、加立體感">🖼 美術檢查</a>
     </div>
   </header>
   <details id="gitBar">
-    <summary>GitHub version control — save / load levels as commits on your fork</summary>
-    <div class="git-row">
-      <input id="gitOwner" placeholder="owner" value="Meyyds34555343" title="GitHub user/org" />
+    <summary>💾 保存到遊戲 — 一鍵提交關卡</summary>
+
+    <!-- one-click row: the only thing you need most of the time -->
+    <div class="git-quick">
+      <button type="button" id="btnGitQuickSave" class="ok git-quick-btn">
+        💾 保存並立即玩
+      </button>
+      <span id="gitState" class="git-state">未設定</span>
+      <button type="button" id="btnGitCfgToggle" class="git-cfg-btn" title="連線設定">⚙ 設定</button>
+    </div>
+
+    <!-- how to save: friends use the webhook, owners can use a PAT -->
+    <div class="git-mode" id="gitModeRow">
+      <label><input type="radio" name="gitMode" value="webhook" checked> 用 n8n（推薦，不需 token）</label>
+      <label><input type="radio" name="gitMode" value="token"> 用 GitHub token</label>
+      <input id="gitWebhook" class="git-wh" type="text"
+             placeholder="https://xxx.app.n8n.cloud/webhook/coinduel-save-level"
+             title="n8n Production webhook URL" hidden />
+    </div>
+
+    <!-- advanced: hidden until needed, but stays reachable -->
+    <div class="git-row" id="gitCfg" hidden>
+      <input id="gitOwner" placeholder="owner" value="Shadow-Candle-Studio" title="GitHub user/org" />
       <input id="gitRepo" placeholder="repo" value="LiteProjects" title="Repository name" />
-      <input id="gitBranch" placeholder="branch" value="behavior-scratch" title="Branch" />
+      <input id="gitBranch" placeholder="branch" value="main" title="Branch" />
       <input id="gitPath" placeholder="cdn/levels" value="cdn/levels" title="Folder path in repo" />
-      <input id="gitToken" class="git-token" type="password" placeholder="GitHub PAT (repo Contents: Read/Write)" autocomplete="off" />
+      <input id="gitToken" class="git-token" type="password" placeholder="GitHub PAT (Contents Read/Write)" autocomplete="off" />
       <button type="button" id="btnGitSave">Save Level → Git</button>
       <button type="button" id="btnGitList">List Levels</button>
       <button type="button" id="btnGitLoad">Load Selected</button>
       <button type="button" id="btnGitHistory">History</button>
       <select id="gitFileList" title="Files in folder" style="min-width:140px"><option value="">(list first)</option></select>
     </div>
+
     <p class="git-hint">
-      Creates a real Git commit (e.g. <code>cdn/levels/2.json</code>). Token stays in this browser only.
-      Create a fine-grained PAT with Contents Read/Write:
-      <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub → Settings → PAT</a>.
-      After save, jsDelivr may lag ~1–5 min (or use <code>@commit</code> / purge).
+      儲存會建立真實的 Git commit（例如 <code>cdn/levels/1.json</code>）。
+      遊戲從 CDN 讀關卡，commit 後<strong>重新整理遊戲頁即生效</strong>（數秒，不需重建）。
+      Token 只存在這個瀏覽器。<br>
+      需要細粒度 PAT（Contents Read/Write）：
+      <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub → Settings → PAT</a>。
     </p>
   </details>
   <details id="memeBar">
@@ -208,7 +280,19 @@
 
   <script>
     /* ── Web-first endpoints (match CdnConfig / shipstatic runtime) ── */
-    const CDN_MANIFEST = 'https://cdn.jsdelivr.net/gh/Meyyds34555343/LiteProjects@behavior-scratch/cdn/manifest.json';
+    const CDN_MANIFEST = 'https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/manifest.json';
+
+    /**
+     * Default save endpoint. Baked in so contributors do not have to paste a
+     * URL before their first save — press the button and it commits.
+     *
+     * Set this to the Production URL of the `CoinDuel — Save Level` workflow
+     * (n8n → that workflow → Webhook node → Copy Production URL). Leave empty
+     * to force people to configure their own, or override per-browser with
+     * localStorage 'CoinDuel:saveWebhook'.
+     */
+    const DEFAULT_SAVE_WEBHOOK = 'https://hellomaaah123.app.n8n.cloud/webhook/coinduel-save-level';
+
     const WS_AUTOSAVE_KEY = 'CoinDuel:blocklyWorkspace';
     const GIT_CFG_KEY = 'CoinDuel:gitConfig';
     const N8N_CFG_KEY = 'CoinDuel:n8nConfig';
@@ -982,9 +1066,9 @@
 
     function githubRawTextureUrl(memeId, ext) {
       const c = readGitCfg();
-      const owner = c.owner || 'Meyyds34555343';
+      const owner = c.owner || 'Shadow-Candle-Studio';
       const repo = c.repo || 'LiteProjects';
-      const branch = c.branch || 'behavior-scratch';
+      const branch = c.branch || 'main';
       return 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/' + branch
         + '/cdn/textures/' + encodeURIComponent(memeId) + '.' + (ext || 'png');
     }
@@ -1323,9 +1407,9 @@
     /** raw.githubusercontent base — reflects editor commits within seconds (jsDelivr lags hours). */
     function rawRepoBase() {
       const c = readGitCfg();
-      const owner = c.owner || 'Meyyds34555343';
+      const owner = c.owner || 'Shadow-Candle-Studio';
       const repo = c.repo || 'LiteProjects';
-      const branch = c.branch || 'behavior-scratch';
+      const branch = c.branch || 'main';
       return 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/' + branch + '/';
     }
 
@@ -1441,7 +1525,7 @@
       return {
         owner: (document.getElementById('gitOwner').value || '').trim(),
         repo: (document.getElementById('gitRepo').value || '').trim(),
-        branch: (document.getElementById('gitBranch').value || 'behavior-scratch').trim(),
+        branch: (document.getElementById('gitBranch').value || 'main').trim(),
         path: (document.getElementById('gitPath').value || 'cdn/levels').trim().replace(/^\/+|\/+$/g, ''),
         token: (document.getElementById('gitToken').value || '').trim(),
       };
@@ -1567,6 +1651,257 @@
         setStatus('Git save failed: ' + e.message, 'err');
       }
     };
+
+    /* ── one-click save: submit the current level, then offer a direct play link ── */
+    (function wireQuickSave() {
+      const quickBtn = document.getElementById('btnGitQuickSave');
+      const cfgBtn = document.getElementById('btnGitCfgToggle');
+      const cfgBox = document.getElementById('gitCfg');
+      const stateEl = document.getElementById('gitState');
+      const whInput = document.getElementById('gitWebhook');
+      if (!quickBtn || !cfgBtn || !cfgBox || !stateEl) return;
+
+      const MODE_KEY = 'CoinDuel:saveMode';
+      const WH_KEY = 'CoinDuel:saveWebhook';
+
+      /** "webhook" needs only a URL; "token" needs owner/repo/branch/PAT. */
+      function currentMode() {
+        const el = document.querySelector('input[name="gitMode"]:checked');
+        return el ? el.value : 'webhook';
+      }
+
+      /**
+       * Resolution order: per-browser override → baked-in default.
+       * When either exists the URL input stays hidden, so saving is one click.
+       */
+      function webhookUrl() {
+        const typed = whInput && whInput.value ? whInput.value.trim() : '';
+        const stored = (localStorage.getItem(WH_KEY) || '').trim();
+        return typed || stored || DEFAULT_SAVE_WEBHOOK;
+      }
+
+      /** True when a URL is available without the user typing anything. */
+      function webhookIsPreconfigured() {
+        return !!webhookUrl();
+      }
+
+      function applyMode() {
+        const mode = currentMode();
+        // Hide the URL box entirely when we already know where to post.
+        const needsUrl = mode === 'webhook' && !webhookIsPreconfigured();
+        if (whInput) whInput.hidden = mode !== 'webhook' || !needsUrl;
+
+        // With a baked-in endpoint the whole chooser is noise: keep it out of
+        // the way so the only thing left is the button.
+        const row = document.getElementById('gitModeRow');
+        const preconfigured = mode === 'webhook' && webhookIsPreconfigured()
+          && !(localStorage.getItem(MODE_KEY) === 'token');
+        if (row) row.hidden = preconfigured;
+
+        if (mode === 'webhook') cfgBox.hidden = true;
+        try { localStorage.setItem(MODE_KEY, mode); } catch (_) {}
+        refreshState();
+      }
+
+      /** Reflect whether the chosen save path is usable, without leaking secrets. */
+      function refreshState() {
+        const mode = currentMode();
+        if (mode === 'webhook') {
+          const url = webhookUrl();
+          if (url) {
+            // Do not print the URL: it is a capability, keep it quiet.
+            stateEl.textContent = '按一下就提交到遊戲 ✓';
+            stateEl.className = 'git-state ok';
+          } else {
+            stateEl.textContent = '貼上 n8n webhook URL（只需一次）';
+            stateEl.className = 'git-state err';
+          }
+          return;
+        }
+        const c = readGitCfg();
+        if (c.owner && c.repo && c.token) {
+          stateEl.textContent = c.owner + '/' + c.repo + '@' + c.branch;
+          stateEl.className = 'git-state';
+        } else {
+          stateEl.textContent = '未設定 — 按「⚙ 設定」填入 owner / repo / PAT';
+          stateEl.className = 'git-state err';
+        }
+      }
+
+      // restore previous choices
+      try {
+        const savedMode = localStorage.getItem(MODE_KEY);
+        if (savedMode === 'token' || savedMode === 'webhook') {
+          const r = document.querySelector('input[name="gitMode"][value="' + savedMode + '"]');
+          if (r) r.checked = true;
+        }
+        const savedWh = localStorage.getItem(WH_KEY);
+        if (savedWh && whInput) whInput.value = savedWh;
+      } catch (_) {}
+
+      document.querySelectorAll('input[name="gitMode"]').forEach(function (r) {
+        r.addEventListener('change', applyMode);
+      });
+
+      if (whInput) {
+        whInput.addEventListener('change', function () {
+          try { localStorage.setItem(WH_KEY, whInput.value.trim()); } catch (_) {}
+          refreshState();
+        });
+      }
+
+      cfgBtn.onclick = function () {
+        cfgBox.hidden = !cfgBox.hidden;
+        if (!cfgBox.hidden) {
+          const first = document.getElementById('gitOwner');
+          if (first) first.focus();
+        }
+      };
+
+      // persist when any config input changes, so the next session skips setup
+      ['gitOwner', 'gitRepo', 'gitBranch', 'gitPath', 'gitToken'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('change', function () {
+          persistGitCfg();
+          refreshState();
+        });
+      });
+
+      /** Absolute URL of the running game, if it is served next to the editor. */
+      function gamePlayUrl(levelId) {
+        const override = (localStorage.getItem('CoinDuel:gameUrl') || '').trim();
+        if (!override) return null;
+        const sep = override.indexOf('?') >= 0 ? '&' : '?';
+        return override + sep + 'level=' + levelId + '&t=' + Date.now().toString(36);
+      }
+
+      /** POST the level to the n8n webhook. No token involved. */
+      async function saveViaWebhook(url, level) {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ levelId: level.id, levelJson: level }),
+        });
+        let payload = null;
+        try { payload = await res.json(); } catch (_) {}
+        if (!res.ok) {
+          const msg = payload && payload.error ? payload.error : ('HTTP ' + res.status);
+          throw new Error(msg);
+        }
+        if (payload && payload.ok === false) {
+          throw new Error(payload.error || 'webhook reported failure');
+        }
+        return payload || {};
+      }
+
+      /** PUT straight to GitHub with a PAT. */
+      async function saveViaToken(c, level, saveId, fullPath, bodyText) {
+        let sha = null;
+        try {
+          const existing = await ghApi(
+            '/repos/' + encodeURIComponent(c.owner) + '/' + encodeURIComponent(c.repo)
+            + '/contents/' + fullPath.split('/').map(encodeURIComponent).join('/')
+            + '?ref=' + encodeURIComponent(c.branch)
+          );
+          if (existing && existing.sha) sha = existing.sha;
+        } catch (_) { /* new file */ }
+
+        const name = (document.getElementById('modName').value || 'level').trim();
+        const payload = {
+          message: 'editor: save level ' + saveId + ' (' + name + ')',
+          content: utf8ToBase64(bodyText),
+          branch: c.branch,
+        };
+        if (sha) payload.sha = sha;
+
+        const result = await ghApi(
+          '/repos/' + encodeURIComponent(c.owner) + '/' + encodeURIComponent(c.repo)
+          + '/contents/' + fullPath.split('/').map(encodeURIComponent).join('/'),
+          { method: 'PUT', body: payload }
+        );
+        const commit = result && result.commit && result.commit.sha
+          ? result.commit.sha.slice(0, 7) : 'ok';
+        return { commit: commit };
+      }
+
+      quickBtn.onclick = async function () {
+        const mode = currentMode();
+
+        // --- preconditions -------------------------------------------------
+        if (mode === 'webhook') {
+          if (!webhookUrl()) {
+            if (whInput) { whInput.hidden = false; whInput.focus(); }
+            setStatus('貼上 n8n webhook URL（Production URL，含 /webhook/）', 'err');
+            refreshState();
+            return;
+          }
+        } else {
+          const c0 = readGitCfg();
+          if (!c0.owner || !c0.repo || !c0.token) {
+            cfgBox.hidden = false;
+            setStatus('先填設定：owner / repo / PAT（Contents Read+Write）', 'err');
+            refreshState();
+            return;
+          }
+        }
+
+        quickBtn.disabled = true;
+        const label = quickBtn.textContent;
+        quickBtn.textContent = '保存中…';
+        stateEl.textContent = '正在提交…';
+        stateEl.className = 'git-state';
+
+        try {
+          const mod = workspaceToMod(workspace);
+          const level = mod.level || { id: 1, width: 800, height: 600, wall: { thickness: 64 }, coins: [] };
+          const saveId = resolveSaveLevelId(level);
+          level.id = saveId;
+          syncSetupBlockId(saveId);
+          rememberEditTarget(saveId, 'cdn/levels/' + saveId + '.json');
+
+          const bodyText = JSON.stringify(level, null, 4) + '\n';
+          let result;
+
+          if (mode === 'webhook') {
+            const payload = await saveViaWebhook(webhookUrl(), level);
+            result = { commit: payload.commit || 'ok' };
+          } else {
+            const c = readGitCfg();
+            const fullPath = c.path + '/' + saveId + '.json';
+            result = await saveViaToken(c, level, saveId, fullPath, bodyText);
+            persistGitCfg();
+          }
+
+          document.getElementById('io').value = bodyText;
+
+          const coins = Array.isArray(level.coins) ? level.coins.length : 0;
+          stateEl.className = 'git-state ok';
+          stateEl.innerHTML = '✅ 已提交 <code>' + result.commit + '</code> · level ' + saveId
+            + ' · ' + coins + ' 枚金幣';
+
+          const play = gamePlayUrl(saveId);
+          if (play) {
+            stateEl.innerHTML += '<br><a class="git-play-link" href="' + play
+              + '" target="_blank" rel="noopener">▶ 立即在遊戲裡看</a>';
+          } else {
+            stateEl.innerHTML += '<br><span style="color:var(--muted);font-size:.72rem">'
+              + '重新整理遊戲頁即生效（commit 後數秒）。</span>';
+          }
+
+          if (mode === 'token') document.getElementById('btnGitList').click();
+        } catch (e) {
+          stateEl.className = 'git-state err';
+          stateEl.textContent = '保存失敗：' + (e.message || e);
+          setStatus('Git save failed: ' + (e.message || e), 'err');
+        } finally {
+          quickBtn.disabled = false;
+          quickBtn.textContent = label;
+        }
+      };
+
+      applyMode();
+    })();
 
     document.getElementById('btnGitList').onclick = async function () {
       try {
