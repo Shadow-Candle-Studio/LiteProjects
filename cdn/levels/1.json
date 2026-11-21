@@ -18,13 +18,13 @@
                 "FreezeBehavior"
             ],
             "skinKey": "ice",
-            "memeId": "cat",
+            "memeId": "maodie_cat_01",
             "skin": {
-                "default": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/cat.png",
-                "idle": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/cat.png",
-                "aim": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/cat.png",
-                "shot": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/cat.png",
-                "hitted": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/cat.png"
+                "default": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/maodie_cat_01.png",
+                "idle": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/maodie_cat_01.png",
+                "aim": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/maodie_cat_01.png",
+                "shot": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/maodie_cat_01.png",
+                "hitted": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/maodie_cat_01.png"
             }
         },
         {
