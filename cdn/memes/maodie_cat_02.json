@@ -1,0 +1,15 @@
+{
+  "id": "maodie_cat_02",
+  "behavior": "FreezeBehavior",
+  "behaviors": [
+    "FreezeBehavior"
+  ],
+  "radius": 32,
+  "textures": {
+    "default": "textures/maodie_cat_02.png",
+    "idle": "textures/maodie_cat_02.png",
+    "aim": "textures/maodie_cat_02.png",
+    "shot": "textures/maodie_cat_02.png",
+    "hitted": "textures/maodie_cat_02.png"
+  }
+}
