@@ -1222,7 +1222,12 @@
           }
         }
         const saved = localStorage.getItem(WS_AUTOSAVE_KEY);
-        if (saved) {
+        // Only restore if the user has not already acted this session.
+        // Previously this ran unconditionally on every page load, so an
+        // autosave from an earlier experiment would silently replace whatever
+        // level you had just loaded — which looked like "my data disappeared".
+        const acted = localStorage.getItem('CoinDuel:workspaceTouched');
+        if (saved && !acted) {
           Blockly.serialization.workspaces.load(JSON.parse(saved), workspace);
           scheduleLive();
           setStatus('Restored autosaved workspace.', 'ok');
@@ -1431,6 +1436,8 @@
         setStatus('Invalid mod.', 'err');
         return;
       }
+      // Explicit import wins over the page-load autosave restore.
+      try { localStorage.setItem('CoinDuel:workspaceTouched', '1'); } catch (_) {}
       const pathId = parseLevelIdFromPath(sourcePath);
       if (pathId != null) {
         if (!mod.level) mod.level = { id: pathId, width: 800, height: 600, wall: 64, coins: [] };
@@ -1525,6 +1532,9 @@
         return;
       }
       const filePath = 'cdn/levels/' + n + '.json';
+      // Mark the workspace as user-owned from here on: the autosave restore on
+      // page load must not fight an explicit Load.
+      try { localStorage.setItem('CoinDuel:workspaceTouched', '1'); } catch (_) {}
       setStatus('Loading Level ' + n + ' from GitHub…');
       fetchRepoJson(filePath).then(function (level) {
         importModIntoEditor(levelJsonToMod(level, n), 'Loaded Level ' + n, filePath);
@@ -1598,6 +1608,7 @@
       loadCdnLevel(document.getElementById('loadLevelId').value || 2);
     };
     document.getElementById('btnClear').onclick = () => {
+      try { localStorage.setItem('CoinDuel:workspaceTouched', '1'); } catch (_) {}
       workspace.clear();
       setStatus('Workspace cleared.');
     };
