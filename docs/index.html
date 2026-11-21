@@ -1504,59 +1504,41 @@
 
     /** Fetch a repo file from raw GitHub, falling back to jsDelivr if raw fails. */
     /**
-     * Fetch a repo file, preferring the newest commit.
+     * Fetch a repo file from the freshest source.
      *
-     * Branch-based refs (raw and jsDelivr) get cached, and raw can keep serving
-     * an old body for a branch without ever 404-ing — so a plain "try raw, fall
-     * back to jsDelivr" would happily load a stale level. Ask the API for the
-     * current commit touching this path, then read that exact commit: a pinned
-     * SHA cannot go stale.
+     * Order matters, and it took two wrong attempts to settle:
+     *
+     *   1. The API's `commits?path=` route is NOT reliable for "current": it lags
+     *      behind recent pushes (it returned an old SHA minutes after a save)
+     *      and is rate limited to 60/hour unauthenticated. Using it first meant
+     *      the editor confidently read a stale commit and showed empty meme
+     *      fields while the branch itself was already correct.
+     *   2. jsDelivr caches a branch for hours - only ever a last resort.
+     *
+     * So: raw on the branch, with a cache-buster strong enough to defeat any
+     * intermediate caching. raw reflects a commit immediately in practice.
      */
     function fetchRepoJson(relPath) {
-      const bust = '?t=' + Date.now().toString(36);
-      const c = readGitCfg();
-      const owner = c.owner || 'Shadow-Candle-Studio';
-      const repo = c.repo || 'LiteProjects';
-      const branch = c.branch || 'main';
+      // Two independent entropy sources; some caches key on the full query.
+      const bust = '?t=' + Date.now().toString(36)
+        + '&r=' + Math.random().toString(36).slice(2);
 
-      const atCommit = function () {
-        const apiUrl = 'https://api.github.com/repos/' + encodeURIComponent(owner)
-          + '/' + encodeURIComponent(repo) + '/commits?path='
-          + encodeURIComponent(relPath) + '&sha=' + encodeURIComponent(branch)
-          + '&per_page=1';
-        return fetch(apiUrl, { cache: 'no-store' })
-          .then(function (r) {
-            if (!r.ok) throw new Error('commit list HTTP ' + r.status);
-            return r.json();
-          })
-          .then(function (list) {
-            const sha = Array.isArray(list) && list[0] && list[0].sha;
-            if (!sha) throw new Error('no commit for ' + relPath);
-            const url = 'https://raw.githubusercontent.com/' + owner + '/'
-              + repo + '/' + sha + '/' + relPath + bust;
-            return fetch(url, { cache: 'no-store' }).then(function (r) {
-              if (!r.ok) throw new Error('raw@commit HTTP ' + r.status);
-              return r.json();
-            });
-          });
+      const tryFetch = function (url) {
+        // No custom headers: `Cache-Control` on a cross-origin request forces a
+        // CORS preflight, and raw.githubusercontent does not allow it — the
+        // request failed outright with "Failed to fetch".
+        return fetch(url, { cache: 'no-store' }).then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        });
       };
 
-      return atCommit().catch(function () {
-        // Fall back to branch refs; better something than nothing.
-        return fetch(rawRepoBase() + relPath + bust, { cache: 'no-store' })
-          .then(function (r) {
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            return r.json();
-          })
-          .catch(function () {
-            const base = CDN_MANIFEST.replace(/\/[^/]*$/, '/');
-            return fetch(base + relPath.replace(/^cdn\//, '') + bust, { cache: 'no-store' })
-              .then(function (r) {
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.json();
-              });
-          });
-      });
+      return tryFetch(rawRepoBase() + relPath + bust)
+        .catch(function () {
+          // jsDelivr as a fallback when raw is unreachable (corporate proxy etc).
+          const base = CDN_MANIFEST.replace(/\/[^/]*$/, '/');
+          return tryFetch(base + relPath.replace(/^cdn\//, '') + bust);
+        });
     }
 
     function loadCdnLevel(id) {

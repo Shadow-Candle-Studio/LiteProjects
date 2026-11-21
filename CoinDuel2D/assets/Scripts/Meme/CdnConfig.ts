@@ -53,8 +53,9 @@ export function jsdelivrUrl(path: string): string {
 /**
  * GitHub API URL listing the newest commits touching `path` on the branch.
  *
- * Used to discover the current SHA, because that is the only ref guaranteed to
- * be current: branch names are cached by every CDN in front of us.
+ * NOTE: not used for level loading — the API's commits?path= route lags behind
+ * recent pushes and is rate limited to 60/hour unauthenticated, which made it
+ * report a stale commit right after a save. Kept for diagnostics only.
  */
 export function githubCommitUrl(path: string): string {
     const clean = String(path || '').replace(/^\/+/, '');
@@ -64,7 +65,7 @@ export function githubCommitUrl(path: string): string {
         + '&per_page=1';
 }
 
-/** raw.github content at one exact commit — immune to branch-level caching. */
+/** raw.github content at one exact commit. Diagnostic use only (see above). */
 export function githubRawAtCommit(sha: string, path: string): string {
     const clean = String(path || '').replace(/^\/+/, '');
     return 'https://raw.githubusercontent.com/' + CDN_REPO_OWNER + '/' + CDN_REPO_NAME

@@ -1,5 +1,5 @@
 import { LevelData } from '../LevelData';
-import { githubCommitUrl, githubRawAtCommit, githubRawUrl, jsdelivrUrl } from '../Meme/CdnConfig';
+import { githubRawUrl, jsdelivrUrl } from '../Meme/CdnConfig';
 import { NetworkManager } from '../NetworkManager';
 
 /**
@@ -44,45 +44,21 @@ export class CdnLevelSource {
             return;
         }
 
-        // Try each mirror in order, preferring whichever is FRESHEST.
+        // Read the branch directly with a strong cache-buster.
         //
-        // History: raw.githubusercontent was tried first because it reflects a
-        // commit immediately — but for this repo it got pinned to an old commit
-        // for a whole branch and ignored cache-busting query strings. jsDelivr
-        // then took the lead, but it caches for 12h (s-maxage=43200), so a level
-        // saved minutes ago still came back stale.
-        //
-        // Correct approach: ask GitHub's API which commit is current, then fetch
-        // that exact commit from raw. A pinned commit ref cannot go stale, and it
-        // has none of jsDelivr's lag.
+        // Previously this asked the API which commit was current and read that
+        // exact SHA. That sounded safer but was wrong twice over: the API's
+        // commits?path= route lags behind recent pushes (it reported an old SHA
+        // right after a save), and it is rate limited to 60 requests/hour
+        // unauthenticated. Reading raw on the branch with two entropy sources in
+        // the query proved to reflect a commit immediately.
         const rel = 'cdn/levels/' + id + '.json';
+        const bust = '?t=' + Date.now().toString(36)
+            + '&r=' + Math.random().toString(36).slice(2);
+
         const sources = [
-            // 1. exact commit from the API (no cache, no lag)
-            async (cb) => {
-                NetworkManager.HttpGet(githubCommitUrl(rel), (code, body) => {
-                    if (code !== 200 || !body) return cb(null);
-                    let sha = '';
-                    try {
-                        const list = JSON.parse(body);
-                        // the API accepts a path and returns an array of commits
-                        sha = Array.isArray(list) && list[0] ? list[0].sha : '';
-                    } catch (e) {
-                        sha = '';
-                    }
-                    if (!sha) return cb(null);
-                    NetworkManager.HttpGet(githubRawAtCommit(sha, rel), (c2, b2) => {
-                        cb(c2 === 200 && b2 ? b2 : null);
-                    });
-                });
-            },
-            // 2. jsDelivr (fast, but may lag hours)
-            (cb) => NetworkManager.HttpGet(
-                jsdelivrUrl(rel) + '?t=' + Date.now().toString(36),
-                (code, body) => cb(code === 200 && body ? body : null)),
-            // 3. raw on the branch (last resort)
-            (cb) => NetworkManager.HttpGet(
-                githubRawUrl(rel) + '?t=' + Date.now().toString(36),
-                (code, body) => cb(code === 200 && body ? body : null)),
+            githubRawUrl(rel) + bust,
+            jsdelivrUrl(rel) + bust,
         ];
 
         const tryNext = (index: number): void => {
@@ -92,10 +68,11 @@ export class CdnLevelSource {
                 cb(null);
                 return;
             }
-            sources[index]((body: string | null) => {
-                const level = body ? CdnLevelSource._parse(body, id) : null;
+            const url = sources[index];
+            NetworkManager.HttpGet(url, (code, body) => {
+                const level = (code === 200 && body) ? CdnLevelSource._parse(body, id) : null;
                 if (!level) {
-                    console.log('[CdnLevel] mirror', index, 'missed level', id);
+                    console.log('[CdnLevel] mirror', index, 'missed level', id, '(code=' + code + ')');
                     tryNext(index + 1);
                     return;
                 }
