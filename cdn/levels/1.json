@@ -18,14 +18,11 @@
                 "FreezeBehavior"
             ],
             "skinKey": "ice",
-            "memeId": "maodie_cat_01",
             "skin": {
                 "default": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/maodie_cat_01.png",
-                "idle": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/maodie_cat_01.png",
-                "aim": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/maodie_cat_01.png",
-                "shot": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/maodie_cat_01.png",
-                "hitted": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/maodie_cat_01.png"
-            }
+                "idle": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/maodie_cat_01.png"
+            },
+            "memeId": "maodie_cat_01"
         },
         {
             "type": "coin",
@@ -39,14 +36,11 @@
                 "FlashStepBehavior"
             ],
             "skinKey": "gold",
-            "memeId": "frog",
             "skin": {
                 "default": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/frog.png",
-                "idle": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/frog.png",
-                "aim": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/frog.png",
-                "shot": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/frog.png",
-                "hitted": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/frog.png"
-            }
+                "idle": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/frog.png"
+            },
+            "memeId": "frog"
         },
         {
             "type": "coin",
@@ -54,7 +48,15 @@
             "x": -60,
             "y": -180,
             "canshot": true,
-            "radius": 32
+            "radius": 32,
+            "memeId": "maodie_cat_02",
+            "skin": {
+                "default": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/maodie_cat_02.png",
+                "idle": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/maodie_cat_02.png",
+                "aim": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/maodie_cat_02.png",
+                "shot": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/maodie_cat_02.png",
+                "hitted": "https://raw.githubusercontent.com/Shadow-Candle-Studio/LiteProjects/main/cdn/textures/maodie_cat_02.png"
+            }
         }
     ]
 }
