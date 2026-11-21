@@ -11,28 +11,35 @@
             "class": 1,
             "x": -220,
             "y": 140,
-            "canshot": false,
-            "radius": 32,
-            "behavior": "FreezeBehavior",
-            "behaviors": [
-                "FreezeBehavior"
-            ]
-        },
-        {
-            "type": "mud",
-            "x": 0,
-            "y": 190,
-            "shape": "circle",
-            "radius": 32,
-            "friction": 0.5
+            "canshot": true,
+            "radius": 32
         },
         {
             "type": "coin",
             "class": 1,
+            "x": 0,
+            "y": 190,
+            "canshot": true,
+            "radius": 32
+        },
+        {
+            "type": "coin",
             "x": -60,
             "y": -180,
             "canshot": true,
-            "radius": 32
+            "radius": 32,
+            "memeId": "maodie_cat_01",
+            "behavior": "FreezeBehavior",
+            "behaviors": [
+                "FreezeBehavior"
+            ],
+            "skin": {
+                "default": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/maodie_cat_01.png",
+                "idle": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/maodie_cat_01.png",
+                "aim": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/maodie_cat_01.png",
+                "shot": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/maodie_cat_01.png",
+                "hitted": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/maodie_cat_01.png"
+            }
         }
     ]
 }
