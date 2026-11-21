@@ -1,12 +1,12 @@
 {
-  "version": 21,
+  "version": 22,
   "baseUrl": "",
   "memeConfig": "memes/index.json",
   "levelConfig": "levels/demo_behavior.json",
   "items": [
     {
       "filename": "memes/index.json",
-      "hash": "art-coin_gold_01-mwq45i3i",
+      "hash": "art-coin_gold_01-mwq4axy6",
       "kind": "meme"
     },
     {
@@ -235,12 +235,12 @@
     },
     {
       "filename": "memes/coin_gold_01.json",
-      "hash": "art-coin_gold_01-mwq45i3i",
+      "hash": "art-coin_gold_01-mwq4axy6",
       "kind": "meme"
     },
     {
       "filename": "textures/coin_gold_01.png",
-      "hash": "art-coin_gold_01-mwq45i3i",
+      "hash": "art-coin_gold_01-mwq4axy6",
       "kind": "texture",
       "url": "https://cdn.jsdelivr.net/gh/Shadow-Candle-Studio/LiteProjects@main/cdn/textures/coin_gold_01.png",
       "theme": "classic"
